@@ -1,11 +1,13 @@
 /**
  * ListaLar — Importador de NFC-e por QR Code
  * Arquivo: importar-nfce-qr.js
- * Versão: 1.0.0
+ * Versão: 1.1.0
  *
  * Responsabilidades:
  * - abrir a câmera traseira;
  * - ler o QR Code da NFC-e;
+ * - usar BarcodeDetector quando disponível;
+ * - usar jsQR como alternativa no Safari/iPhone;
  * - permitir colar a URL manualmente;
  * - chamar a Cloud Function consultarNfce;
  * - encaminhar a nota para a tela universal de conferência.
@@ -16,56 +18,121 @@
 (() => {
     "use strict";
 
-    const VERSAO = "1.0.0";
-    const REGIAO_FUNCOES = "southamerica-east1";
+    const VERSAO = "1.1.0";
+    const REGIAO_FUNCOES =
+        "southamerica-east1";
+
+    const URL_JSQR =
+        "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
 
     const FIREBASE_CONFIG = {
-        apiKey: "AIzaSyC2U7q5HupxKyI3QiAyan-2Sio55NSir0Y",
-        authDomain: "compras-da-casa.firebaseapp.com",
-        projectId: "compras-da-casa",
-        storageBucket: "compras-da-casa.firebasestorage.app",
-        messagingSenderId: "63765433273",
-        appId: "1:63765433273:web:c478a3dd33ef3cd55a0468"
+        apiKey:
+            "AIzaSyC2U7q5HupxKyI3QiAyan-2Sio55NSir0Y",
+
+        authDomain:
+            "compras-da-casa.firebaseapp.com",
+
+        projectId:
+            "compras-da-casa",
+
+        storageBucket:
+            "compras-da-casa.firebasestorage.app",
+
+        messagingSenderId:
+            "63765433273",
+
+        appId:
+            "1:63765433273:web:c478a3dd33ef3cd55a0468"
     };
 
     const IDS = {
-        estilo: "listalar-nfce-qr-estilo",
-        overlay: "listalar-nfce-qr-overlay",
-        fechar: "listalar-nfce-qr-fechar",
-        video: "listalar-nfce-qr-video",
-        areaVideo: "listalar-nfce-qr-area-video",
-        iniciar: "listalar-nfce-qr-iniciar",
-        parar: "listalar-nfce-qr-parar",
-        url: "listalar-nfce-qr-url",
-        consultar: "listalar-nfce-qr-consultar",
-        status: "listalar-nfce-qr-status"
+        estilo:
+            "listalar-nfce-qr-estilo",
+
+        overlay:
+            "listalar-nfce-qr-overlay",
+
+        fechar:
+            "listalar-nfce-qr-fechar",
+
+        video:
+            "listalar-nfce-qr-video",
+
+        areaVideo:
+            "listalar-nfce-qr-area-video",
+
+        iniciar:
+            "listalar-nfce-qr-iniciar",
+
+        parar:
+            "listalar-nfce-qr-parar",
+
+        url:
+            "listalar-nfce-qr-url",
+
+        consultar:
+            "listalar-nfce-qr-consultar",
+
+        status:
+            "listalar-nfce-qr-status"
     };
 
     const estado = {
         familiaId: "",
-        modoImportacao: "nota_fiscal",
+
+        modoImportacao:
+            "nota_fiscal",
+
         stream: null,
+
         detector: null,
-        temporizadorLeitura: null,
+
+        leitorQr: "",
+
+        canvas: null,
+
+        contextoCanvas: null,
+
+        temporizadorLeitura:
+            null,
+
         processando: false,
+
         fechando: false,
-        ultimaUrl: ""
+
+        ultimaUrl: "",
+
+        ultimoQrLido: "",
+
+        ultimaLeituraEm: 0
     };
 
-    let promessaFirebase = null;
+    let promessaFirebase =
+        null;
+
+    let promessaJsQr =
+        null;
 
     // ============================================================
     // ESTILOS
     // ============================================================
 
     function criarEstilos() {
-        if (document.getElementById(IDS.estilo)) {
+        if (
+            document.getElementById(
+                IDS.estilo
+            )
+        ) {
             return;
         }
 
-        const style = document.createElement("style");
+        const style =
+            document.createElement(
+                "style"
+            );
 
-        style.id = IDS.estilo;
+        style.id =
+            IDS.estilo;
 
         style.textContent = `
             body.listalar-nfce-qr-aberto {
@@ -80,13 +147,17 @@
                 align-items: center;
                 justify-content: center;
                 padding: 18px;
-                background: rgba(15, 23, 42, 0.68);
-                backdrop-filter: blur(4px);
+                background:
+                    rgba(15, 23, 42, 0.68);
+                backdrop-filter:
+                    blur(4px);
             }
 
             .ll-nfce-modal {
-                width: min(100%, 540px);
-                max-height: calc(100vh - 36px);
+                width:
+                    min(100%, 540px);
+                max-height:
+                    calc(100vh - 36px);
                 overflow-y: auto;
                 border-radius: 22px;
                 background: #ffffff;
@@ -98,7 +169,8 @@
             .ll-nfce-header {
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
+                justify-content:
+                    space-between;
                 gap: 14px;
                 padding: 18px;
                 color: #ffffff;
@@ -108,7 +180,8 @@
                         #1d4ed8,
                         #2563eb
                     );
-                border-radius: 22px 22px 0 0;
+                border-radius:
+                    22px 22px 0 0;
             }
 
             .ll-nfce-header h2 {
@@ -131,7 +204,13 @@
                 border: 0;
                 border-radius: 50%;
                 color: #ffffff;
-                background: rgba(255, 255, 255, 0.16);
+                background:
+                    rgba(
+                        255,
+                        255,
+                        255,
+                        0.16
+                    );
                 font: inherit;
                 font-size: 24px;
                 cursor: pointer;
@@ -153,20 +232,39 @@
                 width: 100%;
                 height: 100%;
                 object-fit: cover;
-                transform: translateZ(0);
+                transform:
+                    translateZ(0);
             }
 
             .ll-nfce-mira {
                 position: absolute;
-                inset: 50% auto auto 50%;
-                width: min(68%, 280px);
+                inset:
+                    50% auto auto 50%;
+                width:
+                    min(68%, 280px);
                 aspect-ratio: 1;
-                transform: translate(-50%, -50%);
-                border: 3px solid rgba(255, 255, 255, 0.94);
+                transform:
+                    translate(
+                        -50%,
+                        -50%
+                    );
+                border:
+                    3px solid
+                    rgba(
+                        255,
+                        255,
+                        255,
+                        0.94
+                    );
                 border-radius: 18px;
                 box-shadow:
                     0 0 0 999px
-                    rgba(15, 23, 42, 0.3);
+                    rgba(
+                        15,
+                        23,
+                        42,
+                        0.3
+                    );
                 pointer-events: none;
             }
 
@@ -180,7 +278,8 @@
 
             .ll-nfce-acoes {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns:
+                    1fr 1fr;
                 gap: 10px;
                 margin-top: 14px;
             }
@@ -197,7 +296,8 @@
             }
 
             .ll-nfce-botao:disabled {
-                cursor: not-allowed;
+                cursor:
+                    not-allowed;
                 opacity: 0.58;
             }
 
@@ -219,7 +319,8 @@
                 color: #94a3b8;
                 font-size: 12px;
                 font-weight: 800;
-                text-transform: uppercase;
+                text-transform:
+                    uppercase;
             }
 
             .ll-nfce-divisor::before,
@@ -246,14 +347,16 @@
                 min-height: 82px;
                 resize: vertical;
                 padding: 12px;
-                border: 1px solid #cbd5e1;
+                border:
+                    1px solid #cbd5e1;
                 border-radius: 13px;
                 color: #0f172a;
                 background: #ffffff;
                 font: inherit;
                 font-size: 13px;
                 line-height: 1.4;
-                box-sizing: border-box;
+                box-sizing:
+                    border-box;
             }
 
             .ll-nfce-status {
@@ -283,16 +386,20 @@
                 background: #fee2e2;
             }
 
-            @media (max-width: 600px) {
+            @media (
+                max-width: 600px
+            ) {
                 .ll-nfce-overlay {
-                    align-items: flex-end;
+                    align-items:
+                        flex-end;
                     padding: 0;
                 }
 
                 .ll-nfce-modal {
                     width: 100%;
                     max-height: 96vh;
-                    border-radius: 22px 22px 0 0;
+                    border-radius:
+                        22px 22px 0 0;
                 }
 
                 .ll-nfce-video-area {
@@ -301,7 +408,9 @@
             }
         `;
 
-        document.head.appendChild(style);
+        document.head.appendChild(
+            style
+        );
     }
 
     // ============================================================
@@ -309,36 +418,43 @@
     // ============================================================
 
     function obterElemento(id) {
-        return document.getElementById(id);
+        return document.getElementById(
+            id
+        );
     }
 
     function definirStatus(
         mensagem,
         tipo = "info"
     ) {
-        const status = obterElemento(
-            IDS.status
-        );
+        const status =
+            obterElemento(
+                IDS.status
+            );
 
         if (!status) {
             return;
         }
 
-        status.textContent = mensagem;
+        status.textContent =
+            mensagem;
+
         status.className =
             `ll-nfce-status visivel ${tipo}`;
     }
 
     function limparStatus() {
-        const status = obterElemento(
-            IDS.status
-        );
+        const status =
+            obterElemento(
+                IDS.status
+            );
 
         if (!status) {
             return;
         }
 
         status.textContent = "";
+
         status.className =
             "ll-nfce-status";
     }
@@ -357,10 +473,12 @@
         ]
             .map(obterElemento)
             .filter(Boolean)
-            .forEach((elemento) => {
-                elemento.disabled =
-                    estado.processando;
-            });
+            .forEach(
+                (elemento) => {
+                    elemento.disabled =
+                        estado.processando;
+                }
+            );
     }
 
     // ============================================================
@@ -372,45 +490,55 @@
             return promessaFirebase;
         }
 
-        promessaFirebase = Promise.all([
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"
-            ),
+        promessaFirebase =
+            Promise.all([
+                import(
+                    "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"
+                ),
 
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js"
-            )
-        ])
-            .then(([
-                moduloApp,
-                moduloFunctions
-            ]) => {
-                const app =
-                    moduloApp.getApps().length
-                        ? moduloApp.getApp()
-                        : moduloApp.initializeApp(
-                            FIREBASE_CONFIG
-                        );
-
-                const functions =
-                    moduloFunctions.getFunctions(
-                        app,
-                        REGIAO_FUNCOES
-                    );
-
-                return {
-                    consultarNfce:
+                import(
+                    "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js"
+                )
+            ])
+                .then(
+                    ([
+                        moduloApp,
                         moduloFunctions
-                            .httpsCallable(
-                                functions,
-                                "consultarNfce"
-                            )
-                };
-            })
-            .catch((erro) => {
-                promessaFirebase = null;
-                throw erro;
-            });
+                    ]) => {
+                        const app =
+                            moduloApp
+                                .getApps()
+                                .length
+                                ? moduloApp
+                                    .getApp()
+                                : moduloApp
+                                    .initializeApp(
+                                        FIREBASE_CONFIG
+                                    );
+
+                        const functions =
+                            moduloFunctions
+                                .getFunctions(
+                                    app,
+                                    REGIAO_FUNCOES
+                                );
+
+                        return {
+                            consultarNfce:
+                                moduloFunctions
+                                    .httpsCallable(
+                                        functions,
+                                        "consultarNfce"
+                                    )
+                        };
+                    }
+                )
+                .catch((erro) => {
+                    promessaFirebase =
+                        null;
+
+                    throw erro;
+                });
 
         return promessaFirebase;
     }
@@ -420,11 +548,12 @@
     // ============================================================
 
     function normalizarUrl(valor) {
-        const texto = String(
-            valor || ""
-        ).trim();
+        const conteudo =
+            String(
+                valor || ""
+            ).trim();
 
-        if (!texto) {
+        if (!conteudo) {
             throw new Error(
                 "A URL da NFC-e não foi informada."
             );
@@ -433,25 +562,33 @@
         let url;
 
         try {
-            url = new URL(texto);
+            url =
+                new URL(conteudo);
         } catch {
             throw new Error(
                 "O QR Code não contém uma URL válida."
             );
         }
 
-        if (url.protocol !== "https:") {
+        if (
+            url.protocol !==
+            "https:"
+        ) {
             throw new Error(
                 "A consulta da NFC-e deve usar uma URL HTTPS."
             );
         }
 
         const hostname =
-            url.hostname.toLowerCase();
+            url.hostname
+                .toLowerCase()
+                .replace(/\.$/, "");
 
         if (
             hostname !== "gov.br" &&
-            !hostname.endsWith(".gov.br")
+            !hostname.endsWith(
+                ".gov.br"
+            )
         ) {
             throw new Error(
                 "O QR Code não aponta para um portal fiscal oficial do governo."
@@ -461,14 +598,18 @@
         return url.toString();
     }
 
-    function obterMensagemErro(erro) {
-        const codigo = String(
-            erro?.code || ""
-        );
+    function obterMensagemErro(
+        erro
+    ) {
+        const codigo =
+            String(
+                erro?.code || ""
+            );
 
-        const mensagem = String(
-            erro?.message || ""
-        ).trim();
+        const mensagem =
+            String(
+                erro?.message || ""
+            ).trim();
 
         if (
             codigo.includes(
@@ -557,7 +698,9 @@
     // RESPOSTA DA CLOUD FUNCTION
     // ============================================================
 
-    function obterNotaResposta(resposta) {
+    function obterNotaResposta(
+        resposta
+    ) {
         return (
             resposta?.data?.nota ||
             resposta?.data?.dados ||
@@ -568,27 +711,29 @@
         );
     }
 
-    function abrirConferencia(nota) {
+    function abrirConferencia(
+        nota
+    ) {
         const conferidor =
-            window.ListaLarConferenciaNota ||
-            window.ImportadorNotaPDF;
+            window
+                .ListaLarConferenciaNota ||
+            window
+                .ImportadorNotaPDF;
 
         if (
             conferidor &&
             typeof conferidor
-                .abrirComNota === "function"
+                .abrirComNota ===
+                "function"
         ) {
-            conferidor.abrirComNota(
-                nota
-            );
+            conferidor
+                .abrirComNota(
+                    nota
+                );
 
             return;
         }
 
-        /*
-         * Contingência caso o conferidor seja
-         * carregado por evento.
-         */
         window.dispatchEvent(
             new CustomEvent(
                 "listalar:conferir-nota",
@@ -599,7 +744,9 @@
         );
     }
 
-    async function consultarUrl(valorUrl) {
+    async function consultarUrl(
+        valorUrl
+    ) {
         if (estado.processando) {
             return;
         }
@@ -607,9 +754,10 @@
         let url;
 
         try {
-            url = normalizarUrl(
-                valorUrl
-            );
+            url =
+                normalizarUrl(
+                    valorUrl
+                );
         } catch (erro) {
             definirStatus(
                 erro.message,
@@ -619,9 +767,12 @@
             return;
         }
 
-        estado.ultimaUrl = url;
+        estado.ultimaUrl =
+            url;
 
-        definirProcessando(true);
+        definirProcessando(
+            true
+        );
 
         definirStatus(
             "Consultando a NFC-e no portal fiscal...",
@@ -635,11 +786,14 @@
                 await carregarFirebase();
 
             const resposta =
-                await firebase.consultarNfce({
-                    url,
-                    familiaId:
-                        estado.familiaId
-                });
+                await firebase
+                    .consultarNfce({
+                        url,
+
+                        familiaId:
+                            estado
+                                .familiaId
+                    });
 
             const nota =
                 obterNotaResposta(
@@ -648,7 +802,8 @@
 
             if (
                 !nota ||
-                typeof nota !== "object"
+                typeof nota !==
+                    "object"
             ) {
                 throw new Error(
                     "A consulta terminou, mas não retornou os dados da nota."
@@ -663,15 +818,19 @@
                     url,
 
                 familiaIdImportacao:
-                    nota.familiaIdImportacao ||
+                    nota
+                        .familiaIdImportacao ||
                     estado.familiaId,
 
                 modoImportacao:
-                    nota.modoImportacao ||
-                    estado.modoImportacao,
+                    nota
+                        .modoImportacao ||
+                    estado
+                        .modoImportacao,
 
                 origemImportacao:
-                    nota.origemImportacao ||
+                    nota
+                        .origemImportacao ||
                     "QR_CODE_NFCE"
             };
 
@@ -680,13 +839,16 @@
                 "sucesso"
             );
 
-            window.setTimeout(() => {
-                fechar();
+            window.setTimeout(
+                () => {
+                    fechar();
 
-                abrirConferencia(
-                    notaComContexto
-                );
-            }, 250);
+                    abrirConferencia(
+                        notaComContexto
+                    );
+                },
+                250
+            );
         } catch (erro) {
             console.error(
                 "❌ Erro ao consultar a NFC-e:",
@@ -694,20 +856,29 @@
             );
 
             definirStatus(
-                obterMensagemErro(erro),
+                obterMensagemErro(
+                    erro
+                ),
                 "erro"
             );
         } finally {
-            definirProcessando(false);
+            definirProcessando(
+                false
+            );
         }
     }
 
     // ============================================================
-    // LEITOR NATIVO DE QR CODE
+    // LEITOR NATIVO
     // ============================================================
 
     async function criarDetectorQr() {
-        if (!("BarcodeDetector" in window)) {
+        if (
+            !(
+                "BarcodeDetector"
+                in window
+            )
+        ) {
             return null;
         }
 
@@ -731,7 +902,9 @@
             }
 
             return new BarcodeDetector({
-                formats: ["qr_code"]
+                formats: [
+                    "qr_code"
+                ]
             });
         } catch (erro) {
             console.warn(
@@ -743,35 +916,407 @@
         }
     }
 
+    // ============================================================
+    // FALLBACK jsQR PARA IPHONE E SAFARI
+    // ============================================================
+
+    function carregarJsQr() {
+        if (
+            typeof window.jsQR ===
+            "function"
+        ) {
+            return Promise.resolve(
+                window.jsQR
+            );
+        }
+
+        if (promessaJsQr) {
+            return promessaJsQr;
+        }
+
+        promessaJsQr =
+            new Promise(
+                (
+                    resolver,
+                    rejeitar
+                ) => {
+                    const existente =
+                        document
+                            .querySelector(
+                                'script[data-listalar-jsqr="1"]'
+                            );
+
+                    if (existente) {
+                        const concluir =
+                            () => {
+                                if (
+                                    typeof window
+                                        .jsQR ===
+                                    "function"
+                                ) {
+                                    resolver(
+                                        window.jsQR
+                                    );
+
+                                    return;
+                                }
+
+                                rejeitar(
+                                    new Error(
+                                        "A biblioteca jsQR não foi carregada."
+                                    )
+                                );
+                            };
+
+                        if (
+                            existente
+                                .dataset
+                                .carregado ===
+                            "1"
+                        ) {
+                            concluir();
+                            return;
+                        }
+
+                        existente
+                            .addEventListener(
+                                "load",
+                                concluir,
+                                {
+                                    once: true
+                                }
+                            );
+
+                        existente
+                            .addEventListener(
+                                "error",
+                                () => {
+                                    rejeitar(
+                                        new Error(
+                                            "Não foi possível carregar o leitor de QR Code."
+                                        )
+                                    );
+                                },
+                                {
+                                    once: true
+                                }
+                            );
+
+                        return;
+                    }
+
+                    const script =
+                        document
+                            .createElement(
+                                "script"
+                            );
+
+                    script.src =
+                        URL_JSQR;
+
+                    script.async =
+                        true;
+
+                    script.crossOrigin =
+                        "anonymous";
+
+                    script.dataset
+                        .listalarJsqr =
+                        "1";
+
+                    script.onload =
+                        () => {
+                            script.dataset
+                                .carregado =
+                                "1";
+
+                            if (
+                                typeof window
+                                    .jsQR ===
+                                "function"
+                            ) {
+                                resolver(
+                                    window.jsQR
+                                );
+
+                                return;
+                            }
+
+                            rejeitar(
+                                new Error(
+                                    "A biblioteca jsQR não ficou disponível."
+                                )
+                            );
+                        };
+
+                    script.onerror =
+                        () => {
+                            script.remove();
+
+                            rejeitar(
+                                new Error(
+                                    "Não foi possível carregar o leitor de QR Code."
+                                )
+                            );
+                        };
+
+                    document.head
+                        .appendChild(
+                            script
+                        );
+                }
+            )
+                .catch((erro) => {
+                    promessaJsQr =
+                        null;
+
+                    throw erro;
+                });
+
+        return promessaJsQr;
+    }
+
+    function prepararCanvas() {
+        if (!estado.canvas) {
+            estado.canvas =
+                document
+                    .createElement(
+                        "canvas"
+                    );
+
+            estado.contextoCanvas =
+                estado.canvas
+                    .getContext(
+                        "2d",
+                        {
+                            willReadFrequently:
+                                true
+                        }
+                    );
+        }
+
+        return Boolean(
+            estado.contextoCanvas
+        );
+    }
+
+    async function prepararLeitorQr() {
+        const detector =
+            await criarDetectorQr();
+
+        if (detector) {
+            estado.detector =
+                detector;
+
+            estado.leitorQr =
+                "barcode-detector";
+
+            return;
+        }
+
+        definirStatus(
+            "Preparando leitor compatível com iPhone...",
+            "info"
+        );
+
+        await carregarJsQr();
+
+        if (!prepararCanvas()) {
+            throw new Error(
+                "O navegador não conseguiu preparar o leitor de QR Code."
+            );
+        }
+
+        estado.detector =
+            null;
+
+        estado.leitorQr =
+            "jsqr";
+    }
+
+    async function detectarComBarcodeDetector(
+        video
+    ) {
+        if (!estado.detector) {
+            return "";
+        }
+
+        const codigos =
+            await estado
+                .detector
+                .detect(video);
+
+        return String(
+            codigos?.[0]
+                ?.rawValue ||
+            ""
+        ).trim();
+    }
+
+    function detectarComJsQr(
+        video
+    ) {
+        if (
+            typeof window.jsQR !==
+                "function" ||
+            !prepararCanvas()
+        ) {
+            return "";
+        }
+
+        const largura =
+            video.videoWidth;
+
+        const altura =
+            video.videoHeight;
+
+        if (
+            !largura ||
+            !altura
+        ) {
+            return "";
+        }
+
+        const limiteMaiorLado =
+            900;
+
+        const escala =
+            Math.min(
+                1,
+
+                limiteMaiorLado /
+                    Math.max(
+                        largura,
+                        altura
+                    )
+            );
+
+        const larguraCanvas =
+            Math.max(
+                1,
+
+                Math.round(
+                    largura *
+                    escala
+                )
+            );
+
+        const alturaCanvas =
+            Math.max(
+                1,
+
+                Math.round(
+                    altura *
+                    escala
+                )
+            );
+
+        estado.canvas.width =
+            larguraCanvas;
+
+        estado.canvas.height =
+            alturaCanvas;
+
+        estado.contextoCanvas
+            .drawImage(
+                video,
+                0,
+                0,
+                larguraCanvas,
+                alturaCanvas
+            );
+
+        const imagem =
+            estado.contextoCanvas
+                .getImageData(
+                    0,
+                    0,
+                    larguraCanvas,
+                    alturaCanvas
+                );
+
+        const resultado =
+            window.jsQR(
+                imagem.data,
+                imagem.width,
+                imagem.height,
+                {
+                    inversionAttempts:
+                        "attemptBoth"
+                }
+            );
+
+        return String(
+            resultado?.data ||
+            ""
+        ).trim();
+    }
+
+    function podeProcessarQr(
+        valor
+    ) {
+        const agora =
+            Date.now();
+
+        if (
+            valor ===
+                estado
+                    .ultimoQrLido &&
+
+            agora -
+                estado
+                    .ultimaLeituraEm <
+                5000
+        ) {
+            return false;
+        }
+
+        estado.ultimoQrLido =
+            valor;
+
+        estado.ultimaLeituraEm =
+            agora;
+
+        return true;
+    }
+
     function agendarLeitura() {
         window.clearTimeout(
-            estado.temporizadorLeitura
+            estado
+                .temporizadorLeitura
         );
 
         if (
             !estado.stream ||
-            !estado.detector ||
+            !estado.leitorQr ||
             estado.processando
         ) {
             return;
         }
 
+        const intervalo =
+            estado.leitorQr ===
+                "jsqr"
+                ? 180
+                : 300;
+
         estado.temporizadorLeitura =
             window.setTimeout(
                 tentarLerQuadro,
-                300
+                intervalo
             );
     }
 
     async function tentarLerQuadro() {
-        const video = obterElemento(
-            IDS.video
-        );
+        const video =
+            obterElemento(
+                IDS.video
+            );
 
         if (
             !video ||
             !estado.stream ||
-            !estado.detector ||
+            !estado.leitorQr ||
             estado.processando
         ) {
             return;
@@ -783,17 +1328,22 @@
                 HTMLMediaElement
                     .HAVE_CURRENT_DATA
             ) {
-                const codigos =
-                    await estado.detector
-                        .detect(video);
+                const valor =
+                    estado.leitorQr ===
+                        "barcode-detector"
+                        ? await detectarComBarcodeDetector(
+                            video
+                        )
+                        : detectarComJsQr(
+                            video
+                        );
 
-                const valor = String(
-                    codigos?.[0]
-                        ?.rawValue ||
-                    ""
-                ).trim();
-
-                if (valor) {
+                if (
+                    valor &&
+                    podeProcessarQr(
+                        valor
+                    )
+                ) {
                     const campoUrl =
                         obterElemento(
                             IDS.url
@@ -804,24 +1354,38 @@
                             valor;
                     }
 
+                    let urlNormalizada;
+
+                    try {
+                        urlNormalizada =
+                            normalizarUrl(
+                                valor
+                            );
+                    } catch (erro) {
+                        definirStatus(
+                            "O QR Code foi lido, mas não é uma NFC-e oficial. " +
+                            erro.message,
+                            "erro"
+                        );
+
+                        agendarLeitura();
+
+                        return;
+                    }
+
                     definirStatus(
-                        "QR Code identificado.",
+                        "QR Code da NFC-e identificado.",
                         "sucesso"
                     );
 
                     await consultarUrl(
-                        valor
+                        urlNormalizada
                     );
 
                     return;
                 }
             }
         } catch (erro) {
-            /*
-             * Alguns quadros podem falhar durante
-             * movimentação da câmera. O leitor
-             * simplesmente tenta novamente.
-             */
             console.debug(
                 "Leitura de quadro não concluída:",
                 erro
@@ -843,7 +1407,8 @@
         limparStatus();
 
         if (
-            !navigator.mediaDevices
+            !navigator
+                .mediaDevices
                 ?.getUserMedia
         ) {
             definirStatus(
@@ -862,17 +1427,7 @@
         );
 
         try {
-            const detector =
-                await criarDetectorQr();
-
-            if (!detector) {
-                definirStatus(
-                    "Este navegador não possui leitura nativa de QR Code. Cole a URL da NFC-e abaixo.",
-                    "erro"
-                );
-
-                return;
-            }
+            await prepararLeitorQr();
 
             const stream =
                 await navigator
@@ -887,11 +1442,13 @@
                             },
 
                             width: {
-                                ideal: 1280
+                                ideal:
+                                    1280
                             },
 
                             height: {
-                                ideal: 720
+                                ideal:
+                                    720
                             }
                         }
                     });
@@ -905,22 +1462,27 @@
                 stream
                     .getTracks()
                     .forEach(
-                        (track) =>
-                            track.stop()
+                        (track) => {
+                            track.stop();
+                        }
                     );
 
                 return;
             }
 
-            estado.detector = detector;
-            estado.stream = stream;
+            estado.stream =
+                stream;
 
-            video.srcObject = stream;
+            video.srcObject =
+                stream;
 
             await video.play();
 
             definirStatus(
-                "Aponte a câmera para o QR Code impresso na NFC-e.",
+                estado.leitorQr ===
+                    "barcode-detector"
+                    ? "Aponte a câmera para o QR Code impresso na NFC-e."
+                    : "Leitor compatível com iPhone ativado. Aponte para o QR Code da NFC-e.",
                 "info"
             );
 
@@ -931,12 +1493,16 @@
                 erro
             );
 
-            const nome = String(
-                erro?.name || ""
-            );
+            await pararCamera();
+
+            const nome =
+                String(
+                    erro?.name || ""
+                );
 
             if (
-                nome === "NotAllowedError" ||
+                nome ===
+                    "NotAllowedError" ||
                 nome ===
                     "PermissionDeniedError"
             ) {
@@ -949,7 +1515,8 @@
             }
 
             if (
-                nome === "NotFoundError" ||
+                nome ===
+                    "NotFoundError" ||
                 nome ===
                     "DevicesNotFoundError"
             ) {
@@ -962,6 +1529,7 @@
             }
 
             definirStatus(
+                erro?.message ||
                 "Não foi possível abrir a câmera. Cole a URL da NFC-e abaixo.",
                 "erro"
             );
@@ -970,7 +1538,8 @@
 
     async function pararCamera() {
         window.clearTimeout(
-            estado.temporizadorLeitura
+            estado
+                .temporizadorLeitura
         );
 
         estado.temporizadorLeitura =
@@ -979,20 +1548,25 @@
         if (estado.stream) {
             estado.stream
                 .getTracks()
-                .forEach((track) => {
-                    try {
-                        track.stop();
-                    } catch {
-                        /*
-                         * A câmera já estava
-                         * encerrada.
-                         */
+                .forEach(
+                    (track) => {
+                        try {
+                            track.stop();
+                        } catch {
+                            // A câmera já foi encerrada.
+                        }
                     }
-                });
+                );
         }
 
-        estado.stream = null;
-        estado.detector = null;
+        estado.stream =
+            null;
+
+        estado.detector =
+            null;
+
+        estado.leitorQr =
+            "";
 
         const video =
             obterElemento(
@@ -1001,7 +1575,9 @@
 
         if (video) {
             video.pause();
-            video.srcObject = null;
+
+            video.srcObject =
+                null;
         }
     }
 
@@ -1014,7 +1590,8 @@
             return;
         }
 
-        estado.fechando = true;
+        estado.fechando =
+            true;
 
         try {
             await pararCamera();
@@ -1029,7 +1606,8 @@
                     "listalar-nfce-qr-aberto"
                 );
         } finally {
-            estado.fechando = false;
+            estado.fechando =
+                false;
         }
     }
 
@@ -1050,7 +1628,9 @@
                 "div"
             );
 
-        overlay.id = IDS.overlay;
+        overlay.id =
+            IDS.overlay;
+
         overlay.className =
             "ll-nfce-overlay";
 
@@ -1171,13 +1751,16 @@
             </section>
         `;
 
-        document.body.appendChild(
-            overlay
-        );
+        document.body
+            .appendChild(
+                overlay
+            );
 
-        document.body.classList.add(
-            "listalar-nfce-qr-aberto"
-        );
+        document.body
+            .classList
+            .add(
+                "listalar-nfce-qr-aberto"
+            );
 
         obterElemento(
             IDS.fechar
@@ -1208,7 +1791,8 @@
                 consultarUrl(
                     obterElemento(
                         IDS.url
-                    )?.value || ""
+                    )?.value ||
+                    ""
                 );
             }
         );
@@ -1248,28 +1832,43 @@
         );
     }
 
-    function abrir(opcoes = {}) {
-        estado.familiaId = String(
-            opcoes.familiaId || ""
-        ).trim();
+    function abrir(
+        opcoes = {}
+    ) {
+        estado.familiaId =
+            String(
+                opcoes.familiaId ||
+                ""
+            ).trim();
 
-        estado.modoImportacao = String(
-            opcoes.modoImportacao ||
-            "nota_fiscal"
-        ).trim() || "nota_fiscal";
+        estado.modoImportacao =
+            String(
+                opcoes
+                    .modoImportacao ||
+                "nota_fiscal"
+            ).trim() ||
+            "nota_fiscal";
 
-        estado.ultimaUrl = "";
-        estado.processando = false;
+        estado.ultimaUrl =
+            "";
+
+        estado.ultimoQrLido =
+            "";
+
+        estado.ultimaLeituraEm =
+            0;
+
+        estado.processando =
+            false;
 
         criarModal();
 
-        /*
-         * A abertura ocorre a partir de um clique
-         * do usuário no seletor de importação.
-         */
-        window.setTimeout(() => {
-            iniciarCamera();
-        }, 100);
+        window.setTimeout(
+            () => {
+                iniciarCamera();
+            },
+            100
+        );
     }
 
     function obterContexto() {
@@ -1278,7 +1877,8 @@
                 estado.familiaId,
 
             modoImportacao:
-                estado.modoImportacao,
+                estado
+                    .modoImportacao,
 
             ultimaUrl:
                 estado.ultimaUrl,
@@ -1289,7 +1889,10 @@
                 ),
 
             processando:
-                estado.processando
+                estado.processando,
+
+            leitorQr:
+                estado.leitorQr
         };
     }
 
@@ -1297,37 +1900,47 @@
     // API PÚBLICA
     // ============================================================
 
-    window.ListaLarImportadorNfce = {
-        versao: VERSAO,
-        abrir,
-        fechar,
-        iniciarCamera,
-        pararCamera,
-        consultarUrl,
-        obterContexto
-    };
+    window
+        .ListaLarImportadorNfce = {
+            versao:
+                VERSAO,
 
-    /*
-     * Nome alternativo aceito pelo
-     * importar-compra.js.
-     */
+            abrir,
+
+            fechar,
+
+            iniciarCamera,
+
+            pararCamera,
+
+            consultarUrl,
+
+            obterContexto
+        };
+
     window.ImportadorNFCe =
-        window.ListaLarImportadorNfce;
+        window
+            .ListaLarImportadorNfce;
 
     window.addEventListener(
         "listalar:abrir-importador-nfce",
+
         (evento) => {
             abrir(
-                evento.detail || {}
+                evento.detail ||
+                {}
             );
         }
     );
 
     document.addEventListener(
         "keydown",
+
         (evento) => {
             if (
-                evento.key === "Escape" &&
+                evento.key ===
+                    "Escape" &&
+
                 obterElemento(
                     IDS.overlay
                 )
@@ -1337,12 +1950,9 @@
         }
     );
 
-    /*
-     * Interrompe a câmera quando o usuário
-     * muda de aplicativo ou bloqueia a tela.
-     */
     document.addEventListener(
         "visibilitychange",
+
         () => {
             if (
                 document.hidden &&
