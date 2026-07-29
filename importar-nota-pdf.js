@@ -1,30 +1,62 @@
 /**
- * ListaLar — Importador de Nota Fiscal em PDF
+ * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.0.1
+ * Versão: 1.1.0
  *
  * Responsabilidades:
- * - selecionar um arquivo PDF;
- * - extrair o texto com PDF.js;
+ * - selecionar e ler uma nota fiscal em PDF;
  * - interpretar NFC-e gerada pela SEF/MG;
- * - organizar os produtos;
- * - exibir uma tela de conferência;
+ * - receber uma nota já consultada pelo QR Code/Cloud Function;
+ * - normalizar mercado, CNPJ, data, valores e produtos;
+ * - exibir uma tela única de conferência editável;
+ * - emitir o evento de nota confirmada para o módulo Gastos.
  *
- * Este arquivo não grava no Firestore nesta primeira versão.
+ * Este arquivo não grava diretamente no Firestore.
  */
 
-import * as pdfjsLib from
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.mjs";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.worker.mjs";
-
 const ImportadorNotaPDF = (() => {
+    "use strict";
+
+    const VERSAO = "1.1.0";
+
     const ESTADO = {
         arquivo: null,
         textoCompleto: "",
-        nota: null
+        nota: null,
+        origemAtual: ""
     };
+
+    let promessaPDFJS = null;
+
+    // ============================================================
+    // CARREGAMENTO SOB DEMANDA DO PDF.JS
+    // ============================================================
+
+    async function carregarPDFJS() {
+        if (promessaPDFJS) {
+            return promessaPDFJS;
+        }
+
+        promessaPDFJS = import(
+            "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.mjs"
+        )
+            .then((moduloPDF) => {
+                moduloPDF.GlobalWorkerOptions.workerSrc =
+                    "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.worker.mjs";
+
+                return moduloPDF;
+            })
+            .catch((erro) => {
+                promessaPDFJS = null;
+                throw erro;
+            });
+
+        return promessaPDFJS;
+    }
+
+    // ============================================================
+    // ESTILOS
+    // ============================================================
 
     function criarEstilos() {
         if (document.getElementById("importar-nota-pdf-estilos")) {
@@ -75,7 +107,14 @@ const ImportadorNotaPDF = (() => {
                 font-size: 22px;
             }
 
+            .nota-pdf-cabecalho small {
+                display: block;
+                margin-top: 4px;
+                opacity: 0.9;
+            }
+
             .nota-pdf-fechar {
+                flex: 0 0 auto;
                 width: 42px;
                 height: 42px;
                 border: 0;
@@ -84,6 +123,10 @@ const ImportadorNotaPDF = (() => {
                 background: rgba(255, 255, 255, 0.18);
                 font-size: 25px;
                 cursor: pointer;
+            }
+
+            .nota-pdf-fechar:active {
+                transform: scale(0.94);
             }
 
             .nota-pdf-conteudo {
@@ -102,6 +145,12 @@ const ImportadorNotaPDF = (() => {
                 display: none;
             }
 
+            .nota-pdf-seletor p {
+                margin: 10px auto 18px;
+                max-width: 520px;
+                line-height: 1.45;
+            }
+
             .nota-pdf-botao {
                 display: inline-flex;
                 align-items: center;
@@ -111,6 +160,7 @@ const ImportadorNotaPDF = (() => {
                 padding: 12px 20px;
                 border: 0;
                 border-radius: 14px;
+                font: inherit;
                 font-size: 16px;
                 font-weight: 700;
                 cursor: pointer;
@@ -119,6 +169,10 @@ const ImportadorNotaPDF = (() => {
             .nota-pdf-botao-principal {
                 color: #ffffff;
                 background: linear-gradient(135deg, #2563eb, #06b6d4);
+            }
+
+            .nota-pdf-botao-principal:hover {
+                filter: brightness(0.96);
             }
 
             .nota-pdf-botao-secundario {
@@ -162,8 +216,10 @@ const ImportadorNotaPDF = (() => {
             }
 
             .nota-pdf-card strong {
+                display: block;
                 color: #0f172a;
                 font-size: 17px;
+                overflow-wrap: anywhere;
             }
 
             .nota-pdf-tabela-wrapper {
@@ -175,8 +231,8 @@ const ImportadorNotaPDF = (() => {
 
             .nota-pdf-tabela {
                 width: 100%;
-                border-collapse: collapse;
                 min-width: 630px;
+                border-collapse: collapse;
             }
 
             .nota-pdf-tabela th,
@@ -185,6 +241,10 @@ const ImportadorNotaPDF = (() => {
                 border-bottom: 1px solid #e2e8f0;
                 text-align: left;
                 vertical-align: middle;
+            }
+
+            .nota-pdf-tabela tr:last-child td {
+                border-bottom: 0;
             }
 
             .nota-pdf-tabela th {
@@ -199,8 +259,14 @@ const ImportadorNotaPDF = (() => {
                 padding: 9px;
                 border: 1px solid #cbd5e1;
                 border-radius: 9px;
+                font: inherit;
                 font-size: 14px;
                 box-sizing: border-box;
+            }
+
+            .nota-pdf-tabela input:focus {
+                outline: 2px solid rgba(37, 99, 235, 0.22);
+                border-color: #2563eb;
             }
 
             .nota-pdf-acoes {
@@ -216,6 +282,7 @@ const ImportadorNotaPDF = (() => {
                 border-radius: 14px;
                 color: #991b1b;
                 background: #fee2e2;
+                line-height: 1.45;
             }
 
             @media (max-width: 600px) {
@@ -225,12 +292,22 @@ const ImportadorNotaPDF = (() => {
                 }
 
                 .nota-pdf-modal {
+                    width: 100%;
                     max-height: 94vh;
                     border-radius: 22px 22px 0 0;
                 }
 
                 .nota-pdf-cabecalho {
+                    padding: 17px;
                     border-radius: 22px 22px 0 0;
+                }
+
+                .nota-pdf-cabecalho h2 {
+                    font-size: 19px;
+                }
+
+                .nota-pdf-conteudo {
+                    padding: 16px;
                 }
 
                 .nota-pdf-resumo {
@@ -250,21 +327,59 @@ const ImportadorNotaPDF = (() => {
         document.head.appendChild(style);
     }
 
-    function abrir() {
-        criarEstilos();
+    // ============================================================
+    // ESTRUTURA DA TELA
+    // ============================================================
 
+    function criarEstruturaModal({
+        titulo,
+        subtitulo,
+        mostrarSeletorPDF = false
+    }) {
+        criarEstilos();
         fechar();
 
         const overlay = document.createElement("div");
+
         overlay.id = "nota-pdf-overlay";
         overlay.className = "nota-pdf-overlay";
+
+        const seletorPDF = mostrarSeletorPDF
+            ? `
+                <div class="nota-pdf-seletor">
+                    <div style="font-size:42px;margin-bottom:10px;">
+                        📄
+                    </div>
+
+                    <strong>Escolha o PDF da nota fiscal</strong>
+
+                    <p style="color:#64748b;">
+                        O arquivo será analisado antes de qualquer
+                        informação ser enviada ao módulo Gastos.
+                    </p>
+
+                    <label
+                        for="nota-pdf-arquivo"
+                        class="nota-pdf-botao nota-pdf-botao-principal"
+                    >
+                        Selecionar PDF
+                    </label>
+
+                    <input
+                        id="nota-pdf-arquivo"
+                        type="file"
+                        accept="application/pdf,.pdf"
+                    >
+                </div>
+            `
+            : "";
 
         overlay.innerHTML = `
             <section class="nota-pdf-modal">
                 <header class="nota-pdf-cabecalho">
                     <div>
-                        <h2>Importar nota fiscal</h2>
-                        <small>Selecione o PDF salvo pelo navegador</small>
+                        <h2>${escaparHTML(titulo)}</h2>
+                        <small>${escaparHTML(subtitulo)}</small>
                     </div>
 
                     <button
@@ -272,37 +387,21 @@ const ImportadorNotaPDF = (() => {
                         class="nota-pdf-fechar"
                         id="nota-pdf-fechar"
                         aria-label="Fechar"
+                        title="Fechar"
                     >
                         ×
                     </button>
                 </header>
 
                 <div class="nota-pdf-conteudo">
-                    <div class="nota-pdf-seletor">
-                        <div style="font-size: 42px; margin-bottom: 10px;">📄</div>
+                    ${seletorPDF}
 
-                        <strong>Escolha o PDF da nota fiscal</strong>
+                    <div
+                        id="nota-pdf-status"
+                        class="nota-pdf-status"
+                        role="status"
+                    ></div>
 
-                        <p style="color:#64748b;">
-                            O arquivo será analisado antes de qualquer informação
-                            ser salva.
-                        </p>
-
-                        <label
-                            for="nota-pdf-arquivo"
-                            class="nota-pdf-botao nota-pdf-botao-principal"
-                        >
-                            Selecionar PDF
-                        </label>
-
-                        <input
-                            id="nota-pdf-arquivo"
-                            type="file"
-                            accept="application/pdf,.pdf"
-                        >
-                    </div>
-
-                    <div id="nota-pdf-status" class="nota-pdf-status"></div>
                     <div id="nota-pdf-resultado"></div>
                 </div>
             </section>
@@ -312,25 +411,94 @@ const ImportadorNotaPDF = (() => {
 
         document
             .getElementById("nota-pdf-fechar")
-            .addEventListener("click", fechar);
+            ?.addEventListener("click", fechar);
 
         document
             .getElementById("nota-pdf-arquivo")
-            .addEventListener("change", tratarSelecaoArquivo);
+            ?.addEventListener(
+                "change",
+                tratarSelecaoArquivo
+            );
 
-        overlay.addEventListener("click", (event) => {
-            if (event.target === overlay) {
+        overlay.addEventListener("click", (evento) => {
+            if (evento.target === overlay) {
                 fechar();
             }
         });
+
+        return overlay;
+    }
+
+    // ============================================================
+    // ABERTURA
+    // ============================================================
+
+    function abrir() {
+        ESTADO.arquivo = null;
+        ESTADO.textoCompleto = "";
+        ESTADO.nota = null;
+        ESTADO.origemAtual = "PDF";
+
+        criarEstruturaModal({
+            titulo: "Importar nota fiscal",
+            subtitulo: "Selecione o PDF salvo pelo navegador",
+            mostrarSeletorPDF: true
+        });
+    }
+
+    function abrirComNota(notaExterna) {
+        ESTADO.arquivo = null;
+        ESTADO.textoCompleto = "";
+        ESTADO.nota = null;
+        ESTADO.origemAtual = "QR_CODE";
+
+        criarEstruturaModal({
+            titulo: "Conferir nota fiscal",
+            subtitulo: "Dados recebidos pela leitura do QR Code",
+            mostrarSeletorPDF: false
+        });
+
+        atualizarStatus(
+            "Preparando os dados da nota fiscal..."
+        );
+
+        try {
+            const nota = normalizarNotaExterna(notaExterna);
+
+            ESTADO.nota = nota;
+
+            validarNota(nota);
+            exibirNota(nota);
+
+            atualizarStatus(
+                `${nota.itens.length} item(ns) encontrado(s). ` +
+                "Confira os dados antes de importar."
+            );
+        } catch (erro) {
+            console.error(
+                "Erro ao preparar a nota recebida pelo QR Code:",
+                erro
+            );
+
+            mostrarErro(
+                erro?.message ||
+                "Os dados recebidos não formam uma nota fiscal válida."
+            );
+        }
     }
 
     function fechar() {
-        document.getElementById("nota-pdf-overlay")?.remove();
+        document
+            .getElementById("nota-pdf-overlay")
+            ?.remove();
     }
 
-    async function tratarSelecaoArquivo(event) {
-        const arquivo = event.target.files?.[0];
+    // ============================================================
+    // LEITURA DO PDF
+    // ============================================================
+
+    async function tratarSelecaoArquivo(evento) {
+        const arquivo = evento.target.files?.[0];
 
         if (!arquivo) {
             return;
@@ -340,13 +508,17 @@ const ImportadorNotaPDF = (() => {
             arquivo.type !== "application/pdf" &&
             !arquivo.name.toLowerCase().endsWith(".pdf")
         ) {
-            mostrarErro("Selecione um arquivo PDF válido.");
+            mostrarErro(
+                "Selecione um arquivo PDF válido."
+            );
+
             return;
         }
 
         ESTADO.arquivo = arquivo;
         ESTADO.textoCompleto = "";
         ESTADO.nota = null;
+        ESTADO.origemAtual = "PDF";
 
         atualizarStatus(`Lendo ${arquivo.name}...`);
 
@@ -361,19 +533,25 @@ const ImportadorNotaPDF = (() => {
             exibirNota(nota);
 
             atualizarStatus(
-                `${nota.itens.length} item(ns) encontrado(s). Confira os dados antes de importar.`
+                `${nota.itens.length} item(ns) encontrado(s). ` +
+                "Confira os dados antes de importar."
             );
         } catch (erro) {
-            console.error("Erro ao importar nota fiscal:", erro);
+            console.error(
+                "Erro ao importar nota fiscal:",
+                erro
+            );
 
             mostrarErro(
                 erro?.message ||
-                "Não foi possível ler este PDF. Verifique o arquivo e tente novamente."
+                "Não foi possível ler este PDF. " +
+                "Verifique o arquivo e tente novamente."
             );
         }
     }
 
     async function extrairTextoPDF(arquivo) {
+        const pdfjsLib = await carregarPDFJS();
         const arrayBuffer = await arquivo.arrayBuffer();
 
         const documento = await pdfjsLib.getDocument({
@@ -387,69 +565,109 @@ const ImportadorNotaPDF = (() => {
             numeroPagina <= documento.numPages;
             numeroPagina += 1
         ) {
-            const pagina = await documento.getPage(numeroPagina);
-            const conteudo = await pagina.getTextContent();
+            const pagina = await documento.getPage(
+                numeroPagina
+            );
 
-            const linhas = agruparItensEmLinhas(conteudo.items);
+            const conteudo =
+                await pagina.getTextContent();
+
+            const linhas = agruparItensEmLinhas(
+                conteudo.items
+            );
 
             paginas.push(linhas.join("\n"));
         }
 
-        return normalizarTexto(paginas.join("\n"));
+        return normalizarTexto(
+            paginas.join("\n")
+        );
     }
 
     function agruparItensEmLinhas(itens) {
         const grupos = new Map();
         const toleranciaY = 3;
 
-        const ordenados = [...itens].sort((itemA, itemB) => {
-            const yA = itemA.transform?.[5] ?? 0;
-            const yB = itemB.transform?.[5] ?? 0;
+        const ordenados = [...itens].sort(
+            (itemA, itemB) => {
+                const yA =
+                    itemA.transform?.[5] ?? 0;
 
-            if (Math.abs(yA - yB) > toleranciaY) {
-                return yB - yA;
+                const yB =
+                    itemB.transform?.[5] ?? 0;
+
+                if (
+                    Math.abs(yA - yB) >
+                    toleranciaY
+                ) {
+                    return yB - yA;
+                }
+
+                const xA =
+                    itemA.transform?.[4] ?? 0;
+
+                const xB =
+                    itemB.transform?.[4] ?? 0;
+
+                return xA - xB;
             }
-
-            const xA = itemA.transform?.[4] ?? 0;
-            const xB = itemB.transform?.[4] ?? 0;
-
-            return xA - xB;
-        });
+        );
 
         for (const item of ordenados) {
-            const texto = String(item.str || "").trim();
+            const texto = String(
+                item.str || ""
+            ).trim();
 
             if (!texto) {
                 continue;
             }
 
-            const x = item.transform?.[4] ?? 0;
-            const y = item.transform?.[5] ?? 0;
+            const x =
+                item.transform?.[4] ?? 0;
+
+            const y =
+                item.transform?.[5] ?? 0;
 
             let chaveExistente = null;
 
             for (const chave of grupos.keys()) {
-                if (Math.abs(Number(chave) - y) <= toleranciaY) {
+                if (
+                    Math.abs(
+                        Number(chave) - y
+                    ) <= toleranciaY
+                ) {
                     chaveExistente = chave;
                     break;
                 }
             }
 
-            const chave = chaveExistente ?? String(y);
+            const chave =
+                chaveExistente ?? String(y);
 
             if (!grupos.has(chave)) {
                 grupos.set(chave, []);
             }
 
-            grupos.get(chave).push({ x, texto });
+            grupos.get(chave).push({
+                x,
+                texto
+            });
         }
 
         return [...grupos.entries()]
-            .sort(([yA], [yB]) => Number(yB) - Number(yA))
+            .sort(
+                ([yA], [yB]) =>
+                    Number(yB) - Number(yA)
+            )
             .map(([, partes]) => {
                 return partes
-                    .sort((parteA, parteB) => parteA.x - parteB.x)
-                    .map((parte) => parte.texto)
+                    .sort(
+                        (parteA, parteB) =>
+                            parteA.x - parteB.x
+                    )
+                    .map(
+                        (parte) => parte.texto
+                    )
                     .join(" ")
                     .replace(/\s+/g, " ")
                     .trim();
@@ -469,54 +687,91 @@ const ImportadorNotaPDF = (() => {
     function normalizarParaComparacao(texto) {
         return String(texto || "")
             .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
+            .replace(
+                /[\u0300-\u036f]/g,
+                ""
+            )
             .toLowerCase()
             .replace(/\s+/g, " ")
             .trim();
     }
 
+    // ============================================================
+    // INTERPRETAÇÃO DO PDF SEF/MG
+    // ============================================================
+
     function interpretarNotaSEFMG(texto) {
         const linhas = texto
             .split("\n")
-            .map((linha) => linha.trim())
+            .map(
+                (linha) => linha.trim()
+            )
             .filter(Boolean);
 
         return {
             origem: "PDF_SEF_MG",
-            mercadoNome: extrairMercado(linhas),
-            cnpj: extrairCNPJ(texto),
-            dataCompra: extrairDataCompra(texto),
-            chaveAcesso: extrairChaveAcesso(texto),
-            formaPagamento: extrairFormaPagamento(texto),
-            quantidadeTotalItens: extrairQuantidadeTotal(texto),
-            valorTotal: extrairValorTotal(texto),
-            itens: extrairItensSEFMG(linhas),
-            nomeArquivo: ESTADO.arquivo?.name || "",
-            importadoEm: new Date().toISOString()
+
+            mercadoNome:
+                extrairMercado(linhas),
+
+            cnpj:
+                extrairCNPJ(texto),
+
+            dataCompra:
+                extrairDataCompra(texto),
+
+            chaveAcesso:
+                extrairChaveAcesso(texto),
+
+            formaPagamento:
+                extrairFormaPagamento(texto),
+
+            quantidadeTotalItens:
+                extrairQuantidadeTotal(texto),
+
+            valorTotal:
+                extrairValorTotal(texto),
+
+            itens:
+                extrairItensSEFMG(linhas),
+
+            nomeArquivo:
+                ESTADO.arquivo?.name || "",
+
+            importadoEm:
+                new Date().toISOString()
         };
     }
 
     function extrairMercado(linhas) {
-        const indiceTitulo = linhas.findIndex((linha) =>
-            /Nota Fiscal de Consumidor Eletrônica/i.test(linha)
-        );
+        const indiceTitulo =
+            linhas.findIndex((linha) =>
+                /Nota Fiscal de Consumidor Eletrônica/i
+                    .test(linha)
+            );
 
         const candidatos = linhas.slice(
             Math.max(0, indiceTitulo + 1),
             indiceTitulo + 7
         );
 
-        const mercado = candidatos.find((linha) => {
-            return (
-                linha.length >= 4 &&
-                !/^CNPJ/i.test(linha) &&
-                !/Inscrição Estadual/i.test(linha) &&
-                !/Secretaria de Estado/i.test(linha) &&
-                !/^\d{2}\/\d{2}\/\d{4}/.test(linha)
-            );
-        });
+        const mercado = candidatos.find(
+            (linha) => {
+                return (
+                    linha.length >= 4 &&
+                    !/^CNPJ/i.test(linha) &&
+                    !/Inscrição Estadual/i
+                        .test(linha) &&
+                    !/Secretaria de Estado/i
+                        .test(linha) &&
+                    !/^\d{2}\/\d{2}\/\d{4}/
+                        .test(linha)
+                );
+            }
+        );
 
-        return mercado || "Estabelecimento não identificado";
+        return mercado ||
+            "Estabelecimento não identificado";
     }
 
     function extrairCNPJ(texto) {
@@ -525,7 +780,9 @@ const ImportadorNotaPDF = (() => {
         );
 
         return correspondencia
-            ? somenteDigitos(correspondencia[1]).slice(0, 14)
+            ? somenteDigitos(
+                correspondencia[1]
+            ).slice(0, 14)
             : "";
     }
 
@@ -540,9 +797,14 @@ const ImportadorNotaPDF = (() => {
             return "";
         }
 
-        const correspondencia = datas[datas.length - 1];
-        const [dia, mes, ano] = correspondencia[1].split("/");
-        const horario = correspondencia[2] || "00:00";
+        const correspondencia =
+            datas[datas.length - 1];
+
+        const [dia, mes, ano] =
+            correspondencia[1].split("/");
+
+        const horario =
+            correspondencia[2] || "00:00";
 
         return `${ano}-${mes}-${dia}T${horario}`;
     }
@@ -557,7 +819,8 @@ const ImportadorNotaPDF = (() => {
         }
 
         for (const bloco of blocos) {
-            const chave = somenteDigitos(bloco);
+            const chave =
+                somenteDigitos(bloco);
 
             if (chave.length === 44) {
                 return chave;
@@ -578,7 +841,8 @@ const ImportadorNotaPDF = (() => {
     }
 
     function extrairQuantidadeTotal(texto) {
-        const textoComparacao = normalizarParaComparacao(texto);
+        const textoComparacao =
+            normalizarParaComparacao(texto);
 
         const correspondencias = [
             ...textoComparacao.matchAll(
@@ -591,7 +855,9 @@ const ImportadorNotaPDF = (() => {
         }
 
         return converterNumero(
-            correspondencias[correspondencias.length - 1][1]
+            correspondencias[
+                correspondencias.length - 1
+            ][1]
         );
     }
 
@@ -607,28 +873,37 @@ const ImportadorNotaPDF = (() => {
         }
 
         return converterMoeda(
-            correspondencias[correspondencias.length - 1][1]
+            correspondencias[
+                correspondencias.length - 1
+            ][1]
         );
     }
 
     function extrairItensSEFMG(linhas) {
         /*
-         * O portal da SEF/MG pode gerar o PDF em dois formatos:
+         * O portal da SEF/MG pode gerar o PDF
+         * em dois formatos:
          *
-         * 1. todos os dados do produto aparecem em sequência;
-         * 2. os títulos das colunas ficam em uma linha e os valores
-         *    ficam na linha seguinte.
+         * 1. todos os dados do produto aparecem
+         *    em sequência;
          *
-         * O segundo formato é o usado no PDF do Carrefour testado.
+         * 2. os títulos das colunas ficam em
+         *    uma linha e os valores ficam na
+         *    linha seguinte.
          */
-        const itensTabela = extrairItensTabelaSEFMG(linhas);
+
+        const itensTabela =
+            extrairItensTabelaSEFMG(linhas);
 
         if (itensTabela.length) {
-            return removerItensDuplicados(itensTabela);
+            return removerItensDuplicados(
+                itensTabela
+            );
         }
 
         const itens = [];
-        const textoUnificado = linhas.join("\n");
+        const textoUnificado =
+            linhas.join("\n");
 
         const padraoItem =
             /(.+?)\s*\(C[oó]digo:\s*(\d+)\)\s*Qtde total de [ií]tens:\s*([\d.,]+)\s*UN:\s*([A-Za-zÀ-ÿ]+)\s*Valor total R\$:\s*R?\$?\s*([\d.,]+)/gi;
@@ -636,15 +911,30 @@ const ImportadorNotaPDF = (() => {
         let correspondencia;
 
         while (
-            (correspondencia = padraoItem.exec(textoUnificado)) !== null
+            (
+                correspondencia =
+                    padraoItem.exec(
+                        textoUnificado
+                    )
+            ) !== null
         ) {
-            const item = criarItemInterpretado({
-                descricao: correspondencia[1],
-                codigo: correspondencia[2],
-                quantidade: correspondencia[3],
-                unidade: correspondencia[4],
-                valorTotal: correspondencia[5]
-            });
+            const item =
+                criarItemInterpretado({
+                    descricao:
+                        correspondencia[1],
+
+                    codigo:
+                        correspondencia[2],
+
+                    quantidade:
+                        correspondencia[3],
+
+                    unidade:
+                        correspondencia[4],
+
+                    valorTotal:
+                        correspondencia[5]
+                });
 
             if (item) {
                 itens.push(item);
@@ -652,91 +942,132 @@ const ImportadorNotaPDF = (() => {
         }
 
         if (itens.length) {
-            return removerItensDuplicados(itens);
+            return removerItensDuplicados(
+                itens
+            );
         }
 
-        return extrairItensPorLinhas(linhas);
+        return extrairItensPorLinhas(
+            linhas
+        );
     }
 
     function extrairItensTabelaSEFMG(linhas) {
         const itens = [];
 
-        for (let indice = 0; indice < linhas.length; indice += 1) {
-            const linhaCabecalho = linhas[indice];
-            const linhaComparacao = normalizarParaComparacao(
-                linhaCabecalho
-            );
+        for (
+            let indice = 0;
+            indice < linhas.length;
+            indice += 1
+        ) {
+            const linhaCabecalho =
+                linhas[indice];
+
+            const linhaComparacao =
+                normalizarParaComparacao(
+                    linhaCabecalho
+                );
 
             const pareceCabecalhoProduto =
-                linhaComparacao.includes("(codigo:") &&
-                linhaComparacao.includes("qtde total de itens") &&
-                linhaComparacao.includes("un:") &&
-                linhaComparacao.includes("valor total r$");
+                linhaComparacao.includes(
+                    "(codigo:"
+                ) &&
+                linhaComparacao.includes(
+                    "qtde total de itens"
+                ) &&
+                linhaComparacao.includes(
+                    "un:"
+                ) &&
+                linhaComparacao.includes(
+                    "valor total r$"
+                );
 
             if (!pareceCabecalhoProduto) {
                 continue;
             }
 
-            const descricao = linhaCabecalho
-                .split(/\(C[oó]digo:/i)[0]
-                ?.trim();
+            const descricao =
+                linhaCabecalho
+                    .split(
+                        /\(C[oó]digo:/i
+                    )[0]
+                    ?.trim();
 
-            /*
-             * Normalmente os quatro valores ficam na linha imediatamente
-             * seguinte. O pequeno laço também suporta uma eventual quebra
-             * adicional criada pelo PDF.js.
-             */
             let blocoValores = "";
             let itemEncontrado = null;
-            let indiceValorEncontrado = indice;
+
+            let indiceValorEncontrado =
+                indice;
 
             for (
                 let deslocamento = 1;
                 deslocamento <= 3;
                 deslocamento += 1
             ) {
-                const linhaValores = linhas[indice + deslocamento];
+                const linhaValores =
+                    linhas[
+                        indice + deslocamento
+                    ];
 
                 if (!linhaValores) {
                     break;
                 }
 
-                const proximaComparacao = normalizarParaComparacao(
-                    linhaValores
-                );
+                const proximaComparacao =
+                    normalizarParaComparacao(
+                        linhaValores
+                    );
 
                 if (
-                    proximaComparacao.includes("(codigo:") &&
-                    proximaComparacao.includes("qtde total de itens")
+                    proximaComparacao.includes(
+                        "(codigo:"
+                    ) &&
+                    proximaComparacao.includes(
+                        "qtde total de itens"
+                    )
                 ) {
                     break;
                 }
 
-                blocoValores = `${blocoValores} ${linhaValores}`.trim();
+                blocoValores =
+                    `${blocoValores} ${linhaValores}`
+                        .trim();
 
-                const valores = blocoValores.match(
-                    /^(\d+)\)?\s+([\d.,]+)\s+([A-Za-zÀ-ÿ]{1,10})\s+([\d.,]+)$/i
-                );
+                const valores =
+                    blocoValores.match(
+                        /^(\d+)\)?\s+([\d.,]+)\s+([A-Za-zÀ-ÿ]{1,10})\s+([\d.,]+)$/i
+                    );
 
                 if (!valores) {
                     continue;
                 }
 
-                itemEncontrado = criarItemInterpretado({
-                    descricao,
-                    codigo: valores[1],
-                    quantidade: valores[2],
-                    unidade: valores[3],
-                    valorTotal: valores[4]
-                });
+                itemEncontrado =
+                    criarItemInterpretado({
+                        descricao,
+                        codigo:
+                            valores[1],
+                        quantidade:
+                            valores[2],
+                        unidade:
+                            valores[3],
+                        valorTotal:
+                            valores[4]
+                    });
 
-                indiceValorEncontrado = indice + deslocamento;
+                indiceValorEncontrado =
+                    indice + deslocamento;
+
                 break;
             }
 
             if (itemEncontrado) {
-                itens.push(itemEncontrado);
-                indice = indiceValorEncontrado;
+                itens.push(
+                    itemEncontrado
+                );
+
+                indice =
+                    indiceValorEncontrado;
             }
         }
 
@@ -746,8 +1077,13 @@ const ImportadorNotaPDF = (() => {
     function extrairItensPorLinhas(linhas) {
         const itens = [];
 
-        for (let indice = 0; indice < linhas.length; indice += 1) {
-            const linha = linhas[indice];
+        for (
+            let indice = 0;
+            indice < linhas.length;
+            indice += 1
+        ) {
+            const linha =
+                linhas[indice];
 
             const inicio = linha.match(
                 /^(.*?)\s*\(C[oó]digo:\s*(\d+)\)/i
@@ -758,39 +1094,61 @@ const ImportadorNotaPDF = (() => {
             }
 
             const bloco = linhas
-                .slice(indice, indice + 8)
+                .slice(
+                    indice,
+                    indice + 8
+                )
                 .join(" ");
 
-            const quantidadeMatch = bloco.match(
-                /Qtde total de [ií]tens:\s*([\d.,]+)/i
-            );
+            const quantidadeMatch =
+                bloco.match(
+                    /Qtde total de [ií]tens:\s*([\d.,]+)/i
+                );
 
-            const unidadeMatch = bloco.match(
-                /UN:\s*([A-Za-zÀ-ÿ]+)/i
-            );
+            const unidadeMatch =
+                bloco.match(
+                    /UN:\s*([A-Za-zÀ-ÿ]+)/i
+                );
 
-            const valorMatch = bloco.match(
-                /Valor total R\$:\s*R?\$?\s*([\d.,]+)/i
-            );
+            const valorMatch =
+                bloco.match(
+                    /Valor total R\$:\s*R?\$?\s*([\d.,]+)/i
+                );
 
-            if (!quantidadeMatch || !valorMatch) {
+            if (
+                !quantidadeMatch ||
+                !valorMatch
+            ) {
                 continue;
             }
 
-            const item = criarItemInterpretado({
-                descricao: inicio[1],
-                codigo: inicio[2],
-                quantidade: quantidadeMatch[1],
-                unidade: unidadeMatch?.[1] || "UN",
-                valorTotal: valorMatch[1]
-            });
+            const item =
+                criarItemInterpretado({
+                    descricao:
+                        inicio[1],
+
+                    codigo:
+                        inicio[2],
+
+                    quantidade:
+                        quantidadeMatch[1],
+
+                    unidade:
+                        unidadeMatch?.[1] ||
+                        "UN",
+
+                    valorTotal:
+                        valorMatch[1]
+                });
 
             if (item) {
                 itens.push(item);
             }
         }
 
-        return removerItensDuplicados(itens);
+        return removerItensDuplicados(
+            itens
+        );
     }
 
     function criarItemInterpretado({
@@ -800,33 +1158,60 @@ const ImportadorNotaPDF = (() => {
         unidade,
         valorTotal
     }) {
-        const descricaoLimpa = limparDescricaoItem(descricao);
+        const descricaoLimpa =
+            limparDescricaoItem(descricao);
 
         if (
             !descricaoLimpa ||
-            /(?:Filtrar|Filtar)\s+[ií]tens/i.test(descricaoLimpa) ||
-            /Nota Fiscal/i.test(descricaoLimpa)
+            /(?:Filtrar|Filtar)\s+[ií]tens/i
+                .test(descricaoLimpa) ||
+            /Nota Fiscal/i
+                .test(descricaoLimpa)
         ) {
             return null;
         }
 
-        const quantidadeConvertida = converterNumero(quantidade);
-        const valorConvertido = converterMoeda(valorTotal);
-        const unidadeLimpa = String(unidade || "UN")
-            .replace(/[^A-Za-zÀ-ÿ]/g, "")
-            .toUpperCase() || "UN";
+        const quantidadeConvertida =
+            converterNumero(quantidade);
+
+        const valorConvertido =
+            converterMoeda(valorTotal);
+
+        const unidadeLimpa =
+            String(unidade || "UN")
+                .replace(
+                    /[^A-Za-zÀ-ÿ]/g,
+                    ""
+                )
+                .toUpperCase() ||
+            "UN";
 
         return {
-            descricaoOriginal: descricaoLimpa,
-            produtoNome: formatarNomeProduto(descricaoLimpa),
-            codigo: somenteDigitos(codigo),
-            quantidade: quantidadeConvertida,
-            unidade: unidadeLimpa,
-            precoTotal: valorConvertido,
+            descricaoOriginal:
+                descricaoLimpa,
+
+            produtoNome:
+                formatarNomeProduto(
+                    descricaoLimpa
+                ),
+
+            codigo:
+                somenteDigitos(codigo),
+
+            quantidade:
+                quantidadeConvertida,
+
+            unidade:
+                unidadeLimpa,
+
+            precoTotal:
+                valorConvertido,
+
             precoUnitario:
                 quantidadeConvertida > 0
                     ? arredondarMoeda(
-                        valorConvertido / quantidadeConvertida
+                        valorConvertido /
+                        quantidadeConvertida
                     )
                     : valorConvertido
         };
@@ -843,10 +1228,14 @@ const ImportadorNotaPDF = (() => {
     }
 
     function formatarNomeProduto(descricao) {
-        const texto = limparDescricaoItem(descricao).toLowerCase();
+        const texto =
+            limparDescricaoItem(descricao)
+                .toLowerCase();
 
-        return texto.replace(/\b\p{L}/gu, (letra) =>
-            letra.toUpperCase()
+        return texto.replace(
+            /\b\p{L}/gu,
+            (letra) =>
+                letra.toUpperCase()
         );
     }
 
@@ -869,31 +1258,365 @@ const ImportadorNotaPDF = (() => {
         return [...mapa.values()];
     }
 
-    function validarNota(nota) {
-        if (!nota.itens.length) {
+    // ============================================================
+    // NORMALIZAÇÃO DE NOTA RECEBIDA PELO QR CODE
+    // ============================================================
+
+    function clonarSeguro(valor) {
+        if (
+            typeof structuredClone ===
+            "function"
+        ) {
+            return structuredClone(valor);
+        }
+
+        return JSON.parse(
+            JSON.stringify(valor)
+        );
+    }
+
+    function primeiroValorValido(...valores) {
+        for (const valor of valores) {
+            if (
+                valor !== undefined &&
+                valor !== null &&
+                valor !== ""
+            ) {
+                return valor;
+            }
+        }
+
+        return "";
+    }
+
+    function obterListaItensExterna(nota) {
+        const possibilidades = [
+            nota?.itens,
+            nota?.produtos,
+            nota?.items,
+            nota?.dados?.itens,
+            nota?.dados?.produtos,
+            nota?.nota?.itens,
+            nota?.nota?.produtos
+        ];
+
+        return possibilidades.find(
+            Array.isArray
+        ) || [];
+    }
+
+    function normalizarItemExterno(
+        item,
+        indice
+    ) {
+        const descricaoOriginal = String(
+            primeiroValorValido(
+                item?.descricaoOriginal,
+                item?.descricao,
+                item?.produtoNome,
+                item?.nome,
+                item?.produto,
+                item?.item,
+                `Produto ${indice + 1}`
+            )
+        ).trim();
+
+        const quantidade =
+            converterNumero(
+                primeiroValorValido(
+                    item?.quantidade,
+                    item?.qtd,
+                    item?.qtde,
+                    1
+                )
+            );
+
+        const precoTotalInformado =
+            converterNumero(
+                primeiroValorValido(
+                    item?.precoTotal,
+                    item?.valorTotal,
+                    item?.total,
+                    item?.subtotal,
+                    item?.valor_total,
+                    0
+                )
+            );
+
+        const precoUnitarioInformado =
+            converterNumero(
+                primeiroValorValido(
+                    item?.precoUnitario,
+                    item?.valorUnitario,
+                    item?.preco,
+                    item?.valor,
+                    0
+                )
+            );
+
+        const precoTotal =
+            precoTotalInformado > 0
+                ? precoTotalInformado
+                : arredondarMoeda(
+                    quantidade *
+                    precoUnitarioInformado
+                );
+
+        const precoUnitario =
+            precoUnitarioInformado > 0
+                ? precoUnitarioInformado
+                : quantidade > 0
+                    ? arredondarMoeda(
+                        precoTotal /
+                        quantidade
+                    )
+                    : precoTotal;
+
+        return {
+            ...clonarSeguro(
+                item || {}
+            ),
+
+            descricaoOriginal,
+
+            produtoNome: String(
+                primeiroValorValido(
+                    item?.produtoNome,
+                    item?.nomeNormalizado,
+                    formatarNomeProduto(
+                        descricaoOriginal
+                    )
+                )
+            ).trim(),
+
+            codigo: somenteDigitos(
+                primeiroValorValido(
+                    item?.codigo,
+                    item?.codigoProduto,
+                    item?.cProd,
+                    item?.ean,
+                    item?.gtin
+                )
+            ),
+
+            quantidade:
+                quantidade > 0
+                    ? quantidade
+                    : 1,
+
+            unidade: String(
+                primeiroValorValido(
+                    item?.unidade,
+                    item?.un,
+                    item?.tipoUnidade,
+                    "UN"
+                )
+            )
+                .trim()
+                .toUpperCase() ||
+                "UN",
+
+            precoUnitario:
+                arredondarMoeda(
+                    precoUnitario
+                ),
+
+            precoTotal:
+                arredondarMoeda(
+                    precoTotal
+                )
+        };
+    }
+
+    function normalizarNotaExterna(
+        valorRecebido
+    ) {
+        const recebido =
+            valorRecebido?.data?.nota ||
+            valorRecebido?.data?.dados ||
+            valorRecebido?.data ||
+            valorRecebido?.nota ||
+            valorRecebido?.dados ||
+            valorRecebido;
+
+        if (
+            !recebido ||
+            typeof recebido !== "object"
+        ) {
             throw new Error(
-                "O PDF foi aberto, mas nenhum produto foi reconhecido."
+                "A consulta foi concluída, mas não retornou os dados da nota."
+            );
+        }
+
+        const itens =
+            obterListaItensExterna(
+                recebido
+            )
+                .map(
+                    normalizarItemExterno
+                )
+                .filter((item) => {
+                    return (
+                        item.produtoNome &&
+                        item.quantidade > 0
+                    );
+                });
+
+        const valorTotalInformado =
+            converterNumero(
+                primeiroValorValido(
+                    recebido?.valorTotal,
+                    recebido?.total,
+                    recebido?.totalNota,
+                    recebido?.valor_total,
+                    recebido?.dados
+                        ?.valorTotal,
+                    recebido?.dados
+                        ?.total,
+                    0
+                )
+            );
+
+        const valorCalculado =
+            arredondarMoeda(
+                itens.reduce(
+                    (total, item) =>
+                        total +
+                        item.precoTotal,
+                    0
+                )
+            );
+
+        return {
+            ...clonarSeguro(recebido),
+
+            origem: String(
+                primeiroValorValido(
+                    recebido?.origem,
+                    "QR_CODE_NFCE"
+                )
+            ),
+
+            mercadoNome: String(
+                primeiroValorValido(
+                    recebido?.mercadoNome,
+                    recebido?.estabelecimento,
+                    recebido?.supermercado,
+                    recebido?.emitente?.nome,
+                    recebido?.emitente
+                        ?.razaoSocial,
+                    recebido?.razaoSocial,
+                    recebido?.nomeEmpresa,
+                    "Estabelecimento não identificado"
+                )
+            ).trim(),
+
+            cnpj: somenteDigitos(
+                primeiroValorValido(
+                    recebido?.cnpj,
+                    recebido?.emitente?.cnpj,
+                    recebido
+                        ?.estabelecimentoCnpj
+                )
+            ).slice(0, 14),
+
+            dataCompra:
+                primeiroValorValido(
+                    recebido?.dataCompra,
+                    recebido?.dataEmissao,
+                    recebido?.data,
+                    recebido?.emissao
+                ),
+
+            chaveAcesso:
+                somenteDigitos(
+                    primeiroValorValido(
+                        recebido?.chaveAcesso,
+                        recebido?.chave,
+                        recebido?.chaveNfce,
+                        recebido?.chaveNFCE
+                    )
+                ).slice(0, 44),
+
+            formaPagamento: String(
+                primeiroValorValido(
+                    recebido?.formaPagamento,
+                    recebido?.pagamento
+                        ?.forma,
+                    recebido?.pagamento
+                )
+            ).trim(),
+
+            quantidadeTotalItens:
+                itens.length,
+
+            valorTotal:
+                valorTotalInformado > 0
+                    ? arredondarMoeda(
+                        valorTotalInformado
+                    )
+                    : valorCalculado,
+
+            itens,
+
+            nomeArquivo: "",
+
+            importadoEm:
+                recebido?.importadoEm ||
+                new Date().toISOString()
+        };
+    }
+
+    // ============================================================
+    // VALIDAÇÃO
+    // ============================================================
+
+    function validarNota(nota) {
+        if (
+            !nota ||
+            typeof nota !== "object"
+        ) {
+            throw new Error(
+                "Os dados da nota fiscal são inválidos."
+            );
+        }
+
+        if (
+            !Array.isArray(nota.itens) ||
+            !nota.itens.length
+        ) {
+            throw new Error(
+                "A nota foi recebida, mas nenhum produto foi reconhecido."
             );
         }
 
         if (!nota.valorTotal) {
-            nota.valorTotal = arredondarMoeda(
-                nota.itens.reduce(
-                    (total, item) => total + item.precoTotal,
-                    0
-                )
-            );
+            nota.valorTotal =
+                arredondarMoeda(
+                    nota.itens.reduce(
+                        (total, item) =>
+                            total +
+                            item.precoTotal,
+                        0
+                    )
+                );
         }
 
         if (!nota.quantidadeTotalItens) {
-            nota.quantidadeTotalItens = nota.itens.length;
+            nota.quantidadeTotalItens =
+                nota.itens.length;
         }
     }
 
+    // ============================================================
+    // CONFERÊNCIA
+    // ============================================================
+
     function exibirNota(nota) {
-        const resultado = document.getElementById(
-            "nota-pdf-resultado"
-        );
+        const resultado =
+            document.getElementById(
+                "nota-pdf-resultado"
+            );
 
         if (!resultado) {
             return;
@@ -903,22 +1626,42 @@ const ImportadorNotaPDF = (() => {
             <div class="nota-pdf-resumo">
                 <div class="nota-pdf-card">
                     <span>Estabelecimento</span>
-                    <strong>${escaparHTML(nota.mercadoNome)}</strong>
+
+                    <strong>
+                        ${escaparHTML(
+                            nota.mercadoNome
+                        )}
+                    </strong>
                 </div>
 
                 <div class="nota-pdf-card">
                     <span>CNPJ</span>
-                    <strong>${escaparHTML(formatarCNPJ(nota.cnpj))}</strong>
+
+                    <strong>
+                        ${escaparHTML(
+                            formatarCNPJ(
+                                nota.cnpj
+                            )
+                        )}
+                    </strong>
                 </div>
 
                 <div class="nota-pdf-card">
                     <span>Produtos encontrados</span>
-                    <strong>${nota.itens.length}</strong>
+
+                    <strong>
+                        ${nota.itens.length}
+                    </strong>
                 </div>
 
                 <div class="nota-pdf-card">
                     <span>Valor total</span>
-                    <strong>${formatarMoeda(nota.valorTotal)}</strong>
+
+                    <strong>
+                        ${formatarMoeda(
+                            nota.valorTotal
+                        )}
+                    </strong>
                 </div>
             </div>
 
@@ -936,8 +1679,12 @@ const ImportadorNotaPDF = (() => {
 
                     <tbody>
                         ${nota.itens
-                            .map((item, indice) =>
-                                criarLinhaItem(item, indice)
+                            .map(
+                                (item, indice) =>
+                                    criarLinhaItem(
+                                        item,
+                                        indice
+                                    )
                             )
                             .join("")}
                     </tbody>
@@ -964,22 +1711,37 @@ const ImportadorNotaPDF = (() => {
         `;
 
         resultado
-            .querySelector("#nota-pdf-cancelar")
-            ?.addEventListener("click", fechar);
+            .querySelector(
+                "#nota-pdf-cancelar"
+            )
+            ?.addEventListener(
+                "click",
+                fechar
+            );
 
         resultado
-            .querySelector("#nota-pdf-confirmar")
-            ?.addEventListener("click", confirmarImportacao);
+            .querySelector(
+                "#nota-pdf-confirmar"
+            )
+            ?.addEventListener(
+                "click",
+                confirmarImportacao
+            );
     }
 
-    function criarLinhaItem(item, indice) {
+    function criarLinhaItem(
+        item,
+        indice
+    ) {
         return `
             <tr data-indice="${indice}">
                 <td>
                     <input
                         type="text"
                         data-campo="produtoNome"
-                        value="${escaparAtributo(item.produtoNome)}"
+                        value="${escaparAtributo(
+                            item.produtoNome
+                        )}"
                     >
                 </td>
 
@@ -997,7 +1759,9 @@ const ImportadorNotaPDF = (() => {
                     <input
                         type="text"
                         data-campo="unidade"
-                        value="${escaparAtributo(item.unidade)}"
+                        value="${escaparAtributo(
+                            item.unidade
+                        )}"
                     >
                 </td>
 
@@ -1007,7 +1771,8 @@ const ImportadorNotaPDF = (() => {
                         data-campo="precoUnitario"
                         min="0"
                         step="0.01"
-                        value="${item.precoUnitario.toFixed(2)}"
+                        value="${item.precoUnitario
+                            .toFixed(2)}"
                     >
                 </td>
 
@@ -1017,7 +1782,8 @@ const ImportadorNotaPDF = (() => {
                         data-campo="precoTotal"
                         min="0"
                         step="0.01"
-                        value="${item.precoTotal.toFixed(2)}"
+                        value="${item.precoTotal
+                            .toFixed(2)}"
                     >
                 </td>
             </tr>
@@ -1025,92 +1791,249 @@ const ImportadorNotaPDF = (() => {
     }
 
     function confirmarImportacao() {
-        const linhas = document.querySelectorAll(
-            ".nota-pdf-tabela tbody tr"
-        );
+        if (!ESTADO.nota) {
+            mostrarErro(
+                "Nenhuma nota fiscal está disponível para confirmar."
+            );
 
-        const itensRevisados = [...linhas].map((linha) => {
-            const indice = Number(linha.dataset.indice);
-            const itemOriginal = ESTADO.nota.itens[indice];
+            return;
+        }
 
-            const obterValor = (campo) => {
-                return linha.querySelector(
-                    `[data-campo="${campo}"]`
-                )?.value;
-            };
+        const linhas =
+            document.querySelectorAll(
+                ".nota-pdf-tabela tbody tr"
+            );
 
-            return {
-                ...itemOriginal,
-                produtoNome: obterValor("produtoNome")?.trim() || "",
-                quantidade: converterNumero(
-                    obterValor("quantidade")
-                ),
-                unidade:
-                    obterValor("unidade")?.trim().toUpperCase() || "UN",
-                precoUnitario: converterNumero(
-                    obterValor("precoUnitario")
-                ),
-                precoTotal: converterNumero(
-                    obterValor("precoTotal")
+        const itensRevisados =
+            [...linhas]
+                .map((linha) => {
+                    const indice =
+                        Number(
+                            linha.dataset.indice
+                        );
+
+                    const itemOriginal =
+                        ESTADO.nota
+                            .itens[indice];
+
+                    const obterValor =
+                        (campo) => {
+                            return linha
+                                .querySelector(
+                                    `[data-campo="${campo}"]`
+                                )
+                                ?.value;
+                        };
+
+                    const produtoNome =
+                        obterValor(
+                            "produtoNome"
+                        )
+                            ?.trim() ||
+                        "";
+
+                    const quantidade =
+                        converterNumero(
+                            obterValor(
+                                "quantidade"
+                            )
+                        );
+
+                    const precoUnitario =
+                        converterNumero(
+                            obterValor(
+                                "precoUnitario"
+                            )
+                        );
+
+                    let precoTotal =
+                        converterNumero(
+                            obterValor(
+                                "precoTotal"
+                            )
+                        );
+
+                    if (
+                        !precoTotal &&
+                        quantidade > 0
+                    ) {
+                        precoTotal =
+                            arredondarMoeda(
+                                quantidade *
+                                precoUnitario
+                            );
+                    }
+
+                    return {
+                        ...itemOriginal,
+
+                        produtoNome,
+
+                        quantidade,
+
+                        unidade:
+                            obterValor(
+                                "unidade"
+                            )
+                                ?.trim()
+                                .toUpperCase() ||
+                            "UN",
+
+                        precoUnitario:
+                            arredondarMoeda(
+                                precoUnitario
+                            ),
+
+                        precoTotal:
+                            arredondarMoeda(
+                                precoTotal
+                            )
+                    };
+                })
+                .filter((item) => {
+                    return (
+                        item.produtoNome &&
+                        item.quantidade > 0
+                    );
+                });
+
+        if (!itensRevisados.length) {
+            mostrarErro(
+                "Mantenha pelo menos um produto com nome e quantidade válida."
+            );
+
+            return;
+        }
+
+        const valorTotalRevisado =
+            arredondarMoeda(
+                itensRevisados.reduce(
+                    (total, item) =>
+                        total +
+                        item.precoTotal,
+                    0
                 )
-            };
-        });
+            );
 
         const notaConfirmada = {
             ...ESTADO.nota,
-            itens: itensRevisados,
-            revisadaEm: new Date().toISOString()
+
+            origemImportacao:
+                ESTADO.origemAtual ||
+                ESTADO.nota.origem ||
+                "NOTA_FISCAL",
+
+            itens:
+                itensRevisados,
+
+            quantidadeTotalItens:
+                itensRevisados.length,
+
+            valorTotal:
+                valorTotalRevisado,
+
+            revisadaEm:
+                new Date().toISOString()
         };
 
+        ESTADO.nota =
+            notaConfirmada;
+
+        /*
+         * Evento novo e genérico.
+         *
+         * Será usado pelo novo fluxo de QR Code
+         * e pelas futuras integrações.
+         */
         window.dispatchEvent(
-            new CustomEvent("listalar:nota-pdf-importada", {
-                detail: notaConfirmada
-            })
+            new CustomEvent(
+                "listalar:nota-importada",
+                {
+                    detail:
+                        notaConfirmada
+                }
+            )
+        );
+
+        /*
+         * Compatibilidade com gastos.js 1.2.0.
+         *
+         * O arquivo atual ainda escuta
+         * listalar:nota-pdf-importada.
+         */
+        window.dispatchEvent(
+            new CustomEvent(
+                "listalar:nota-pdf-importada",
+                {
+                    detail:
+                        notaConfirmada
+                }
+            )
         );
 
         console.log(
-            "Nota fiscal pronta para salvar:",
+            "✅ Nota fiscal conferida e enviada ao módulo Gastos:",
             notaConfirmada
-        );
-
-        alert(
-            `${notaConfirmada.itens.length} produtos foram lidos corretamente.`
         );
 
         fechar();
     }
 
+    // ============================================================
+    // INTERFACE E MENSAGENS
+    // ============================================================
+
     function atualizarStatus(mensagem) {
-        const status = document.getElementById("nota-pdf-status");
+        const status =
+            document.getElementById(
+                "nota-pdf-status"
+            );
 
         if (!status) {
             return;
         }
 
-        status.textContent = mensagem;
-        status.classList.add("ativo");
+        status.textContent =
+            mensagem;
+
+        status.classList.add(
+            "ativo"
+        );
     }
 
     function mostrarErro(mensagem) {
-        const resultado = document.getElementById(
-            "nota-pdf-resultado"
-        );
+        const resultado =
+            document.getElementById(
+                "nota-pdf-resultado"
+            );
 
-        atualizarStatus("Não foi possível concluir a leitura.");
+        atualizarStatus(
+            "Não foi possível concluir a leitura."
+        );
 
         if (resultado) {
             resultado.innerHTML = `
                 <div class="nota-pdf-erro">
-                    ${escaparHTML(mensagem)}
+                    ${escaparHTML(
+                        mensagem
+                    )}
                 </div>
             `;
         }
     }
 
+    // ============================================================
+    // UTILITÁRIOS
+    // ============================================================
+
     function converterMoeda(valor) {
-        const texto = String(valor || "")
-            .replace(/[^\d,.-]/g, "")
-            .trim();
+        const texto =
+            String(valor || "")
+                .replace(
+                    /[^\d,.-]/g,
+                    ""
+                )
+                .trim();
 
         if (!texto) {
             return 0;
@@ -1118,7 +2041,9 @@ const ImportadorNotaPDF = (() => {
 
         if (texto.includes(",")) {
             return Number(
-                texto.replace(/\./g, "").replace(",", ".")
+                texto
+                    .replace(/\./g, "")
+                    .replace(",", ".")
             ) || 0;
         }
 
@@ -1126,47 +2051,71 @@ const ImportadorNotaPDF = (() => {
     }
 
     function converterNumero(valor) {
-        const texto = String(valor ?? "")
-            .replace(/[^\d,.-]/g, "")
-            .trim();
+        const texto =
+            String(valor ?? "")
+                .replace(
+                    /[^\d,.-]/g,
+                    ""
+                )
+                .trim();
 
         if (!texto) {
             return 0;
         }
 
-        if (texto.includes(",") && texto.includes(".")) {
+        if (
+            texto.includes(",") &&
+            texto.includes(".")
+        ) {
             return Number(
-                texto.replace(/\./g, "").replace(",", ".")
+                texto
+                    .replace(/\./g, "")
+                    .replace(",", ".")
             ) || 0;
         }
 
         if (texto.includes(",")) {
-            return Number(texto.replace(",", ".")) || 0;
+            return Number(
+                texto.replace(",", ".")
+            ) || 0;
         }
 
         return Number(texto) || 0;
     }
 
     function arredondarMoeda(valor) {
-        return Math.round((Number(valor) + Number.EPSILON) * 100) / 100;
+        return Math.round(
+            (
+                Number(valor) +
+                Number.EPSILON
+            ) * 100
+        ) / 100;
     }
 
     function somenteDigitos(valor) {
-        return String(valor || "").replace(/\D/g, "");
+        return String(valor || "")
+            .replace(/\D/g, "");
     }
 
     function formatarMoeda(valor) {
-        return Number(valor || 0).toLocaleString("pt-BR", {
-            style: "currency",
-            currency: "BRL"
-        });
+        return Number(
+            valor || 0
+        ).toLocaleString(
+            "pt-BR",
+            {
+                style: "currency",
+                currency: "BRL"
+            }
+        );
     }
 
     function formatarCNPJ(cnpj) {
-        const numeros = somenteDigitos(cnpj);
+        const numeros =
+            somenteDigitos(cnpj);
 
         if (numeros.length !== 14) {
-            return cnpj || "Não identificado";
+            return cnpj ||
+                "Não identificado";
         }
 
         return numeros.replace(
@@ -1188,24 +2137,76 @@ const ImportadorNotaPDF = (() => {
         return escaparHTML(valor);
     }
 
+    // ============================================================
+    // API PÚBLICA
+    // ============================================================
+
     return {
+        versao: VERSAO,
+
         abrir,
+
+        abrirComNota,
+
         fechar,
+
         obterUltimaNota() {
             return ESTADO.nota
-                ? structuredClone(ESTADO.nota)
+                ? clonarSeguro(
+                    ESTADO.nota
+                )
                 : null;
         }
     };
 })();
 
-window.ImportadorNotaPDF = ImportadorNotaPDF;
+// ============================================================
+// COMPATIBILIDADE E EVENTOS
+// ============================================================
 
+/*
+ * Nome antigo preservado para não quebrar
+ * o gastos.js existente.
+ */
+window.ImportadorNotaPDF =
+    ImportadorNotaPDF;
+
+/*
+ * Nome novo e genérico.
+ */
+window.ListaLarConferenciaNota =
+    ImportadorNotaPDF;
+
+/*
+ * Abre a seleção de PDF.
+ */
 window.addEventListener(
     "listalar:abrir-importador-nota",
-    () => ImportadorNotaPDF.abrir()
+    () => {
+        ImportadorNotaPDF.abrir();
+    }
+);
+
+/*
+ * Abre diretamente a conferência de uma nota
+ * recebida pelo leitor de QR Code.
+ */
+window.addEventListener(
+    "listalar:conferir-nota",
+    (evento) => {
+        const nota =
+            evento?.detail?.data?.nota ||
+            evento?.detail?.data?.dados ||
+            evento?.detail?.data ||
+            evento?.detail?.nota ||
+            evento?.detail?.dados ||
+            evento?.detail;
+
+        ImportadorNotaPDF
+            .abrirComNota(nota);
+    }
 );
 
 console.log(
-    "✅ Importador de nota fiscal PDF carregado — versão 1.0.1"
+    `✅ Importador e conferidor de nota fiscal carregado — versão ${ImportadorNotaPDF.versao}`
 );
