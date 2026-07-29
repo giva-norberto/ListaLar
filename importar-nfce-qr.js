@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador de NFC-e por QR Code
  * Arquivo: importar-nfce-qr.js
- * Versão: 1.1.0
+ * Versão: 1.2.0
  *
  * Responsabilidades:
  * - abrir a câmera traseira;
@@ -18,7 +18,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "1.1.0";
+    const VERSAO = "1.2.0";
     const REGIAO_FUNCOES =
         "southamerica-east1";
 
@@ -74,7 +74,16 @@
             "listalar-nfce-qr-consultar",
 
         status:
-            "listalar-nfce-qr-status"
+            "listalar-nfce-qr-status",
+
+        fallback:
+            "listalar-nfce-qr-fallback",
+
+        fallbackAbrirPortal:
+            "listalar-nfce-qr-fallback-portal",
+
+        fallbackSelecionarPdf:
+            "listalar-nfce-qr-fallback-pdf"
     };
 
     const estado = {
@@ -386,6 +395,45 @@
                 background: #fee2e2;
             }
 
+            .ll-nfce-fallback {
+                display: none;
+                margin-top: 14px;
+                padding: 14px;
+                border-radius: 16px;
+                border:
+                    1px dashed #fbbf24;
+                background: #fffbeb;
+            }
+
+            .ll-nfce-fallback.visivel {
+                display: block;
+            }
+
+            .ll-nfce-fallback-texto {
+                margin: 0 0 12px;
+                color: #92400e;
+                font-size: 13px;
+                font-weight: 700;
+                line-height: 1.45;
+                text-align: center;
+            }
+
+            .ll-nfce-fallback-acoes {
+                display: grid;
+                grid-template-columns:
+                    1fr 1fr;
+                gap: 10px;
+            }
+
+            @media (
+                max-width: 420px
+            ) {
+                .ll-nfce-fallback-acoes {
+                    grid-template-columns:
+                        1fr;
+                }
+            }
+
             @media (
                 max-width: 600px
             ) {
@@ -694,6 +742,39 @@
         );
     }
 
+    function ehBloqueioSeguranca(
+        erro
+    ) {
+        const textoErro = [
+            erro?.code,
+            erro?.message,
+            erro?.details?.motivo,
+            erro?.details?.tipo
+        ]
+            .filter(Boolean)
+            .join(" ")
+            .normalize("NFD")
+            .replace(
+                /[\u0300-\u036f]/g,
+                ""
+            )
+            .toLowerCase();
+
+        return [
+            "cloudflare",
+            "captcha",
+            "recaptcha",
+            "verificacao de seguranca",
+            "checagem de seguranca",
+            "challenge"
+        ].some(
+            (pista) =>
+                textoErro.includes(
+                    pista
+                )
+        );
+    }
+
     // ============================================================
     // RESPOSTA DA CLOUD FUNCTION
     // ============================================================
@@ -744,6 +825,110 @@
         );
     }
 
+    // ============================================================
+    // FALLBACK: PORTAL BLOQUEADO (VERIFICAÇÃO DE SEGURANÇA)
+    // ============================================================
+
+    function ocultarFallbackBloqueio() {
+        const bloco =
+            obterElemento(
+                IDS.fallback
+            );
+
+        if (bloco) {
+            bloco.classList
+                .remove(
+                    "visivel"
+                );
+        }
+    }
+
+    function mostrarFallbackBloqueio(
+        url
+    ) {
+        const bloco =
+            obterElemento(
+                IDS.fallback
+            );
+
+        if (!bloco) {
+            return;
+        }
+
+        bloco.classList.add(
+            "visivel"
+        );
+
+        const botaoPortal =
+            obterElemento(
+                IDS.fallbackAbrirPortal
+            );
+
+        if (botaoPortal) {
+            botaoPortal.dataset.url =
+                url ||
+                estado.ultimaUrl ||
+                "";
+        }
+    }
+
+    function abrirPortalManualmente() {
+        const url =
+            obterElemento(
+                IDS.fallbackAbrirPortal
+            )?.dataset.url ||
+
+            estado.ultimaUrl;
+
+        if (!url) {
+            definirStatus(
+                "Não há uma URL de NFC-e para abrir. Leia o QR Code novamente.",
+                "erro"
+            );
+
+            return;
+        }
+
+        window.open(
+            url,
+            "_blank",
+            "noopener"
+        );
+
+        definirStatus(
+            "Conclua a verificação no portal. Depois, volte aqui e use " +
+            "\"Selecionar PDF da nota\" para importar a compra.",
+            "info"
+        );
+    }
+
+    function abrirImportadorPdfExistente() {
+        const importador =
+            window
+                .ImportadorNotaPDF ||
+            window
+                .ListaLarConferenciaNota;
+
+        if (
+            importador &&
+            typeof importador
+                .abrir ===
+                "function"
+        ) {
+            fechar();
+
+            importador.abrir();
+
+            return;
+        }
+
+        window.dispatchEvent(
+            new CustomEvent(
+                "listalar:abrir-importador-nota"
+            )
+        );
+    }
+
     async function consultarUrl(
         valorUrl
     ) {
@@ -773,6 +958,8 @@
         definirProcessando(
             true
         );
+
+        ocultarFallbackBloqueio();
 
         definirStatus(
             "Consultando a NFC-e no portal fiscal...",
@@ -861,6 +1048,16 @@
                 ),
                 "erro"
             );
+
+            if (
+                ehBloqueioSeguranca(
+                    erro
+                )
+            ) {
+                mostrarFallbackBloqueio(
+                    url
+                );
+            }
         } finally {
             definirProcessando(
                 false
@@ -1747,6 +1944,36 @@
                         role="status"
                         aria-live="polite"
                     ></div>
+
+                    <div
+                        id="${IDS.fallback}"
+                        class="ll-nfce-fallback"
+                    >
+                        <p class="ll-nfce-fallback-texto">
+                            O portal fiscal pediu uma
+                            verificação de segurança.
+                            Conclua no portal e depois
+                            importe pelo PDF da nota.
+                        </p>
+
+                        <div class="ll-nfce-fallback-acoes">
+                            <button
+                                id="${IDS.fallbackAbrirPortal}"
+                                class="ll-nfce-botao ll-nfce-botao-secundario"
+                                type="button"
+                            >
+                                Abrir portal
+                            </button>
+
+                            <button
+                                id="${IDS.fallbackSelecionarPdf}"
+                                class="ll-nfce-botao ll-nfce-botao-principal"
+                                type="button"
+                            >
+                                Selecionar PDF da nota
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </section>
         `;
@@ -1795,6 +2022,20 @@
                     ""
                 );
             }
+        );
+
+        obterElemento(
+            IDS.fallbackAbrirPortal
+        )?.addEventListener(
+            "click",
+            abrirPortalManualmente
+        );
+
+        obterElemento(
+            IDS.fallbackSelecionarPdf
+        )?.addEventListener(
+            "click",
+            abrirImportadorPdfExistente
         );
 
         obterElemento(
