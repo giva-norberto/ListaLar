@@ -1,13 +1,13 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 1.2.0
+// Versão: 1.3.0
 //
 // Responsabilidades:
 // - Criar o acesso "Gastos"
 // - Criar a tela "Meus Gastos"
-// - Abrir o importador de nota fiscal PDF
-// - Receber os dados extraídos da nota
+// - Abrir a importação por QR Code ou PDF
+// - Receber e preparar os dados conferidos da nota
 //
 // Este arquivo não altera os módulos existentes.
 // ============================================================
@@ -15,7 +15,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "1.2.0";
+    const VERSAO = "1.3.0";
 
     const FIREBASE_CONFIG = {
         apiKey: "AIzaSyC2U7q5HupxKyI3QiAyan-2Sio55NSir0Y",
@@ -43,15 +43,47 @@
         botaoImportar: "listalar-gastos-importar-nf",
         resumoImportacao: "listalar-gastos-resumo-importacao",
         aviso: "listalar-gastos-aviso",
-        modalDuplicidade: "listalar-gastos-modal-duplicidade",
-        modalCancelar: "listalar-gastos-modal-cancelar",
-        modalSubstituir: "listalar-gastos-modal-substituir",
-        modalNovaCompra: "listalar-gastos-modal-nova-compra"
+
+        modalDuplicidade:
+            "listalar-gastos-modal-duplicidade",
+
+        modalCancelar:
+            "listalar-gastos-modal-cancelar",
+
+        modalSubstituir:
+            "listalar-gastos-modal-substituir",
+
+        modalNovaCompra:
+            "listalar-gastos-modal-nova-compra",
+
+        modalOrigem:
+            "listalar-gastos-modal-origem",
+
+        modalOrigemQr:
+            "listalar-gastos-modal-origem-qr",
+
+        modalOrigemPdf:
+            "listalar-gastos-modal-origem-pdf",
+
+        modalOrigemCancelar:
+            "listalar-gastos-modal-origem-cancelar"
     };
 
     let ultimaNotaImportada = null;
     let modoImportacaoAtual = null;
+
     let resolverModoImportacao = null;
+    let resolverOrigemImportacao = null;
+
+    /*
+     * O conferidor universal emite o evento genérico e também
+     * o evento antigo de compatibilidade.
+     *
+     * Esta referência impede que a mesma nota seja processada
+     * duas vezes pelo módulo Gastos.
+     */
+    let ultimaNotaRecebidaReferencia = null;
+    let ultimaNotaRecebidaEm = 0;
 
     let familiaIdAtual = "";
     let moduloLiberado = false;
@@ -97,30 +129,42 @@
         });
     }
 
-    function mostrarAviso(mensagem, tipo = "info") {
-        const aviso = document.getElementById(IDS.aviso);
+    function mostrarAviso(
+        mensagem,
+        tipo = "info"
+    ) {
+        const aviso = document.getElementById(
+            IDS.aviso
+        );
 
         if (!aviso) {
             return;
         }
 
         aviso.textContent = mensagem;
-        aviso.className = `listalar-gastos-aviso ${tipo}`;
+        aviso.className =
+            `listalar-gastos-aviso ${tipo}`;
+
         aviso.hidden = false;
 
-        window.clearTimeout(mostrarAviso.timeout);
+        window.clearTimeout(
+            mostrarAviso.timeout
+        );
 
-        mostrarAviso.timeout = window.setTimeout(() => {
-            aviso.hidden = true;
-        }, 4500);
+        mostrarAviso.timeout =
+            window.setTimeout(() => {
+                aviso.hidden = true;
+            }, 4500);
     }
 
     function controlePrecosEstaAtivo() {
         try {
             return Boolean(
                 window.ListaLarPrecos &&
-                typeof window.ListaLarPrecos.estaAtivo === "function" &&
-                window.ListaLarPrecos.estaAtivo() === true
+                typeof window.ListaLarPrecos
+                    .estaAtivo === "function" &&
+                window.ListaLarPrecos
+                    .estaAtivo() === true
             );
         } catch (erro) {
             console.warn(
@@ -141,51 +185,72 @@
             return promessaFirebaseGastos;
         }
 
-        promessaFirebaseGastos = Promise.all([
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"
-            ),
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"
-            ),
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
-            )
-        ]).then(([
-            moduloApp,
-            moduloAuth,
-            moduloFirestore
-        ]) => {
-            const app = moduloApp.getApps().length
-                ? moduloApp.getApp()
-                : moduloApp.initializeApp(FIREBASE_CONFIG);
+        promessaFirebaseGastos =
+            Promise.all([
+                import(
+                    "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"
+                ),
 
-            return {
-                auth: moduloAuth.getAuth(app),
-                db: moduloFirestore.getFirestore(app),
-                onAuthStateChanged:
-                    moduloAuth.onAuthStateChanged,
-                doc: moduloFirestore.doc,
-                getDoc: moduloFirestore.getDoc
-            };
-        });
+                import(
+                    "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"
+                ),
+
+                import(
+                    "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+                )
+            ]).then(([
+                moduloApp,
+                moduloAuth,
+                moduloFirestore
+            ]) => {
+                const app =
+                    moduloApp.getApps().length
+                        ? moduloApp.getApp()
+                        : moduloApp.initializeApp(
+                            FIREBASE_CONFIG
+                        );
+
+                return {
+                    auth:
+                        moduloAuth.getAuth(app),
+
+                    db:
+                        moduloFirestore
+                            .getFirestore(app),
+
+                    onAuthStateChanged:
+                        moduloAuth
+                            .onAuthStateChanged,
+
+                    doc:
+                        moduloFirestore.doc,
+
+                    getDoc:
+                        moduloFirestore.getDoc
+                };
+            });
 
         return promessaFirebaseGastos;
     }
 
-    function definirVisibilidadeGastos(liberado) {
-        moduloLiberado = liberado === true;
+    function definirVisibilidadeGastos(
+        liberado
+    ) {
+        moduloLiberado =
+            liberado === true;
 
         if (moduloLiberado) {
             if (!interfaceInicializada) {
                 criarTela();
                 criarBotaoMenu();
                 configurarEventos();
+
                 interfaceInicializada = true;
             } else {
-                const botao = document.getElementById(
-                    IDS.botaoMenu
-                );
+                const botao =
+                    document.getElementById(
+                        IDS.botaoMenu
+                    );
 
                 if (botao) {
                     botao.hidden = false;
@@ -195,15 +260,17 @@
             return;
         }
 
-        const botao = document.getElementById(
-            IDS.botaoMenu
-        );
+        const botao =
+            document.getElementById(
+                IDS.botaoMenu
+            );
 
         if (botao) {
             botao.hidden = true;
         }
 
         fecharModalDuplicidade();
+        fecharModalOrigem();
         fecharTela();
     }
 
@@ -211,13 +278,14 @@
         usuario,
         firebase
     ) {
-        const usuarioSnapshot = await firebase.getDoc(
-            firebase.doc(
-                firebase.db,
-                "usuarios",
-                usuario.uid
-            )
-        );
+        const usuarioSnapshot =
+            await firebase.getDoc(
+                firebase.doc(
+                    firebase.db,
+                    "usuarios",
+                    usuario.uid
+                )
+            );
 
         if (!usuarioSnapshot.exists()) {
             familiaIdAtual = "";
@@ -225,7 +293,8 @@
             return;
         }
 
-        const dadosUsuario = usuarioSnapshot.data();
+        const dadosUsuario =
+            usuarioSnapshot.data();
 
         const familiaId = String(
             dadosUsuario.familiaId || ""
@@ -237,40 +306,55 @@
             return;
         }
 
-        const modulosSnapshot = await firebase.getDoc(
-            firebase.doc(
-                firebase.db,
-                "configuracoes",
-                "modulos"
-            )
-        );
+        const modulosSnapshot =
+            await firebase.getDoc(
+                firebase.doc(
+                    firebase.db,
+                    "configuracoes",
+                    "modulos"
+                )
+            );
 
-        const modulos = modulosSnapshot.exists()
-            ? modulosSnapshot.data()
-            : {};
+        const modulos =
+            modulosSnapshot.exists()
+                ? modulosSnapshot.data()
+                : {};
 
         familiaIdAtual = familiaId;
 
         const liberado =
             modulos.gastosLiberados === true ||
-            modulos.familiaPilotoId === familiaId ||
+            modulos.familiaPilotoId ===
+                familiaId ||
             (
                 ADMIN_COMO_PILOTO_SEM_CONFIG &&
                 !modulosSnapshot.exists() &&
-                dadosUsuario.adminSistema === true
+                dadosUsuario.adminSistema ===
+                    true
             );
 
-        definirVisibilidadeGastos(liberado);
+        definirVisibilidadeGastos(
+            liberado
+        );
 
         console.log(
             "Diagnóstico módulo Gastos:",
             {
-                familiaId: familiaIdAtual,
+                familiaId:
+                    familiaIdAtual,
+
                 familiaPilotoId:
-                    modulos.familiaPilotoId || "",
+                    modulos
+                        .familiaPilotoId ||
+                    "",
+
                 gastosLiberados:
-                    modulos.gastosLiberados === true,
-                liberado: moduloLiberado
+                    modulos
+                        .gastosLiberados ===
+                    true,
+
+                liberado:
+                    moduloLiberado
             }
         );
 
@@ -279,8 +363,11 @@
                 "listalar:gastos-pronto",
                 {
                     detail: {
-                        familiaId: familiaIdAtual,
-                        liberado: moduloLiberado
+                        familiaId:
+                            familiaIdAtual,
+
+                        liberado:
+                            moduloLiberado
                     }
                 }
             )
@@ -294,10 +381,15 @@
 
             firebase.onAuthStateChanged(
                 firebase.auth,
+
                 async (usuario) => {
                     if (!usuario) {
                         familiaIdAtual = "";
-                        definirVisibilidadeGastos(false);
+
+                        definirVisibilidadeGastos(
+                            false
+                        );
+
                         return;
                     }
 
@@ -313,7 +405,10 @@
                         );
 
                         familiaIdAtual = "";
-                        definirVisibilidadeGastos(false);
+
+                        definirVisibilidadeGastos(
+                            false
+                        );
                     }
                 }
             );
@@ -324,7 +419,10 @@
             );
 
             familiaIdAtual = "";
-            definirVisibilidadeGastos(false);
+
+            definirVisibilidadeGastos(
+                false
+            );
         }
     }
 
@@ -333,11 +431,19 @@
     // ========================================================
 
     function criarEstilos() {
-        if (document.getElementById(IDS.estilo)) {
+        if (
+            document.getElementById(
+                IDS.estilo
+            )
+        ) {
             return;
         }
 
-        const style = document.createElement("style");
+        const style =
+            document.createElement(
+                "style"
+            );
+
         style.id = IDS.estilo;
 
         style.textContent = `
@@ -365,7 +471,8 @@
             }
 
             .listalar-menu-gastos:hover {
-                background: rgba(37, 99, 235, 0.09);
+                background:
+                    rgba(37, 99, 235, 0.09);
             }
 
             .listalar-menu-gastos:active {
@@ -384,74 +491,167 @@
                 white-space: nowrap;
             }
 
-            /*
-             * Quando o botão Gastos existir, o rodapé permanece
-             * em uma única linha para os usuários comuns.
-             *
-             * Os itens dividem a largura igualmente, sem largura
-             * mínima que force a quebra do menu.
-             */
-            #bottom-nav:has(#listalar-menu-gastos),
-            #bottomNav:has(#listalar-menu-gastos),
-            #menu-inferior:has(#listalar-menu-gastos),
-            #menuInferior:has(#listalar-menu-gastos),
-            .bottom-nav:has(#listalar-menu-gastos),
-            .bottom-navigation:has(#listalar-menu-gastos),
-            .menu-inferior:has(#listalar-menu-gastos),
-            .menu-bottom:has(#listalar-menu-gastos),
-            .nav-bottom:has(#listalar-menu-gastos),
-            .mobile-nav:has(#listalar-menu-gastos),
-            [data-menu-principal]:has(#listalar-menu-gastos) {
+            #bottom-nav:has(
+                #listalar-menu-gastos
+            ),
+
+            #bottomNav:has(
+                #listalar-menu-gastos
+            ),
+
+            #menu-inferior:has(
+                #listalar-menu-gastos
+            ),
+
+            #menuInferior:has(
+                #listalar-menu-gastos
+            ),
+
+            .bottom-nav:has(
+                #listalar-menu-gastos
+            ),
+
+            .bottom-navigation:has(
+                #listalar-menu-gastos
+            ),
+
+            .menu-inferior:has(
+                #listalar-menu-gastos
+            ),
+
+            .menu-bottom:has(
+                #listalar-menu-gastos
+            ),
+
+            .nav-bottom:has(
+                #listalar-menu-gastos
+            ),
+
+            .mobile-nav:has(
+                #listalar-menu-gastos
+            ),
+
+            [data-menu-principal]:has(
+                #listalar-menu-gastos
+            ) {
                 width: 100% !important;
                 display: flex !important;
                 flex-wrap: nowrap !important;
-                align-items: stretch !important;
-                justify-content: stretch !important;
+                align-items:
+                    stretch !important;
+                justify-content:
+                    stretch !important;
                 gap: 4px !important;
-                box-sizing: border-box !important;
+                box-sizing:
+                    border-box !important;
             }
 
-            #bottom-nav:has(#listalar-menu-gastos) > *,
-            #bottomNav:has(#listalar-menu-gastos) > *,
-            #menu-inferior:has(#listalar-menu-gastos) > *,
-            #menuInferior:has(#listalar-menu-gastos) > *,
-            .bottom-nav:has(#listalar-menu-gastos) > *,
-            .bottom-navigation:has(#listalar-menu-gastos) > *,
-            .menu-inferior:has(#listalar-menu-gastos) > *,
-            .menu-bottom:has(#listalar-menu-gastos) > *,
-            .nav-bottom:has(#listalar-menu-gastos) > *,
-            .mobile-nav:has(#listalar-menu-gastos) > *,
-            [data-menu-principal]:has(#listalar-menu-gastos) > * {
+            #bottom-nav:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            #bottomNav:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            #menu-inferior:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            #menuInferior:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            .bottom-nav:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            .bottom-navigation:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            .menu-inferior:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            .menu-bottom:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            .nav-bottom:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            .mobile-nav:has(
+                #listalar-menu-gastos
+            ) > *,
+
+            [data-menu-principal]:has(
+                #listalar-menu-gastos
+            ) > * {
                 flex: 1 1 0 !important;
                 width: auto !important;
                 min-width: 0 !important;
                 max-width: none !important;
                 margin-left: 0 !important;
                 margin-right: 0 !important;
-                box-sizing: border-box !important;
+                box-sizing:
+                    border-box !important;
             }
 
-            #bottom-nav:has(#listalar-menu-gastos)
+            #bottom-nav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            #bottomNav:has(#listalar-menu-gastos)
+
+            #bottomNav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            #menu-inferior:has(#listalar-menu-gastos)
+
+            #menu-inferior:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            #menuInferior:has(#listalar-menu-gastos)
+
+            #menuInferior:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            .bottom-nav:has(#listalar-menu-gastos)
+
+            .bottom-nav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            .bottom-navigation:has(#listalar-menu-gastos)
+
+            .bottom-navigation:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            .menu-inferior:has(#listalar-menu-gastos)
+
+            .menu-inferior:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            .menu-bottom:has(#listalar-menu-gastos)
+
+            .menu-bottom:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            .nav-bottom:has(#listalar-menu-gastos)
+
+            .nav-bottom:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            .mobile-nav:has(#listalar-menu-gastos)
+
+            .mobile-nav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos,
-            [data-menu-principal]:has(#listalar-menu-gastos)
+
+            [data-menu-principal]:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos {
                 width: auto !important;
                 min-width: 0 !important;
@@ -462,27 +662,59 @@
                 gap: 2px;
             }
 
-            #bottom-nav:has(#listalar-menu-gastos)
+            #bottom-nav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            #bottomNav:has(#listalar-menu-gastos)
+
+            #bottomNav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            #menu-inferior:has(#listalar-menu-gastos)
+
+            #menu-inferior:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            #menuInferior:has(#listalar-menu-gastos)
+
+            #menuInferior:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            .bottom-nav:has(#listalar-menu-gastos)
+
+            .bottom-nav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            .bottom-navigation:has(#listalar-menu-gastos)
+
+            .bottom-navigation:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            .menu-inferior:has(#listalar-menu-gastos)
+
+            .menu-inferior:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            .menu-bottom:has(#listalar-menu-gastos)
+
+            .menu-bottom:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            .nav-bottom:has(#listalar-menu-gastos)
+
+            .nav-bottom:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            .mobile-nav:has(#listalar-menu-gastos)
+
+            .mobile-nav:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto,
-            [data-menu-principal]:has(#listalar-menu-gastos)
+
+            [data-menu-principal]:has(
+                #listalar-menu-gastos
+            )
             .listalar-menu-gastos-texto {
                 max-width: 100%;
                 overflow: hidden;
@@ -498,7 +730,9 @@
                 z-index: 9990;
                 color: #ffffff;
                 background: #2563eb;
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+                box-shadow:
+                    0 8px 24px
+                    rgba(0, 0, 0, 0.22);
                 padding: 10px 14px;
             }
 
@@ -510,7 +744,8 @@
                 background: #f4f7fb;
                 color: #172033;
                 overflow-y: auto;
-                overscroll-behavior: contain;
+                overscroll-behavior:
+                    contain;
             }
 
             .listalar-gastos-tela.aberta {
@@ -523,16 +758,27 @@
                 z-index: 5;
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
+                justify-content:
+                    space-between;
                 gap: 14px;
                 min-height: 68px;
                 padding:
-                    max(14px, env(safe-area-inset-top))
+                    max(
+                        14px,
+                        env(safe-area-inset-top)
+                    )
                     18px
                     14px;
                 color: #ffffff;
-                background: linear-gradient(135deg, #1d4ed8, #2563eb);
-                box-shadow: 0 4px 16px rgba(15, 23, 42, 0.18);
+                background:
+                    linear-gradient(
+                        135deg,
+                        #1d4ed8,
+                        #2563eb
+                    );
+                box-shadow:
+                    0 4px 16px
+                    rgba(15, 23, 42, 0.18);
             }
 
             .listalar-gastos-cabecalho-titulo {
@@ -550,7 +796,13 @@
                 height: 42px;
                 border-radius: 13px;
                 font-size: 23px;
-                background: rgba(255, 255, 255, 0.16);
+                background:
+                    rgba(
+                        255,
+                        255,
+                        255,
+                        0.16
+                    );
             }
 
             .listalar-gastos-cabecalho h1 {
@@ -574,7 +826,13 @@
                 border: 0;
                 border-radius: 50%;
                 color: #ffffff;
-                background: rgba(255, 255, 255, 0.17);
+                background:
+                    rgba(
+                        255,
+                        255,
+                        255,
+                        0.17
+                    );
                 font-size: 25px;
                 cursor: pointer;
             }
@@ -586,7 +844,8 @@
             .listalar-gastos-conteudo {
                 width: min(100%, 920px);
                 margin: 0 auto;
-                padding: 18px 16px 110px;
+                padding:
+                    18px 16px 110px;
             }
 
             .listalar-gastos-boas-vindas {
@@ -594,8 +853,20 @@
                 padding: 18px;
                 border-radius: 18px;
                 color: #ffffff;
-                background: linear-gradient(135deg, #0f766e, #14b8a6);
-                box-shadow: 0 10px 24px rgba(15, 118, 110, 0.18);
+                background:
+                    linear-gradient(
+                        135deg,
+                        #0f766e,
+                        #14b8a6
+                    );
+                box-shadow:
+                    0 10px 24px
+                    rgba(
+                        15,
+                        118,
+                        110,
+                        0.18
+                    );
             }
 
             .listalar-gastos-boas-vindas h2 {
@@ -612,7 +883,11 @@
 
             .listalar-gastos-grade-resumo {
                 display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
+                grid-template-columns:
+                    repeat(
+                        3,
+                        minmax(0, 1fr)
+                    );
                 gap: 12px;
                 margin-bottom: 16px;
             }
@@ -620,10 +895,18 @@
             .listalar-gastos-card-resumo {
                 min-height: 105px;
                 padding: 15px;
-                border: 1px solid #e3e9f2;
+                border:
+                    1px solid #e3e9f2;
                 border-radius: 17px;
                 background: #ffffff;
-                box-shadow: 0 5px 15px rgba(15, 23, 42, 0.06);
+                box-shadow:
+                    0 5px 15px
+                    rgba(
+                        15,
+                        23,
+                        42,
+                        0.06
+                    );
             }
 
             .listalar-gastos-card-resumo span {
@@ -645,16 +928,26 @@
             .listalar-gastos-card {
                 margin-bottom: 16px;
                 padding: 18px;
-                border: 1px solid #e3e9f2;
+                border:
+                    1px solid #e3e9f2;
                 border-radius: 18px;
                 background: #ffffff;
-                box-shadow: 0 5px 16px rgba(15, 23, 42, 0.06);
+                box-shadow:
+                    0 5px 16px
+                    rgba(
+                        15,
+                        23,
+                        42,
+                        0.06
+                    );
             }
 
             .listalar-gastos-card-topo {
                 display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
+                align-items:
+                    flex-start;
+                justify-content:
+                    space-between;
                 gap: 16px;
                 margin-bottom: 15px;
             }
@@ -681,7 +974,14 @@
                 font-size: 15px;
                 font-weight: 800;
                 cursor: pointer;
-                box-shadow: 0 7px 16px rgba(37, 99, 235, 0.22);
+                box-shadow:
+                    0 7px 16px
+                    rgba(
+                        37,
+                        99,
+                        235,
+                        0.22
+                    );
             }
 
             .listalar-gastos-botao-principal:hover {
@@ -702,11 +1002,13 @@
 
             .listalar-gastos-nota-cabecalho {
                 display: grid;
-                grid-template-columns: 1fr auto;
+                grid-template-columns:
+                    1fr auto;
                 gap: 12px;
                 align-items: start;
                 padding-bottom: 14px;
-                border-bottom: 1px solid #e8edf5;
+                border-bottom:
+                    1px solid #e8edf5;
             }
 
             .listalar-gastos-nota-cabecalho h3 {
@@ -734,10 +1036,13 @@
 
             .listalar-gastos-produto {
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-columns:
+                    minmax(0, 1fr)
+                    auto;
                 gap: 12px;
                 padding: 11px 0;
-                border-bottom: 1px solid #edf1f6;
+                border-bottom:
+                    1px solid #edf1f6;
             }
 
             .listalar-gastos-produto:last-child {
@@ -764,7 +1069,8 @@
 
             .listalar-gastos-vazio {
                 padding: 22px 14px;
-                border: 1px dashed #cbd5e1;
+                border:
+                    1px dashed #cbd5e1;
                 border-radius: 14px;
                 text-align: center;
                 color: #64748b;
@@ -780,10 +1086,21 @@
             .listalar-gastos-aviso {
                 position: fixed;
                 left: 50%;
-                bottom: max(22px, env(safe-area-inset-bottom));
+                bottom:
+                    max(
+                        22px,
+                        env(
+                            safe-area-inset-bottom
+                        )
+                    );
                 z-index: 11000;
-                width: min(calc(100% - 32px), 480px);
-                transform: translateX(-50%);
+                width:
+                    min(
+                        calc(100% - 32px),
+                        480px
+                    );
+                transform:
+                    translateX(-50%);
                 padding: 13px 16px;
                 border-radius: 13px;
                 color: #ffffff;
@@ -791,7 +1108,9 @@
                 font-size: 14px;
                 font-weight: 700;
                 text-align: center;
-                box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+                box-shadow:
+                    0 10px 28px
+                    rgba(0, 0, 0, 0.24);
             }
 
             .listalar-gastos-aviso.sucesso {
@@ -814,11 +1133,26 @@
                 align-items: center;
                 justify-content: center;
                 padding:
-                    max(18px, env(safe-area-inset-top))
+                    max(
+                        18px,
+                        env(safe-area-inset-top)
+                    )
                     16px
-                    max(18px, env(safe-area-inset-bottom));
-                background: rgba(15, 23, 42, 0.62);
-                backdrop-filter: blur(3px);
+                    max(
+                        18px,
+                        env(
+                            safe-area-inset-bottom
+                        )
+                    );
+                background:
+                    rgba(
+                        15,
+                        23,
+                        42,
+                        0.62
+                    );
+                backdrop-filter:
+                    blur(3px);
             }
 
             .listalar-gastos-modal.aberto {
@@ -826,25 +1160,44 @@
             }
 
             .listalar-gastos-modal-conteudo {
-                width: min(100%, 500px);
-                max-height: calc(100vh - 36px);
+                width:
+                    min(
+                        100%,
+                        500px
+                    );
+                max-height:
+                    calc(100vh - 36px);
                 overflow-y: auto;
                 padding: 22px;
                 border-radius: 20px;
                 background: #ffffff;
-                box-shadow: 0 24px 60px rgba(15, 23, 42, 0.34);
-                animation: listalar-gastos-modal-entrada 0.2s ease-out;
+                box-shadow:
+                    0 24px 60px
+                    rgba(
+                        15,
+                        23,
+                        42,
+                        0.34
+                    );
+                animation:
+                    listalar-gastos-modal-entrada
+                    0.2s ease-out;
             }
 
-            @keyframes listalar-gastos-modal-entrada {
+            @keyframes
+            listalar-gastos-modal-entrada {
                 from {
                     opacity: 0;
-                    transform: translateY(12px) scale(0.98);
+                    transform:
+                        translateY(12px)
+                        scale(0.98);
                 }
 
                 to {
                     opacity: 1;
-                    transform: translateY(0) scale(1);
+                    transform:
+                        translateY(0)
+                        scale(1);
                 }
             }
 
@@ -853,7 +1206,8 @@
                 place-items: center;
                 width: 52px;
                 height: 52px;
-                margin: 0 auto 13px;
+                margin:
+                    0 auto 13px;
                 border-radius: 16px;
                 background: #dbeafe;
                 font-size: 27px;
@@ -867,7 +1221,8 @@
             }
 
             .listalar-gastos-modal-descricao {
-                margin: 9px 0 18px;
+                margin:
+                    9px 0 18px;
                 color: #64748b;
                 font-size: 14px;
                 line-height: 1.5;
@@ -883,7 +1238,8 @@
                 width: 100%;
                 min-height: 58px;
                 padding: 12px 14px;
-                border: 1px solid #dbe4f0;
+                border:
+                    1px solid #dbe4f0;
                 border-radius: 14px;
                 color: #172033;
                 background: #f8fafc;
@@ -894,9 +1250,12 @@
                 text-align: left;
                 cursor: pointer;
                 transition:
-                    border-color 0.2s ease,
-                    background-color 0.2s ease,
-                    transform 0.2s ease;
+                    border-color
+                    0.2s ease,
+                    background-color
+                    0.2s ease,
+                    transform
+                    0.2s ease;
             }
 
             .listalar-gastos-modal-opcao:hover {
@@ -916,6 +1275,61 @@
 
             .listalar-gastos-modal-opcao.destaque:hover {
                 background: #1d4ed8;
+            }
+
+            .listalar-gastos-modal-opcao-conteudo {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .listalar-gastos-modal-opcao-icone {
+                flex: 0 0 auto;
+                display: grid;
+                place-items: center;
+                width: 42px;
+                height: 42px;
+                border-radius: 12px;
+                background: #dbeafe;
+                font-size: 22px;
+            }
+
+            .listalar-gastos-modal-opcao.destaque
+            .listalar-gastos-modal-opcao-icone {
+                background:
+                    rgba(
+                        255,
+                        255,
+                        255,
+                        0.18
+                    );
+            }
+
+            .listalar-gastos-modal-opcao-textos {
+                min-width: 0;
+            }
+
+            .listalar-gastos-modal-opcao-textos strong,
+            .listalar-gastos-modal-opcao-textos small {
+                display: block;
+            }
+
+            .listalar-gastos-modal-opcao-textos small {
+                margin-top: 3px;
+                color: #64748b;
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            .listalar-gastos-modal-opcao.destaque
+            .listalar-gastos-modal-opcao-textos small {
+                color:
+                    rgba(
+                        255,
+                        255,
+                        255,
+                        0.84
+                    );
             }
 
             .listalar-gastos-modal-cancelar {
@@ -952,11 +1366,13 @@
                 }
 
                 .listalar-gastos-conteudo {
-                    padding: 14px 12px 100px;
+                    padding:
+                        14px 12px 100px;
                 }
 
                 .listalar-gastos-grade-resumo {
-                    grid-template-columns: 1fr 1fr;
+                    grid-template-columns:
+                        1fr 1fr;
                     gap: 10px;
                 }
 
@@ -966,7 +1382,8 @@
                 }
 
                 .listalar-gastos-card-resumo:first-child {
-                    grid-column: 1 / -1;
+                    grid-column:
+                        1 / -1;
                 }
 
                 .listalar-gastos-card-resumo strong {
@@ -978,7 +1395,8 @@
                 }
 
                 .listalar-gastos-nota-cabecalho {
-                    grid-template-columns: 1fr;
+                    grid-template-columns:
+                        1fr;
                 }
 
                 .listalar-gastos-nota-total {
@@ -986,7 +1404,8 @@
                 }
 
                 .listalar-gastos-modal-conteudo {
-                    padding: 19px 16px 16px;
+                    padding:
+                        19px 16px 16px;
                     border-radius: 18px;
                 }
 
@@ -1011,7 +1430,8 @@
                 }
 
                 .listalar-gastos-grade-resumo {
-                    grid-template-columns: 1fr;
+                    grid-template-columns:
+                        1fr;
                 }
 
                 .listalar-gastos-card-resumo:first-child {
@@ -1028,24 +1448,48 @@
     // ========================================================
 
     function criarTela() {
-        if (document.getElementById(IDS.tela)) {
+        if (
+            document.getElementById(
+                IDS.tela
+            )
+        ) {
             return;
         }
 
-        const tela = document.createElement("section");
+        const tela =
+            document.createElement(
+                "section"
+            );
 
         tela.id = IDS.tela;
-        tela.className = "listalar-gastos-tela";
-        tela.setAttribute("aria-hidden", "true");
+        tela.className =
+            "listalar-gastos-tela";
+
+        tela.setAttribute(
+            "aria-hidden",
+            "true"
+        );
 
         tela.innerHTML = `
-            <header class="listalar-gastos-cabecalho">
-                <div class="listalar-gastos-cabecalho-titulo">
-                    <div class="listalar-gastos-cabecalho-icone">💰</div>
+            <header
+                class="listalar-gastos-cabecalho"
+            >
+                <div
+                    class="listalar-gastos-cabecalho-titulo"
+                >
+                    <div
+                        class="listalar-gastos-cabecalho-icone"
+                    >
+                        💰
+                    </div>
 
                     <div>
                         <h1>Meus Gastos</h1>
-                        <p>Acompanhe as compras da família</p>
+
+                        <p>
+                            Acompanhe as compras
+                            da família
+                        </p>
                     </div>
                 </div>
 
@@ -1060,50 +1504,82 @@
                 </button>
             </header>
 
-            <main class="listalar-gastos-conteudo">
-                <section class="listalar-gastos-boas-vindas">
-                    <h2>Controle suas compras</h2>
+            <main
+                class="listalar-gastos-conteudo"
+            >
+                <section
+                    class="listalar-gastos-boas-vindas"
+                >
+                    <h2>
+                        Controle suas compras
+                    </h2>
 
                     <p>
-                        Importe suas notas fiscais para acompanhar valores,
+                        Importe suas notas fiscais
+                        para acompanhar valores,
                         produtos e supermercados.
                     </p>
                 </section>
 
-                <section class="listalar-gastos-grade-resumo">
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Total importado</span>
+                <section
+                    class="listalar-gastos-grade-resumo"
+                >
+                    <article
+                        class="listalar-gastos-card-resumo"
+                    >
+                        <span>
+                            Total importado
+                        </span>
 
-                        <strong id="listalar-gastos-total-importado">
+                        <strong
+                            id="listalar-gastos-total-importado"
+                        >
                             R$ 0,00
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo">
+                    <article
+                        class="listalar-gastos-card-resumo"
+                    >
                         <span>Produtos</span>
 
-                        <strong id="listalar-gastos-total-produtos">
+                        <strong
+                            id="listalar-gastos-total-produtos"
+                        >
                             0
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo">
+                    <article
+                        class="listalar-gastos-card-resumo"
+                    >
                         <span>Notas</span>
 
-                        <strong id="listalar-gastos-total-notas">
+                        <strong
+                            id="listalar-gastos-total-notas"
+                        >
                             0
                         </strong>
                     </article>
                 </section>
 
-                <section class="listalar-gastos-card">
-                    <div class="listalar-gastos-card-topo">
+                <section
+                    class="listalar-gastos-card"
+                >
+                    <div
+                        class="listalar-gastos-card-topo"
+                    >
                         <div>
-                            <h2>Nota fiscal</h2>
+                            <h2>
+                                Importar compra
+                            </h2>
 
                             <p>
-                                Selecione uma nota em PDF para conferir os
-                                produtos e os valores.
+                                Leia o QR Code da
+                                NFC-e ou selecione
+                                o PDF da nota para
+                                conferir produtos
+                                e valores.
                             </p>
                         </div>
                     </div>
@@ -1113,7 +1589,7 @@
                         class="listalar-gastos-botao-principal"
                         type="button"
                     >
-                        📄 Importar NF
+                        🧾 Importar compra
                     </button>
                 </section>
 
@@ -1126,18 +1602,27 @@
                     id="listalar-gastos-historico"
                     class="listalar-gastos-card"
                 >
-                    <div class="listalar-gastos-card-topo">
+                    <div
+                        class="listalar-gastos-card-topo"
+                    >
                         <div>
-                            <h2>Histórico</h2>
+                            <h2>
+                                Histórico
+                            </h2>
 
                             <p>
-                                As notas salvas aparecerão aqui.
+                                As notas salvas
+                                aparecerão aqui.
                             </p>
                         </div>
                     </div>
 
-                    <div class="listalar-gastos-vazio">
-                        <span class="listalar-gastos-vazio-icone">
+                    <div
+                        class="listalar-gastos-vazio"
+                    >
+                        <span
+                            class="listalar-gastos-vazio-icone"
+                        >
                             🧾
                         </span>
 
@@ -1161,7 +1646,9 @@
                 aria-hidden="true"
                 aria-labelledby="listalar-gastos-modal-titulo"
             >
-                <div class="listalar-gastos-modal-conteudo">
+                <div
+                    class="listalar-gastos-modal-conteudo"
+                >
                     <div
                         class="listalar-gastos-modal-icone"
                         aria-hidden="true"
@@ -1169,22 +1656,31 @@
                         🧾
                     </div>
 
-                    <h2 id="listalar-gastos-modal-titulo">
+                    <h2
+                        id="listalar-gastos-modal-titulo"
+                    >
                         Como deseja importar?
                     </h2>
 
-                    <p class="listalar-gastos-modal-descricao">
-                        O Controle de Preços está ativo. Escolha como esta
-                        nota fiscal deve ser tratada.
+                    <p
+                        class="listalar-gastos-modal-descricao"
+                    >
+                        O Controle de Preços
+                        está ativo. Escolha como
+                        esta nota fiscal deve
+                        ser tratada.
                     </p>
 
-                    <div class="listalar-gastos-modal-opcoes">
+                    <div
+                        class="listalar-gastos-modal-opcoes"
+                    >
                         <button
                             id="${IDS.modalSubstituir}"
                             class="listalar-gastos-modal-opcao destaque"
                             type="button"
                         >
-                            Importar e substituir compra manual
+                            Importar e substituir
+                            compra manual
                         </button>
 
                         <button
@@ -1192,7 +1688,8 @@
                             class="listalar-gastos-modal-opcao"
                             type="button"
                         >
-                            Importar como nova compra
+                            Importar como
+                            nova compra
                         </button>
                     </div>
 
@@ -1205,9 +1702,121 @@
                     </button>
                 </div>
             </div>
+
+            <div
+                id="${IDS.modalOrigem}"
+                class="listalar-gastos-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-hidden="true"
+                aria-labelledby="listalar-gastos-modal-origem-titulo"
+            >
+                <div
+                    class="listalar-gastos-modal-conteudo"
+                >
+                    <div
+                        class="listalar-gastos-modal-icone"
+                        aria-hidden="true"
+                    >
+                        🛒
+                    </div>
+
+                    <h2
+                        id="listalar-gastos-modal-origem-titulo"
+                    >
+                        Como deseja importar?
+                    </h2>
+
+                    <p
+                        class="listalar-gastos-modal-descricao"
+                    >
+                        Use a câmera para ler
+                        o QR Code da NFC-e ou
+                        selecione o PDF salvo
+                        da nota fiscal.
+                    </p>
+
+                    <div
+                        class="listalar-gastos-modal-opcoes"
+                    >
+                        <button
+                            id="${IDS.modalOrigemQr}"
+                            class="listalar-gastos-modal-opcao destaque"
+                            type="button"
+                        >
+                            <span
+                                class="listalar-gastos-modal-opcao-conteudo"
+                            >
+                                <span
+                                    class="listalar-gastos-modal-opcao-icone"
+                                    aria-hidden="true"
+                                >
+                                    📷
+                                </span>
+
+                                <span
+                                    class="listalar-gastos-modal-opcao-textos"
+                                >
+                                    <strong>
+                                        Ler QR Code
+                                        da NFC-e
+                                    </strong>
+
+                                    <small>
+                                        Opção mais
+                                        rápida e
+                                        automática
+                                    </small>
+                                </span>
+                            </span>
+                        </button>
+
+                        <button
+                            id="${IDS.modalOrigemPdf}"
+                            class="listalar-gastos-modal-opcao"
+                            type="button"
+                        >
+                            <span
+                                class="listalar-gastos-modal-opcao-conteudo"
+                            >
+                                <span
+                                    class="listalar-gastos-modal-opcao-icone"
+                                    aria-hidden="true"
+                                >
+                                    📄
+                                </span>
+
+                                <span
+                                    class="listalar-gastos-modal-opcao-textos"
+                                >
+                                    <strong>
+                                        Selecionar PDF
+                                    </strong>
+
+                                    <small>
+                                        Use o arquivo
+                                        salvo pelo
+                                        navegador
+                                    </small>
+                                </span>
+                            </span>
+                        </button>
+                    </div>
+
+                    <button
+                        id="${IDS.modalOrigemCancelar}"
+                        class="listalar-gastos-modal-cancelar"
+                        type="button"
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </div>
         `;
 
-        document.body.appendChild(tela);
+        document.body.appendChild(
+            tela
+        );
     }
 
     // ========================================================
@@ -1229,8 +1838,13 @@
             "[data-menu-principal]"
         ];
 
-        for (const seletor of seletores) {
-            const elemento = document.querySelector(seletor);
+        for (
+            const seletor of seletores
+        ) {
+            const elemento =
+                document.querySelector(
+                    seletor
+                );
 
             if (elemento) {
                 return elemento;
@@ -1241,16 +1855,29 @@
     }
 
     function criarBotaoMenu() {
-        if (document.getElementById(IDS.botaoMenu)) {
+        if (
+            document.getElementById(
+                IDS.botaoMenu
+            )
+        ) {
             return;
         }
 
-        const botao = document.createElement("button");
+        const botao =
+            document.createElement(
+                "button"
+            );
 
         botao.id = IDS.botaoMenu;
         botao.type = "button";
-        botao.className = "listalar-menu-gastos";
-        botao.setAttribute("aria-label", "Abrir Gastos");
+        botao.className =
+            "listalar-menu-gastos";
+
+        botao.setAttribute(
+            "aria-label",
+            "Abrir Gastos"
+        );
+
         botao.title = "Gastos";
 
         botao.innerHTML = `
@@ -1261,23 +1888,26 @@
                 💰
             </span>
 
-            <span class="listalar-menu-gastos-texto">
+            <span
+                class="listalar-menu-gastos-texto"
+            >
                 Gastos
             </span>
         `;
 
-        const menu = localizarContainerMenu();
+        const menu =
+            localizarContainerMenu();
 
         if (menu) {
             menu.appendChild(botao);
         } else {
-            /*
-             * Caso o menu principal ainda não tenha sido encontrado,
-             * o módulo cria um acesso provisório fixo na tela.
-             * Assim a função continua disponível sem alterar o index.
-             */
-            botao.classList.add("listalar-menu-gastos-fixo");
-            document.body.appendChild(botao);
+            botao.classList.add(
+                "listalar-menu-gastos-fixo"
+            );
+
+            document.body.appendChild(
+                botao
+            );
 
             console.warn(
                 "⚠️ Módulo Gastos: menu principal não localizado. " +
@@ -1299,20 +1929,32 @@
             return;
         }
 
-        const tela = document.getElementById(IDS.tela);
+        const tela =
+            document.getElementById(
+                IDS.tela
+            );
 
         if (!tela) {
             criarTela();
         }
 
-        const telaAtual = document.getElementById(IDS.tela);
+        const telaAtual =
+            document.getElementById(
+                IDS.tela
+            );
 
         if (!telaAtual) {
             return;
         }
 
-        telaAtual.classList.add("aberta");
-        telaAtual.setAttribute("aria-hidden", "false");
+        telaAtual.classList.add(
+            "aberta"
+        );
+
+        telaAtual.setAttribute(
+            "aria-hidden",
+            "false"
+        );
 
         document.body.classList.add(
             "listalar-gastos-aberto"
@@ -1325,14 +1967,23 @@
     }
 
     function fecharTela() {
-        const tela = document.getElementById(IDS.tela);
+        const tela =
+            document.getElementById(
+                IDS.tela
+            );
 
         if (!tela) {
             return;
         }
 
-        tela.classList.remove("aberta");
-        tela.setAttribute("aria-hidden", "true");
+        tela.classList.remove(
+            "aberta"
+        );
+
+        tela.setAttribute(
+            "aria-hidden",
+            "true"
+        );
 
         document.body.classList.remove(
             "listalar-gastos-aberto"
@@ -1344,26 +1995,79 @@
     // ========================================================
 
     function fecharModalDuplicidade() {
-        const modal = document.getElementById(
-            IDS.modalDuplicidade
-        );
+        const modal =
+            document.getElementById(
+                IDS.modalDuplicidade
+            );
 
         if (!modal) {
             return;
         }
 
-        modal.classList.remove("aberto");
-        modal.setAttribute("aria-hidden", "true");
+        modal.classList.remove(
+            "aberto"
+        );
+
+        modal.setAttribute(
+            "aria-hidden",
+            "true"
+        );
     }
 
-    function finalizarEscolhaModoImportacao(modo) {
+    function fecharModalOrigem() {
+        const modal =
+            document.getElementById(
+                IDS.modalOrigem
+            );
+
+        if (!modal) {
+            return;
+        }
+
+        modal.classList.remove(
+            "aberto"
+        );
+
+        modal.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+    }
+
+    function finalizarEscolhaModoImportacao(
+        modo
+    ) {
         fecharModalDuplicidade();
 
-        if (typeof resolverModoImportacao === "function") {
-            const resolver = resolverModoImportacao;
+        if (
+            typeof resolverModoImportacao ===
+            "function"
+        ) {
+            const resolver =
+                resolverModoImportacao;
 
             resolverModoImportacao = null;
+
             resolver(modo);
+        }
+    }
+
+    function finalizarEscolhaOrigemImportacao(
+        origem
+    ) {
+        fecharModalOrigem();
+
+        if (
+            typeof resolverOrigemImportacao ===
+            "function"
+        ) {
+            const resolver =
+                resolverOrigemImportacao;
+
+            resolverOrigemImportacao =
+                null;
+
+            resolver(origem);
         }
     }
 
@@ -1380,39 +2084,133 @@
     }
 
     function escolherCancelar() {
-        finalizarEscolhaModoImportacao(null);
+        finalizarEscolhaModoImportacao(
+            null
+        );
+    }
+
+    function escolherOrigemQrCode() {
+        finalizarEscolhaOrigemImportacao(
+            "qr_code"
+        );
+    }
+
+    function escolherOrigemPdf() {
+        finalizarEscolhaOrigemImportacao(
+            "pdf"
+        );
+    }
+
+    function escolherCancelarOrigem() {
+        finalizarEscolhaOrigemImportacao(
+            null
+        );
     }
 
     function escolherModoImportacao() {
-        const modal = document.getElementById(
-            IDS.modalDuplicidade
-        );
+        const modal =
+            document.getElementById(
+                IDS.modalDuplicidade
+            );
 
         if (!modal) {
             console.error(
                 "❌ Modal de escolha da importação não foi encontrado."
             );
 
-            return Promise.resolve(null);
+            return Promise.resolve(
+                null
+            );
         }
 
-        if (typeof resolverModoImportacao === "function") {
-            resolverModoImportacao(null);
-            resolverModoImportacao = null;
+        if (
+            typeof resolverModoImportacao ===
+            "function"
+        ) {
+            resolverModoImportacao(
+                null
+            );
+
+            resolverModoImportacao =
+                null;
         }
 
-        modal.classList.add("aberto");
-        modal.setAttribute("aria-hidden", "false");
+        modal.classList.add(
+            "aberto"
+        );
+
+        modal.setAttribute(
+            "aria-hidden",
+            "false"
+        );
 
         window.setTimeout(() => {
             document
-                .getElementById(IDS.modalSubstituir)
+                .getElementById(
+                    IDS.modalSubstituir
+                )
                 ?.focus();
         }, 0);
 
-        return new Promise((resolve) => {
-            resolverModoImportacao = resolve;
-        });
+        return new Promise(
+            (resolve) => {
+                resolverModoImportacao =
+                    resolve;
+            }
+        );
+    }
+
+    function escolherOrigemImportacao() {
+        const modal =
+            document.getElementById(
+                IDS.modalOrigem
+            );
+
+        if (!modal) {
+            console.error(
+                "❌ Modal de origem da importação não foi encontrado."
+            );
+
+            return Promise.resolve(
+                null
+            );
+        }
+
+        if (
+            typeof resolverOrigemImportacao ===
+            "function"
+        ) {
+            resolverOrigemImportacao(
+                null
+            );
+
+            resolverOrigemImportacao =
+                null;
+        }
+
+        modal.classList.add(
+            "aberto"
+        );
+
+        modal.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+        window.setTimeout(() => {
+            document
+                .getElementById(
+                    IDS.modalOrigemQr
+                )
+                ?.focus();
+        }, 0);
+
+        return new Promise(
+            (resolve) => {
+                resolverOrigemImportacao =
+                    resolve;
+            }
+        );
     }
 
     async function solicitarImportacaoNota() {
@@ -1426,31 +2224,105 @@
 
         modoImportacaoAtual = null;
 
-        if (!controlePrecosEstaAtivo()) {
-            modoImportacaoAtual = "nota_fiscal";
-            abrirImportadorNota();
+        if (
+            !controlePrecosEstaAtivo()
+        ) {
+            modoImportacaoAtual =
+                "nota_fiscal";
+        } else {
+            const escolha =
+                await escolherModoImportacao();
+
+            if (!escolha) {
+                return;
+            }
+
+            modoImportacaoAtual =
+                escolha;
+        }
+
+        const origem =
+            await escolherOrigemImportacao();
+
+        if (!origem) {
             return;
         }
 
-        const escolha = await escolherModoImportacao();
-
-        if (!escolha) {
+        if (
+            origem === "qr_code"
+        ) {
+            abrirImportadorQrCode();
             return;
         }
 
-        modoImportacaoAtual = escolha;
-        abrirImportadorNota();
+        abrirImportadorPdf();
     }
 
-    function abrirImportadorNota() {
-        const importador = window.ImportadorNotaPDF;
+    function obterImportadorQrCode() {
+        return (
+            window
+                .ListaLarImportadorNfce ||
+            window.ImportadorNFCe ||
+            window.ImportadorNfceQR ||
+            null
+        );
+    }
+
+    function abrirImportadorQrCode() {
+        const importador =
+            obterImportadorQrCode();
 
         if (
             !importador ||
-            typeof importador.abrir !== "function"
+            typeof importador.abrir !==
+                "function"
         ) {
             mostrarAviso(
-                "O importador de nota fiscal ainda não está disponível.",
+                "O leitor de QR Code da NFC-e ainda não está disponível.",
+                "erro"
+            );
+
+            console.error(
+                "❌ ListaLarImportadorNfce.abrir() não foi encontrado."
+            );
+
+            return;
+        }
+
+        try {
+            importador.abrir({
+                familiaId:
+                    familiaIdAtual,
+
+                modoImportacao:
+                    modoImportacaoAtual
+            });
+        } catch (erro) {
+            console.error(
+                "❌ Erro ao abrir o leitor de QR Code da NFC-e:",
+                erro
+            );
+
+            mostrarAviso(
+                "Não foi possível abrir a câmera para ler a nota.",
+                "erro"
+            );
+        }
+    }
+
+    function abrirImportadorPdf() {
+        const importador =
+            window
+                .ListaLarConferenciaNota ||
+            window.ImportadorNotaPDF;
+
+        if (
+            !importador ||
+            typeof importador.abrir !==
+                "function"
+        ) {
+            mostrarAviso(
+                "O importador de PDF ainda não está disponível.",
                 "erro"
             );
 
@@ -1465,7 +2337,7 @@
             importador.abrir();
         } catch (erro) {
             console.error(
-                "❌ Erro ao abrir o importador de nota fiscal:",
+                "❌ Erro ao abrir o importador de PDF:",
                 erro
             );
 
@@ -1476,8 +2348,25 @@
         }
     }
 
-    function obterProdutosDaNota(nota) {
-        if (!nota || typeof nota !== "object") {
+    /*
+     * Compatibilidade com chamadas
+     * antigas da API pública.
+     */
+    function abrirImportadorNota() {
+        abrirImportadorPdf();
+    }
+
+    // ========================================================
+    // LEITURA E NORMALIZAÇÃO DA NOTA
+    // ========================================================
+
+    function obterProdutosDaNota(
+        nota
+    ) {
+        if (
+            !nota ||
+            typeof nota !== "object"
+        ) {
             return [];
         }
 
@@ -1491,7 +2380,9 @@
             nota.nota?.itens
         ];
 
-        for (const lista of possibilidades) {
+        for (
+            const lista of possibilidades
+        ) {
             if (Array.isArray(lista)) {
                 return lista;
             }
@@ -1500,7 +2391,10 @@
         return [];
     }
 
-    function obterValorTotal(nota, produtos) {
+    function obterValorTotal(
+        nota,
+        produtos
+    ) {
         const possibilidades = [
             nota?.total,
             nota?.valorTotal,
@@ -1512,78 +2406,135 @@
             nota?.nota?.valorTotal
         ];
 
-        for (const valor of possibilidades) {
-            const numero = Number(valor);
+        for (
+            const valor of possibilidades
+        ) {
+            const numero =
+                Number(valor);
 
-            if (Number.isFinite(numero)) {
+            if (
+                Number.isFinite(numero)
+            ) {
                 return numero;
             }
         }
 
-        return produtos.reduce((soma, produto) => {
-            const possibilidadesProduto = [
-                produto?.total,
-                produto?.valorTotal,
-                produto?.subtotal,
-                produto?.valor_total
-            ];
+        return produtos.reduce(
+            (soma, produto) => {
+                const valoresProduto = [
+                    produto?.precoTotal,
+                    produto?.total,
+                    produto?.valorTotal,
+                    produto?.subtotal,
+                    produto?.valor_total
+                ];
 
-            for (const valor of possibilidadesProduto) {
-                const numero = Number(valor);
+                for (
+                    const valor of
+                    valoresProduto
+                ) {
+                    const numero =
+                        Number(valor);
 
-                if (Number.isFinite(numero)) {
-                    return soma + numero;
+                    if (
+                        Number.isFinite(
+                            numero
+                        )
+                    ) {
+                        return soma +
+                            numero;
+                    }
                 }
-            }
 
-            const quantidade = Number(
-                produto?.quantidade ??
-                produto?.qtd ??
-                produto?.qtde ??
-                1
-            );
+                const quantidade =
+                    Number(
+                        produto
+                            ?.quantidade ??
+                        produto?.qtd ??
+                        produto?.qtde ??
+                        1
+                    );
 
-            const valorUnitario = Number(
-                produto?.valorUnitario ??
-                produto?.precoUnitario ??
-                produto?.preco ??
-                produto?.valor ??
-                0
-            );
+                const unitario =
+                    Number(
+                        produto
+                            ?.valorUnitario ??
+                        produto
+                            ?.precoUnitario ??
+                        produto?.preco ??
+                        produto?.valor ??
+                        0
+                    );
 
-            if (
-                Number.isFinite(quantidade) &&
-                Number.isFinite(valorUnitario)
-            ) {
-                return soma + quantidade * valorUnitario;
-            }
+                if (
+                    Number.isFinite(
+                        quantidade
+                    ) &&
+                    Number.isFinite(
+                        unitario
+                    )
+                ) {
+                    return soma +
+                        quantidade *
+                        unitario;
+                }
 
-            return soma;
-        }, 0);
+                return soma;
+            },
+            0
+        );
     }
 
-    function obterNomeEstabelecimento(nota) {
+    function obterNomeEstabelecimento(
+        nota
+    ) {
+        const emitente =
+            nota?.emitente;
+
         return (
+            nota?.mercadoNome ||
             nota?.estabelecimento ||
             nota?.supermercado ||
-            nota?.emitente ||
+            emitente?.nome ||
+            emitente?.razaoSocial ||
+            (
+                typeof emitente ===
+                "string"
+                    ? emitente
+                    : ""
+            ) ||
             nota?.razaoSocial ||
             nota?.nomeEmpresa ||
-            nota?.dados?.estabelecimento ||
-            nota?.dados?.emitente ||
-            nota?.nota?.estabelecimento ||
-            nota?.nota?.emitente ||
+            nota?.dados?.mercadoNome ||
+            nota?.dados
+                ?.estabelecimento ||
+            nota?.dados
+                ?.emitente?.nome ||
+            nota?.dados
+                ?.emitente
+                ?.razaoSocial ||
+            nota?.nota?.mercadoNome ||
+            nota?.nota
+                ?.estabelecimento ||
+            nota?.nota
+                ?.emitente?.nome ||
+            nota?.nota
+                ?.emitente
+                ?.razaoSocial ||
             "Estabelecimento não identificado"
         );
     }
 
     function obterDataNota(nota) {
         const valor =
+            nota?.dataCompra ||
             nota?.data ||
             nota?.dataEmissao ||
             nota?.emissao ||
+            nota?.dados?.dataCompra ||
             nota?.dados?.data ||
             nota?.dados?.dataEmissao ||
+            nota?.nota?.dataCompra ||
             nota?.nota?.data ||
             nota?.nota?.dataEmissao;
 
@@ -1591,17 +2542,31 @@
             return "Data não identificada";
         }
 
-        const data = new Date(valor);
+        const data =
+            new Date(valor);
 
-        if (!Number.isNaN(data.getTime())) {
-            return data.toLocaleDateString("pt-BR");
+        if (
+            !Number.isNaN(
+                data.getTime()
+            )
+        ) {
+            return data
+                .toLocaleDateString(
+                    "pt-BR"
+                );
         }
 
         return String(valor);
     }
 
-    function obterNomeProduto(produto, indice) {
+    function obterNomeProduto(
+        produto,
+        indice
+    ) {
         return (
+            produto?.produtoNome ||
+            produto
+                ?.descricaoOriginal ||
             produto?.nome ||
             produto?.descricao ||
             produto?.produto ||
@@ -1610,7 +2575,9 @@
         );
     }
 
-    function obterQuantidadeProduto(produto) {
+    function obterQuantidadeProduto(
+        produto
+    ) {
         return (
             produto?.quantidade ??
             produto?.qtd ??
@@ -1619,7 +2586,9 @@
         );
     }
 
-    function obterUnidadeProduto(produto) {
+    function obterUnidadeProduto(
+        produto
+    ) {
         return (
             produto?.unidade ||
             produto?.un ||
@@ -1628,39 +2597,58 @@
         );
     }
 
-    function obterTotalProduto(produto) {
+    function obterTotalProduto(
+        produto
+    ) {
         const valoresTotais = [
+            produto?.precoTotal,
             produto?.total,
             produto?.valorTotal,
             produto?.subtotal,
             produto?.valor_total
         ];
 
-        for (const valor of valoresTotais) {
-            const numero = Number(valor);
+        for (
+            const valor of valoresTotais
+        ) {
+            const numero =
+                Number(valor);
 
-            if (Number.isFinite(numero)) {
+            if (
+                Number.isFinite(numero)
+            ) {
                 return numero;
             }
         }
 
-        const quantidade = Number(
-            obterQuantidadeProduto(produto)
-        );
+        const quantidade =
+            Number(
+                obterQuantidadeProduto(
+                    produto
+                )
+            );
 
-        const unitario = Number(
-            produto?.valorUnitario ??
-            produto?.precoUnitario ??
-            produto?.preco ??
-            produto?.valor ??
-            0
-        );
+        const unitario =
+            Number(
+                produto
+                    ?.valorUnitario ??
+                produto
+                    ?.precoUnitario ??
+                produto?.preco ??
+                produto?.valor ??
+                0
+            );
 
         if (
-            Number.isFinite(quantidade) &&
-            Number.isFinite(unitario)
+            Number.isFinite(
+                quantidade
+            ) &&
+            Number.isFinite(
+                unitario
+            )
         ) {
-            return quantidade * unitario;
+            return quantidade *
+                unitario;
         }
 
         return 0;
@@ -1670,17 +2658,20 @@
         total,
         totalProdutos
     ) {
-        const elementoTotal = document.getElementById(
-            "listalar-gastos-total-importado"
-        );
+        const elementoTotal =
+            document.getElementById(
+                "listalar-gastos-total-importado"
+            );
 
-        const elementoProdutos = document.getElementById(
-            "listalar-gastos-total-produtos"
-        );
+        const elementoProdutos =
+            document.getElementById(
+                "listalar-gastos-total-produtos"
+            );
 
-        const elementoNotas = document.getElementById(
-            "listalar-gastos-total-notas"
-        );
+        const elementoNotas =
+            document.getElementById(
+                "listalar-gastos-total-notas"
+            );
 
         if (elementoTotal) {
             elementoTotal.textContent =
@@ -1693,26 +2684,41 @@
         }
 
         if (elementoNotas) {
-            elementoNotas.textContent = "1";
+            elementoNotas.textContent =
+                "1";
         }
     }
 
-    function exibirNotaImportada(nota) {
-        const resumo = document.getElementById(
-            IDS.resumoImportacao
-        );
+    function exibirNotaImportada(
+        nota
+    ) {
+        const resumo =
+            document.getElementById(
+                IDS.resumoImportacao
+            );
 
         if (!resumo) {
             return;
         }
 
-        const produtos = obterProdutosDaNota(nota);
-        const total = obterValorTotal(nota, produtos);
+        const produtos =
+            obterProdutosDaNota(
+                nota
+            );
+
+        const total =
+            obterValorTotal(
+                nota,
+                produtos
+            );
 
         const estabelecimento =
-            obterNomeEstabelecimento(nota);
+            obterNomeEstabelecimento(
+                nota
+            );
 
-        const dataNota = obterDataNota(nota);
+        const dataNota =
+            obterDataNota(nota);
 
         atualizarResumoSuperior(
             total,
@@ -1721,51 +2727,86 @@
 
         const limiteExibicao = 50;
 
-        const produtosHTML = produtos
-            .slice(0, limiteExibicao)
-            .map((produto, indice) => {
-                const nome =
-                    obterNomeProduto(
+        const produtosHTML =
+            produtos
+                .slice(
+                    0,
+                    limiteExibicao
+                )
+                .map(
+                    (
                         produto,
                         indice
-                    );
+                    ) => {
+                        const nome =
+                            obterNomeProduto(
+                                produto,
+                                indice
+                            );
 
-                const quantidade =
-                    obterQuantidadeProduto(produto);
+                        const quantidade =
+                            obterQuantidadeProduto(
+                                produto
+                            );
 
-                const unidade =
-                    obterUnidadeProduto(produto);
+                        const unidade =
+                            obterUnidadeProduto(
+                                produto
+                            );
 
-                const totalProduto =
-                    obterTotalProduto(produto);
+                        const totalProduto =
+                            obterTotalProduto(
+                                produto
+                            );
 
-                return `
-                    <div class="listalar-gastos-produto">
-                        <div>
-                            <strong>
-                                ${escaparHTML(nome)}
-                            </strong>
+                        return `
+                            <div
+                                class="listalar-gastos-produto"
+                            >
+                                <div>
+                                    <strong>
+                                        ${escaparHTML(
+                                            nome
+                                        )}
+                                    </strong>
 
-                            <small>
-                                ${formatarQuantidade(quantidade)}
-                                ${escaparHTML(unidade)}
-                            </small>
-                        </div>
+                                    <small>
+                                        ${formatarQuantidade(
+                                            quantidade
+                                        )}
 
-                        <div class="listalar-gastos-produto-valor">
-                            ${formatarMoeda(totalProduto)}
-                        </div>
-                    </div>
-                `;
-            })
-            .join("");
+                                        ${escaparHTML(
+                                            unidade
+                                        )}
+                                    </small>
+                                </div>
+
+                                <div
+                                    class="listalar-gastos-produto-valor"
+                                >
+                                    ${formatarMoeda(
+                                        totalProduto
+                                    )}
+                                </div>
+                            </div>
+                        `;
+                    }
+                )
+                .join("");
 
         const mensagemLimite =
-            produtos.length > limiteExibicao
+            produtos.length >
+            limiteExibicao
                 ? `
-                    <div class="listalar-gastos-vazio">
-                        Mais ${produtos.length - limiteExibicao}
-                        produtos foram identificados na nota.
+                    <div
+                        class="listalar-gastos-vazio"
+                    >
+                        Mais ${
+                            produtos.length -
+                            limiteExibicao
+                        }
+                        produtos foram
+                        identificados na nota.
                     </div>
                 `
                 : "";
@@ -1780,49 +2821,76 @@
             mensagemPreparacao =
                 "Esta nota será preparada para substituir a compra manual correspondente.";
         } else if (
-            modoImportacaoAtual === "nova_compra"
+            modoImportacaoAtual ===
+            "nova_compra"
         ) {
             mensagemPreparacao =
                 "Esta nota será tratada como uma nova compra independente.";
         }
 
         resumo.innerHTML = `
-            <div class="listalar-gastos-card-topo">
+            <div
+                class="listalar-gastos-card-topo"
+            >
                 <div>
-                    <h2>Nota importada</h2>
+                    <h2>
+                        Nota importada
+                    </h2>
 
                     <p>
-                        ${escaparHTML(mensagemPreparacao)}
+                        ${escaparHTML(
+                            mensagemPreparacao
+                        )}
                     </p>
                 </div>
             </div>
 
-            <div class="listalar-gastos-nota-cabecalho">
+            <div
+                class="listalar-gastos-nota-cabecalho"
+            >
                 <div>
                     <h3>
-                        ${escaparHTML(estabelecimento)}
+                        ${escaparHTML(
+                            estabelecimento
+                        )}
                     </h3>
 
                     <p>
-                        ${escaparHTML(dataNota)}
+                        ${escaparHTML(
+                            dataNota
+                        )}
+
                         · ${produtos.length}
-                        ${produtos.length === 1
-                            ? "produto"
-                            : "produtos"}
+
+                        ${
+                            produtos.length ===
+                            1
+                                ? "produto"
+                                : "produtos"
+                        }
                     </p>
                 </div>
 
-                <div class="listalar-gastos-nota-total">
-                    ${formatarMoeda(total)}
+                <div
+                    class="listalar-gastos-nota-total"
+                >
+                    ${formatarMoeda(
+                        total
+                    )}
                 </div>
             </div>
 
-            <div class="listalar-gastos-produtos">
+            <div
+                class="listalar-gastos-produtos"
+            >
                 ${
                     produtosHTML ||
                     `
-                        <div class="listalar-gastos-vazio">
-                            Nenhum produto foi identificado na nota.
+                        <div
+                            class="listalar-gastos-vazio"
+                        >
+                            Nenhum produto foi
+                            identificado na nota.
                         </div>
                     `
                 }
@@ -1831,7 +2899,9 @@
             </div>
         `;
 
-        resumo.classList.add("visivel");
+        resumo.classList.add(
+            "visivel"
+        );
 
         mostrarAviso(
             "Nota fiscal importada com sucesso.",
@@ -1839,7 +2909,47 @@
         );
     }
 
-    function receberNotaImportada(evento) {
+    function extrairNotaDoEvento(
+        evento
+    ) {
+        const detalhe =
+            evento?.detail;
+
+        return (
+            detalhe?.data?.nota ||
+            detalhe?.data?.dados ||
+            detalhe?.data ||
+            detalhe?.nota ||
+            detalhe?.dados ||
+            detalhe
+        );
+    }
+
+    function notaJaRecebida(nota) {
+        const agora = Date.now();
+
+        if (
+            nota ===
+                ultimaNotaRecebidaReferencia &&
+            agora -
+                ultimaNotaRecebidaEm <
+                1500
+        ) {
+            return true;
+        }
+
+        ultimaNotaRecebidaReferencia =
+            nota;
+
+        ultimaNotaRecebidaEm =
+            agora;
+
+        return false;
+    }
+
+    function receberNotaImportada(
+        evento
+    ) {
         if (!moduloLiberado) {
             console.warn(
                 "⚠️ Nota ignorada: módulo Gastos não liberado."
@@ -1848,18 +2958,15 @@
             return;
         }
 
-        /*
-         * O importador pode enviar os dados diretamente em detail
-         * ou dentro de detail.nota / detail.dados.
-         */
-        const detalhe = evento?.detail;
-
         const nota =
-            detalhe?.nota ||
-            detalhe?.dados ||
-            detalhe;
+            extrairNotaDoEvento(
+                evento
+            );
 
-        if (!nota || typeof nota !== "object") {
+        if (
+            !nota ||
+            typeof nota !== "object"
+        ) {
             console.warn(
                 "⚠️ O evento da nota não trouxe dados válidos:",
                 evento
@@ -1873,10 +2980,24 @@
             return;
         }
 
-        ultimaNotaImportada = nota;
+        if (
+            notaJaRecebida(nota)
+        ) {
+            console.log(
+                "ℹ️ Evento duplicado da mesma nota ignorado."
+            );
+
+            return;
+        }
+
+        ultimaNotaImportada =
+            nota;
 
         abrirTela();
-        exibirNotaImportada(nota);
+
+        exibirNotaImportada(
+            nota
+        );
 
         window.dispatchEvent(
             new CustomEvent(
@@ -1884,8 +3005,12 @@
                 {
                     detail: {
                         nota,
+
                         modoImportacao:
-                            modoImportacaoAtual
+                            modoImportacaoAtual,
+
+                        familiaId:
+                            familiaIdAtual
                     }
                 }
             )
@@ -1895,7 +3020,15 @@
             "✅ Nota recebida e preparada pelo módulo Gastos:",
             {
                 nota,
-                modoImportacao: modoImportacaoAtual
+
+                modoImportacao:
+                    modoImportacaoAtual,
+
+                familiaId:
+                    familiaIdAtual,
+
+                eventoOrigem:
+                    evento?.type || ""
             }
         );
     }
@@ -1905,37 +3038,65 @@
     // ========================================================
 
     function configurarEventos() {
-        const botaoMenu = document.getElementById(
-            IDS.botaoMenu
-        );
+        const botaoMenu =
+            document.getElementById(
+                IDS.botaoMenu
+            );
 
-        const botaoFechar = document.getElementById(
-            IDS.botaoFechar
-        );
+        const botaoFechar =
+            document.getElementById(
+                IDS.botaoFechar
+            );
 
-        const botaoImportar = document.getElementById(
-            IDS.botaoImportar
-        );
+        const botaoImportar =
+            document.getElementById(
+                IDS.botaoImportar
+            );
 
-        const tela = document.getElementById(
-            IDS.tela
-        );
+        const tela =
+            document.getElementById(
+                IDS.tela
+            );
 
-        const modalDuplicidade = document.getElementById(
-            IDS.modalDuplicidade
-        );
+        const modalDuplicidade =
+            document.getElementById(
+                IDS.modalDuplicidade
+            );
 
-        const modalCancelar = document.getElementById(
-            IDS.modalCancelar
-        );
+        const modalCancelar =
+            document.getElementById(
+                IDS.modalCancelar
+            );
 
-        const modalSubstituir = document.getElementById(
-            IDS.modalSubstituir
-        );
+        const modalSubstituir =
+            document.getElementById(
+                IDS.modalSubstituir
+            );
 
-        const modalNovaCompra = document.getElementById(
-            IDS.modalNovaCompra
-        );
+        const modalNovaCompra =
+            document.getElementById(
+                IDS.modalNovaCompra
+            );
+
+        const modalOrigem =
+            document.getElementById(
+                IDS.modalOrigem
+            );
+
+        const modalOrigemQr =
+            document.getElementById(
+                IDS.modalOrigemQr
+            );
+
+        const modalOrigemPdf =
+            document.getElementById(
+                IDS.modalOrigemPdf
+            );
+
+        const modalOrigemCancelar =
+            document.getElementById(
+                IDS.modalOrigemCancelar
+            );
 
         if (botaoMenu) {
             botaoMenu.addEventListener(
@@ -1952,45 +3113,89 @@
         }
 
         if (botaoImportar) {
-            botaoImportar.addEventListener(
-                "click",
-                solicitarImportacaoNota
-            );
+            botaoImportar
+                .addEventListener(
+                    "click",
+                    solicitarImportacaoNota
+                );
         }
 
         if (modalSubstituir) {
-            modalSubstituir.addEventListener(
-                "click",
-                escolherSubstituir
-            );
+            modalSubstituir
+                .addEventListener(
+                    "click",
+                    escolherSubstituir
+                );
         }
 
         if (modalNovaCompra) {
-            modalNovaCompra.addEventListener(
-                "click",
-                escolherNovaCompra
-            );
+            modalNovaCompra
+                .addEventListener(
+                    "click",
+                    escolherNovaCompra
+                );
         }
 
         if (modalCancelar) {
-            modalCancelar.addEventListener(
-                "click",
-                escolherCancelar
-            );
+            modalCancelar
+                .addEventListener(
+                    "click",
+                    escolherCancelar
+                );
+        }
+
+        if (modalOrigemQr) {
+            modalOrigemQr
+                .addEventListener(
+                    "click",
+                    escolherOrigemQrCode
+                );
+        }
+
+        if (modalOrigemPdf) {
+            modalOrigemPdf
+                .addEventListener(
+                    "click",
+                    escolherOrigemPdf
+                );
+        }
+
+        if (modalOrigemCancelar) {
+            modalOrigemCancelar
+                .addEventListener(
+                    "click",
+                    escolherCancelarOrigem
+                );
         }
 
         if (modalDuplicidade) {
-            modalDuplicidade.addEventListener(
-                "click",
-                (evento) => {
-                    if (
-                        evento.target ===
-                        modalDuplicidade
-                    ) {
-                        escolherCancelar();
+            modalDuplicidade
+                .addEventListener(
+                    "click",
+                    (evento) => {
+                        if (
+                            evento.target ===
+                            modalDuplicidade
+                        ) {
+                            escolherCancelar();
+                        }
                     }
-                }
-            );
+                );
+        }
+
+        if (modalOrigem) {
+            modalOrigem
+                .addEventListener(
+                    "click",
+                    (evento) => {
+                        if (
+                            evento.target ===
+                            modalOrigem
+                        ) {
+                            escolherCancelarOrigem();
+                        }
+                    }
+                );
         }
 
         if (tela) {
@@ -1998,8 +3203,11 @@
                 "click",
                 (evento) => {
                     /*
-                     * Não fecha ao clicar dentro da tela.
-                     * O fechamento ocorre somente no botão ×.
+                     * Não fecha ao clicar
+                     * dentro da tela.
+                     *
+                     * O fechamento ocorre
+                     * somente no botão ×.
                      */
                     evento.stopPropagation();
                 }
@@ -2009,19 +3217,43 @@
         document.addEventListener(
             "keydown",
             (evento) => {
-                if (evento.key !== "Escape") {
+                if (
+                    evento.key !==
+                    "Escape"
+                ) {
                     return;
                 }
 
-                const modalAberto = document
-                    .getElementById(
-                        IDS.modalDuplicidade
-                    )
-                    ?.classList.contains(
-                        "aberto"
-                    );
+                const modalOrigemAberto =
+                    document
+                        .getElementById(
+                            IDS.modalOrigem
+                        )
+                        ?.classList
+                        .contains(
+                            "aberto"
+                        );
 
-                if (modalAberto) {
+                if (
+                    modalOrigemAberto
+                ) {
+                    escolherCancelarOrigem();
+                    return;
+                }
+
+                const modalDuplicidadeAberto =
+                    document
+                        .getElementById(
+                            IDS.modalDuplicidade
+                        )
+                        ?.classList
+                        .contains(
+                            "aberto"
+                        );
+
+                if (
+                    modalDuplicidadeAberto
+                ) {
                     escolherCancelar();
                     return;
                 }
@@ -2030,6 +3262,15 @@
             }
         );
 
+        window.addEventListener(
+            "listalar:nota-importada",
+            receberNotaImportada
+        );
+
+        /*
+         * Compatibilidade com o
+         * importador PDF anterior.
+         */
         window.addEventListener(
             "listalar:nota-pdf-importada",
             receberNotaImportada
@@ -2057,13 +3298,37 @@
     }
 
     window.ListaLarGastos = {
-        versao: VERSAO,
-        abrir: abrirTela,
-        fechar: fecharTela,
-        importarNF: solicitarImportacaoNota,
+        versao:
+            VERSAO,
+
+        abrir:
+            abrirTela,
+
+        fechar:
+            fecharTela,
+
+        importarCompra:
+            solicitarImportacaoNota,
+
+        /*
+         * Nome antigo mantido para
+         * compatibilidade.
+         */
+        importarNF:
+            solicitarImportacaoNota,
+
+        abrirImportadorPdf,
+
+        abrirImportadorQrCode,
+
+        abrirImportadorNota,
+
         obterUltimaNota,
+
         obterModoImportacao,
+
         obterFamiliaId,
+
         estaLiberado
     };
 
@@ -2073,6 +3338,7 @@
 
     function iniciar() {
         criarEstilos();
+
         iniciarControleAcessoGastos();
 
         console.log(
@@ -2080,7 +3346,10 @@
         );
     }
 
-    if (document.readyState === "loading") {
+    if (
+        document.readyState ===
+        "loading"
+    ) {
         document.addEventListener(
             "DOMContentLoaded",
             iniciar,
