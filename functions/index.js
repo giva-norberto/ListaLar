@@ -248,6 +248,7 @@ async function limparConvitesAtivosDasFamilias(
 
   convites.forEach((conviteSnap) => {
     const convite = conviteSnap.data() || {};
+
     const familiaId = String(
       convite.familiaId || ""
     ).trim();
@@ -263,6 +264,7 @@ async function limparConvitesAtivosDasFamilias(
           familiaRef: db
             .collection("familias")
             .doc(familiaId),
+
           tokensExcluidos: new Set()
         }
       );
@@ -287,6 +289,7 @@ async function limparConvitesAtivosDasFamilias(
     }
 
     const familia = familiaSnap.data() || {};
+
     const tokenAtivo = String(
       familia.conviteTokenAtivo || ""
     ).trim();
@@ -296,9 +299,14 @@ async function limparConvitesAtivosDasFamilias(
       tokensExcluidos.has(tokenAtivo)
     ) {
       await familiaRef.update({
-        conviteTokenAtivo: FieldValue.delete(),
-        conviteAtualizadoEm: FieldValue.delete(),
-        atualizadaEm: FieldValue.serverTimestamp()
+        conviteTokenAtivo:
+          FieldValue.delete(),
+
+        conviteAtualizadoEm:
+          FieldValue.delete(),
+
+        atualizadaEm:
+          FieldValue.serverTimestamp()
       });
     }
   }
@@ -316,6 +324,7 @@ async function limparConvitesAtivosDasFamilias(
 async function excluirContaAuthentication(uidAlvo) {
   try {
     await authAdmin.deleteUser(uidAlvo);
+
     return true;
   } catch (erro) {
     if (erro?.code === "auth/user-not-found") {
@@ -347,6 +356,7 @@ exports.excluirUsuarioAdministrativo = onCall(
     // estiver configurado no ListaLar.
     enforceAppCheck: false
   },
+
   async (request) => {
     const uidAdministrador =
       request.auth?.uid || "";
@@ -414,10 +424,12 @@ exports.excluirUsuarioAdministrativo = onCall(
         .collection("familias")
         .doc(familiaId);
 
-      const familiaSnap = await familiaRef.get();
+      const familiaSnap =
+        await familiaRef.get();
 
       if (familiaSnap.exists) {
-        familia = familiaSnap.data() || {};
+        familia =
+          familiaSnap.data() || {};
 
         if (familia.donoId === uidAlvo) {
           throw new HttpsError(
@@ -489,8 +501,10 @@ exports.excluirUsuarioAdministrativo = onCall(
 
       const referenciasParaExcluir = [
         ...referenciasMembros,
+
         ...convitesCriados.map(
-          (conviteSnap) => conviteSnap.ref
+          (conviteSnap) =>
+            conviteSnap.ref
         )
       ];
 
@@ -524,10 +538,13 @@ exports.excluirUsuarioAdministrativo = onCall(
           uidAlvo,
           familiaId,
           emailUsuario,
+
           membrosRemovidos:
             referenciasMembros.length,
+
           convitesRemovidos:
             convitesCriados.length,
+
           contaAuthExistia
         }
       );
@@ -538,12 +555,16 @@ exports.excluirUsuarioAdministrativo = onCall(
         nome: nomeUsuario,
         email: emailUsuario,
         familiaId,
+
         membrosRemovidos:
           referenciasMembros.length,
+
         convitesRemovidos:
           convitesCriados.length,
+
         contaAuthenticationRemovida:
           contaAuthExistia,
+
         mensagem:
           "Usuário excluído com sucesso."
       };
@@ -555,6 +576,7 @@ exports.excluirUsuarioAdministrativo = onCall(
           uidAlvo,
           familiaId,
           limpezaFirestoreConcluida,
+
           erro:
             erro?.message ||
             String(erro)
@@ -589,11 +611,29 @@ exports.excluirUsuarioAdministrativo = onCall(
 );
 
 
+// ============================================================================
+// NFC-e
+// ============================================================================
+
+const {
+  consultarNfce
+} = require("./nfce");
+
+exports.consultarNfce =
+  consultarNfce;
+
+
+// ============================================================================
 // NOTIFICAÇÕES ADMINISTRATIVAS
+// ============================================================================
+
 const {
   registrarDispositivoAdmin,
   notificarNovaFamiliaAdmin,
 } = require("./notificacoes-admin");
 
-exports.registrarDispositivoAdmin = registrarDispositivoAdmin;
-exports.notificarNovaFamiliaAdmin = notificarNovaFamiliaAdmin;
+exports.registrarDispositivoAdmin =
+  registrarDispositivoAdmin;
+
+exports.notificarNovaFamiliaAdmin =
+  notificarNovaFamiliaAdmin;
