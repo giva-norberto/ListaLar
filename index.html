@@ -1062,6 +1062,125 @@
       });
     }
 
+
+    function dataHojeLocalISO() {
+      const agora = new Date();
+      const ano = agora.getFullYear();
+      const mes = String(agora.getMonth() + 1).padStart(2, '0');
+      const dia = String(agora.getDate()).padStart(2, '0');
+      return `${ano}-${mes}-${dia}`;
+    }
+
+    function formatarMoedaBR(valor) {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(Number(valor || 0));
+    }
+
+    function solicitarDadosCompraComPrecos({
+      quantidadeItens = 0,
+      valorTotal = 0
+    } = {}) {
+      return new Promise((resolve) => {
+        resolverModalAtual = null;
+
+        const modal = document.getElementById('appModal');
+        const icone = document.getElementById('appModalIcone');
+        const tituloEl = document.getElementById('appModalTitulo');
+        const textoEl = document.getElementById('appModalTexto');
+        const acoes = document.getElementById('appModalAcoes');
+
+        icone.className = 'app-modal-icon success';
+        icone.textContent = '🛒';
+        tituloEl.textContent = 'Confirmar compra com preços';
+        textoEl.textContent =
+          'Informe o estabelecimento. A data de hoje já está preenchida e pode ser alterada.';
+
+        acoes.className = 'app-modal-actions';
+        acoes.innerHTML = `
+          <div style="text-align:left; display:grid; gap:12px;">
+            <label style="font-size:14px; font-weight:900; color:var(--texto);">
+              Estabelecimento
+              <input
+                id="finalizacaoEstabelecimento"
+                type="text"
+                autocomplete="organization"
+                placeholder="Ex.: Mercado do bairro"
+                style="margin-top:6px;"
+              >
+            </label>
+
+            <label style="font-size:14px; font-weight:900; color:var(--texto);">
+              Data da compra
+              <input
+                id="finalizacaoDataCompra"
+                type="date"
+                value="${dataHojeLocalISO()}"
+                style="margin-top:6px;"
+              >
+            </label>
+
+            <div style="
+              background:#dcfce7;
+              color:#166534;
+              border-radius:15px;
+              padding:13px 14px;
+              font-size:15px;
+              font-weight:900;
+            ">
+              ${quantidadeItens} ${quantidadeItens === 1 ? 'item' : 'itens'} ·
+              ${formatarMoedaBR(valorTotal)}
+            </div>
+
+            <div class="app-modal-actions dual" style="margin-top:2px;">
+              <button id="finalizacaoCancelar" class="app-modal-btn secondary">
+                Cancelar
+              </button>
+              <button id="finalizacaoSalvar" class="app-modal-btn success">
+                Salvar compra
+              </button>
+            </div>
+          </div>
+        `;
+
+        const finalizar = (resultado) => {
+          modal.classList.remove('active');
+          resolve(resultado);
+        };
+
+        document
+          .getElementById('finalizacaoCancelar')
+          .addEventListener('click', () => finalizar(null), { once: true });
+
+        document
+          .getElementById('finalizacaoSalvar')
+          .addEventListener('click', () => {
+            const estabelecimentoNome = document
+              .getElementById('finalizacaoEstabelecimento')
+              .value.trim();
+            const dataCompra = document
+              .getElementById('finalizacaoDataCompra')
+              .value || dataHojeLocalISO();
+
+            if (!estabelecimentoNome) {
+              const campo = document.getElementById('finalizacaoEstabelecimento');
+              campo.focus();
+              campo.style.borderColor = 'var(--vermelho)';
+              return;
+            }
+
+            finalizar({ estabelecimentoNome, dataCompra });
+          });
+
+        modal.classList.add('active');
+
+        window.setTimeout(() => {
+          document.getElementById('finalizacaoEstabelecimento')?.focus();
+        }, 0);
+      });
+    }
+
     function guardarConvitePendente(token) {
       if (!token) return;
       sessionStorage.setItem(CHAVE_CONVITE_PENDENTE, token);
@@ -2260,39 +2379,57 @@
 
       if (
         apiGastos &&
+        typeof apiGastos.obterResumoCompraManualAoFinalizar === 'function' &&
         typeof apiGastos.salvarCompraManualAoFinalizar === 'function'
       ) {
-        let resultadoGasto;
+        let resumoGasto;
 
         try {
-          resultadoGasto = await apiGastos.salvarCompraManualAoFinalizar({
+          resumoGasto = apiGastos.obterResumoCompraManualAoFinalizar({
             produtoIds: comprados.map(p => p.id)
           });
         } catch (erro) {
-          console.error('Erro ao registrar a compra em Gastos:', erro);
-
-          await mostrarMensagem({
-            titulo: 'Compra não finalizada',
-            texto: 'Não foi possível registrar os valores da compra. O estoque e a lista não foram alterados.',
-            tipo: 'danger'
-          });
-          return;
+          console.error('Erro ao verificar os preços da compra:', erro);
+          resumoGasto = { necessario: false };
         }
 
-        if (resultadoGasto?.cancelado) {
-          return;
-        }
-
-        if (
-          resultadoGasto?.necessario === true &&
-          resultadoGasto?.salvo !== true
-        ) {
-          await mostrarMensagem({
-            titulo: 'Compra não finalizada',
-            texto: 'Os valores não foram salvos. O estoque e a lista permanecem como estavam.',
-            tipo: 'warning'
+        if (resumoGasto?.necessario === true) {
+          const dadosCompra = await solicitarDadosCompraComPrecos({
+            quantidadeItens: resumoGasto.quantidadeItens,
+            valorTotal: resumoGasto.valorTotal
           });
-          return;
+
+          if (!dadosCompra) {
+            return;
+          }
+
+          let resultadoGasto;
+
+          try {
+            resultadoGasto = await apiGastos.salvarCompraManualAoFinalizar({
+              produtoIds: comprados.map(p => p.id),
+              estabelecimentoNome: dadosCompra.estabelecimentoNome,
+              dataCompra: dadosCompra.dataCompra
+            });
+          } catch (erro) {
+            console.error('Erro ao registrar a compra em Gastos:', erro);
+
+            await mostrarMensagem({
+              titulo: 'Compra não finalizada',
+              texto: 'Não foi possível registrar os valores da compra. O estoque e a lista não foram alterados.',
+              tipo: 'danger'
+            });
+            return;
+          }
+
+          if (resultadoGasto?.salvo !== true) {
+            await mostrarMensagem({
+              titulo: 'Compra não finalizada',
+              texto: 'Os valores não foram salvos. O estoque e a lista permanecem como estavam.',
+              tipo: 'warning'
+            });
+            return;
+          }
         }
       }
 
@@ -2816,7 +2953,7 @@
 <script type="module" src="./importar-nota-pdf.js?v=1.1.0"></script>
 <script src="./importar-nfce-qr.js?v=1.2.0"></script>
 <script src="./importar-compra.js?v=1.0.0"></script>
-<script type="module" src="./gastos.js?v=2.1.0"></script>
+<script type="module" src="./gastos.js?v=2.2.0"></script>
 
 </body>
 </html>
