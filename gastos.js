@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "2.1.0";
+    const VERSAO = "2.2.0";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -2626,6 +2626,108 @@
         }
     }
 
+
+    function obterResumoCompraManualAoFinalizar({
+        produtoIds = []
+    } = {}) {
+        const itens = obterItensManuaisAtuais(produtoIds);
+
+        if (!itens.length) {
+            return {
+                necessario: false,
+                quantidadeItens: 0,
+                valorTotal: 0
+            };
+        }
+
+        return {
+            necessario: true,
+            quantidadeItens: itens.length,
+            valorTotal: arredondarMoeda(
+                itens.reduce(
+                    (soma, item) =>
+                        soma + numeroSeguro(item.valorTotal, 0),
+                    0
+                )
+            )
+        };
+    }
+
+    async function salvarCompraManualAoFinalizar({
+        produtoIds = [],
+        estabelecimentoNome = "",
+        dataCompra = ""
+    } = {}) {
+        if (ESTADO.salvando) {
+            throw new Error("SALVAMENTO_EM_ANDAMENTO");
+        }
+
+        const itens = obterItensManuaisAtuais(produtoIds);
+
+        if (!itens.length) {
+            return {
+                necessario: false,
+                salvo: false,
+                cancelado: false
+            };
+        }
+
+        const nome = normalizarTexto(estabelecimentoNome);
+
+        if (!nome) {
+            throw new Error("ESTABELECIMENTO_OBRIGATORIO");
+        }
+
+        const dataCompraConvertida = converterParaData(
+            dataCompra || dataHojeISO()
+        );
+
+        const valorTotal = arredondarMoeda(
+            itens.reduce(
+                (soma, item) =>
+                    soma + numeroSeguro(item.valorTotal, 0),
+                0
+            )
+        );
+
+        const assinatura = [
+            ESTADO.familiaId,
+            dataParaISO(dataCompraConvertida),
+            nome.toLowerCase(),
+            valorTotal.toFixed(2),
+            itens.map(
+                (item) => `${item.produtoId}:${item.valorTotal}`
+            ).join("|")
+        ].join("::");
+
+        const registro = {
+            id: `manual_${hashTexto(assinatura)}`,
+            tipoRegistro: "compra_manual",
+            origem: "MANUAL",
+            estabelecimentoNome: nome,
+            estabelecimentoCnpj: "",
+            dataCompra: dataParaISO(dataCompraConvertida),
+            dataCompraMs: dataCompraConvertida.getTime(),
+            competencia: competenciaDaData(dataCompraConvertida),
+            valorTotal,
+            quantidadeItens: itens.length,
+            chaveAcesso: ""
+        };
+
+        await salvarRegistroComItens(registro, itens);
+
+        return {
+            necessario: true,
+            salvo: true,
+            cancelado: false,
+            gastoId: registro.id,
+            valorTotal,
+            quantidadeItens: itens.length,
+            dataCompra: registro.dataCompra,
+            estabelecimentoNome: nome
+        };
+    }
+
     // ========================================================
     // HISTÓRICO E DASHBOARD
     // ========================================================
@@ -3180,14 +3282,8 @@
         importarNF: abrirImportadorPdf,
         abrirImportadorPdf,
         salvarCompraManual: abrirModalManual,
-        salvarCompraManualAoFinalizar({
-            produtoIds = []
-        } = {}) {
-            return abrirModalManual({
-                produtoIds,
-                origem: "finalizacao_lista"
-            });
-        },
+        obterResumoCompraManualAoFinalizar,
+        salvarCompraManualAoFinalizar,
         obterFamiliaId() {
             return ESTADO.familiaId;
         },
