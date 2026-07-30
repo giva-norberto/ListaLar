@@ -33,26 +33,26 @@ const ImportadorNotaPDF = (() => {
     // ============================================================
 
     async function carregarPDFJS() {
-        if (promessaPDFJS) {
-            return promessaPDFJS;
-        }
-
-        promessaPDFJS = import(
-            "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.mjs"
-        )
-            .then((moduloPDF) => {
-                moduloPDF.GlobalWorkerOptions.workerSrc =
-                    "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.worker.mjs";
-
-                return moduloPDF;
-            })
-            .catch((erro) => {
-                promessaPDFJS = null;
-                throw erro;
-            });
-
+    if (promessaPDFJS) {
         return promessaPDFJS;
     }
+
+    promessaPDFJS = import(
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/legacy/build/pdf.mjs"
+    )
+        .then((moduloPDF) => {
+            moduloPDF.GlobalWorkerOptions.workerSrc =
+                "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/legacy/build/pdf.worker.mjs";
+
+            return moduloPDF;
+        })
+        .catch((erro) => {
+            promessaPDFJS = null;
+            throw erro;
+        });
+
+    return promessaPDFJS;
+}
 
     // ============================================================
     // ESTILOS
