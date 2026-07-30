@@ -1,3321 +1,2959 @@
-// ============================================================
-// LISTALAR — MÓDULO GASTOS
-// Arquivo: gastos.js
-// Versão: 2.1.0
-//
-// Funções:
-// - Painel de gastos da família;
-// - Importação exclusiva por PDF (sem QR Code);
-// - Gravação permanente de notas fiscais no Firestore;
-// - Gravação de compras manuais usando o Controle de Preços;
-// - Itens salvos em subcoleção;
-// - Indicadores, gráficos simples e histórico;
-// - Não altera o cadastro principal de produtos.
-// ============================================================
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
 
-(() => {
-    "use strict";
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
 
-    const VERSAO = "2.2.0";
-    const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
-    const LIMITE_HISTORICO = 120;
+  <title>ListaLar</title>
 
-    const FIREBASE_CONFIG = {
-        apiKey: "AIzaSyC2U7q5HupxKyI3QiAyan-2Sio55NSir0Y",
-        authDomain: "compras-da-casa.firebaseapp.com",
-        projectId: "compras-da-casa",
-        storageBucket: "compras-da-casa.firebasestorage.app",
-        messagingSenderId: "63765433273",
-        appId: "1:63765433273:web:c478a3dd33ef3cd55a0468"
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+
+  <meta name="theme-color" content="#2563eb">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ListaLar">
+
+  <link rel="stylesheet" href="./tarefas.css?v=1.0.0">
+  <style>
+    :root {
+      --azul1:#2563eb; --azul2:#06b6d4; --fundo:#eef5ff; --card:#fff; --texto:#172033;
+      --cinza:#64748b; --borda:#dbeafe; --verde:#16a34a; --verde-bg:#dcfce7;
+      --vermelho:#dc2626; --vermelho-bg:#fee2e2; --amarelo-bg:#fef3c7;
+      --amarelo-txt:#92400e; --roxo-bg:#ede9fe; --roxo-txt:#6d28d9;
+      --sombra:0 8px 18px rgba(15,23,42,.10);
+    }
+
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+    html, body {
+      margin:0; min-height:100%; font-family:Arial, Helvetica, sans-serif;
+      background:var(--fundo); color:var(--texto);
+    }
+
+    body { padding-bottom:88px; }
+
+    header {
+      background:linear-gradient(135deg,var(--azul1),var(--azul2)); color:white;
+      padding:14px 14px 12px; text-align:center; border-bottom-left-radius:22px;
+      border-bottom-right-radius:22px; box-shadow:var(--sombra); position:sticky; top:0; z-index:10;
+    }
+
+    header h1 { margin:0; font-size:21px; font-weight:900; }
+    header p { margin:4px 0 0; font-size:12px; opacity:.95; font-weight:700; }
+
+    .app { width:100%; max-width:520px; margin:0 auto; padding:10px 10px 0; }
+
+    .bottom-nav {
+      position:fixed; left:0; right:0; bottom:0; z-index:50; background:rgba(255,255,255,.96);
+      backdrop-filter:blur(10px); border-top:1px solid #dbeafe;
+      padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+      display:grid; grid-template-columns:repeat(3,1fr); gap:7px; max-width:520px; margin:0 auto;
+      box-shadow:0 -8px 20px rgba(15,23,42,.10); border-top-left-radius:18px; border-top-right-radius:18px;
+    }
+
+    .tab {
+      border:0; border-radius:15px; background:#f8fafc; color:var(--azul1); min-height:56px;
+      font-size:13px; font-weight:900; cursor:pointer; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:2px;
+    }
+
+    .tab .ico { font-size:20px; line-height:1; }
+    .tab.active { color:white; background:linear-gradient(135deg,var(--azul1),var(--azul2)); }
+
+    .screen { display:none; }
+    .screen.active { display:block; }
+
+    .card { background:var(--card); border-radius:20px; padding:12px; box-shadow:var(--sombra); margin-bottom:10px; }
+
+    .title-row { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px; }
+    .title { margin:0; font-size:20px; font-weight:900; }
+    .subtitle { margin:3px 0 0; color:var(--cinza); font-size:12px; font-weight:700; line-height:1.25; }
+
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-bottom:10px; }
+
+    .mini-card {
+      background:#f8fafc; border:1px solid var(--borda); border-radius:15px;
+      padding:8px 4px; text-align:center; min-height:58px;
+    }
+
+    .mini-card strong { display:block; font-size:21px; line-height:1; font-weight:900; color:var(--azul1); }
+    .mini-card span { display:block; font-size:10px; font-weight:900; color:var(--cinza); margin-top:5px; }
+
+    .form { display:grid; grid-template-columns:1fr 96px; gap:8px; margin-bottom:10px; }
+
+    .manual-box {
+      background:#f8fafc;
+      border:2px solid #e2e8f0;
+      border-radius:18px;
+      padding:10px;
+      margin-bottom:10px;
+    }
+
+    .manual-title {
+      font-size:15px;
+      font-weight:900;
+      margin-bottom:7px;
+      color:var(--texto);
+    }
+
+    .manual-grid {
+      display:grid;
+      grid-template-columns:1fr 78px;
+      gap:7px;
+      margin-bottom:7px;
+    }
+
+    .search-box {
+      margin-bottom:10px;
+    }
+
+    .sugestoes {
+      display:none;
+      background:white;
+      border:1px solid var(--borda);
+      border-radius:15px;
+      overflow:hidden;
+      margin-top:7px;
+    }
+
+    .sugestoes.active {
+      display:block;
+    }
+
+    .sugestao-item { 
+      width:100%;
+      border:0;
+      border-bottom:1px solid var(--borda);
+      background:white;
+      color:var(--texto);
+      text-align:left;
+      padding:12px;
+      font-size:15px;
+      font-weight:900;
+      cursor:pointer;
+      box-shadow:none;
+      border-radius:0;
+    }
+
+    .sugestao-item:last-child {
+      border-bottom:0;
+    }
+
+    input {
+      width:100%; border:2px solid var(--borda); border-radius:15px; padding:14px 12px;
+      font-size:16px; outline:none; background:white; font-weight:800;
+    }
+
+    input:focus { border-color:var(--azul1); }
+
+    button { font-family:inherit; }
+
+    .btn { border:0; border-radius:15px; padding:13px; font-size:15px; font-weight:900; cursor:pointer; }
+    .btn-primary { background:linear-gradient(135deg,var(--azul1),var(--azul2)); color:white; }
+    .btn-green { background:var(--verde); color:white; }
+    .btn-yellow { background:var(--amarelo-bg); color:var(--amarelo-txt); }
+    .btn-red { background:var(--vermelho-bg); color:var(--vermelho); }
+    .btn-full { width:100%; margin-top:9px; padding:16px; font-size:17px; }
+
+    .list { display:flex; flex-direction:column; gap:9px; }
+
+    .stock-item, .buy-item, .ia-card {
+      background:#f8fafc; border:2px solid #e2e8f0; border-radius:18px; padding:10px;
+    }
+
+    .buy-item.checked { background:#ecfdf5; border-color:#86efac; }
+
+    .item-top { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; }
+    .item-name { font-size:18px; font-weight:900; line-height:1.15; word-break:break-word; }
+    .item-top-actions { display:flex; align-items:center; justify-content:flex-end; gap:6px; flex:0 0 auto; }
+    .remover-manual-icon {
+      width:34px; height:34px; padding:0; border:0; border-radius:11px;
+      background:var(--vermelho-bg); color:var(--vermelho); font-size:17px;
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+    }
+    .remover-manual-icon:active { transform:scale(.96); }
+    .lista-controles-linha {
+      display:grid;
+      grid-template-columns:40px minmax(0, 1fr) 40px;
+      gap:8px;
+      align-items:center;
+      margin-top:8px;
+    }
+
+    .remover-lista-icon {
+      grid-column:3;
+      grid-row:1;
+      width:40px;
+      height:40px;
+      padding:0;
+      border:0;
+      border-radius:12px;
+      background:var(--vermelho-bg);
+      color:var(--vermelho);
+      font-size:18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+    }
+
+    .remover-lista-icon:active { transform:scale(.96); }
+    .lista-controles-linha > .check { grid-column:1; grid-row:1; }
+    .lista-controles-linha > .comprado-controle { grid-column:2; grid-row:1; }
+    .lista-controles-linha > .controle-precos-area {
+      grid-column:1 / -1;
+      grid-row:2;
+      width:100%;
+      margin-top:0;
+    }
+
+    .info { margin-top:3px; color:var(--cinza); font-size:12px; font-weight:800; }
+
+    .badge { padding:6px 9px; border-radius:999px; font-size:10.5px; font-weight:900; white-space:nowrap; }
+    .badge-ok { background:var(--verde-bg); color:#166534; }
+    .badge-low { background:var(--vermelho-bg); color:#991b1b; }
+    .badge-extra { background:var(--amarelo-bg); color:var(--amarelo-txt); }
+    .badge-ia { background:var(--roxo-bg); color:var(--roxo-txt); }
+
+    .stock-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+
+    .stock-top-actions {
+      display:flex; align-items:center; justify-content:flex-end; gap:6px; flex:0 0 auto;
+    }
+
+    .stock-unit-btn,
+    .stock-delete-icon {
+      height:34px; border:0; border-radius:11px; display:flex; align-items:center;
+      justify-content:center; cursor:pointer; font-weight:900;
+    }
+
+    .stock-unit-btn {
+      min-width:46px; padding:0 9px; background:#dbeafe; color:var(--azul1); font-size:11px;
+    }
+
+    .stock-unit-btn:disabled { opacity:.45; cursor:not-allowed; }
+
+    .stock-delete-icon {
+      width:34px; padding:0; background:var(--vermelho-bg); color:var(--vermelho); font-size:17px;
+    }
+
+    .stock-unit-btn:active:not(:disabled),
+    .stock-delete-icon:active { transform:scale(.96); }
+
+    .field-box {
+      background:white; border:1px solid var(--borda); border-radius:15px;
+      padding:7px 5px; text-align:center; min-height:74px;
+    }
+
+    .field-box label { display:block; color:var(--cinza); font-size:10px; font-weight:900; margin-bottom:6px; }
+
+    .stepper {
+      display:grid; grid-template-columns:32px minmax(20px,1fr) auto 32px;
+      align-items:center; gap:3px;
+    }
+
+    .stepper button {
+      border:0; background:#dbeafe; color:var(--azul1); border-radius:11px;
+      width:32px; height:38px; font-size:22px; line-height:1; font-weight:900; cursor:pointer;
+    }
+
+    .num { font-size:20px; font-weight:900; color:var(--texto); }
+
+    .stock-unit {
+      min-width:18px; color:var(--cinza); font-size:10px; font-weight:900; text-align:left;
+    }
+
+    .comprar-num {
+      min-height:38px; border-radius:11px; background:linear-gradient(135deg,var(--azul1),var(--azul2));
+      color:white; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900;
+      padding:5px 3px; line-height:1.05; text-align:center;
+    }
+
+    .actions { display:flex; gap:7px; margin-top:8px; flex-wrap:wrap; }
+    .inventory-bar {
+      display:grid;
+      grid-template-columns:1fr;
+      gap:8px;
+      margin-bottom:10px;
+    }
+
+    .inventory-note {
+      display:none;
+      background:#eff6ff;
+      border:1px solid #bfdbfe;
+      color:#1d4ed8;
+      border-radius:15px;
+      padding:10px 12px;
+      font-size:12px;
+      font-weight:900;
+      line-height:1.35;
+      margin-bottom:10px;
+    }
+
+    .inventory-note.active { display:block; }
+
+    .stock-item.inventory-locked .stepper button {
+      opacity:.45;
+      cursor:not-allowed;
+      pointer-events:none;
+    }
+
+    .stock-item.inventory-active {
+      border-color:#93c5fd;
+      background:#f8fbff;
+    }
+
+    .inventory-status {
+      margin-top:6px;
+      color:var(--cinza);
+      font-size:11px;
+      font-weight:800;
+    }
+
+
+    .small-btn {
+      border:0; border-radius:12px; min-height:38px; font-size:13px; font-weight:900;
+      padding:0 12px; cursor:pointer;
+    }
+
+    .buy-row { display:block; }
+
+    .check {
+      width:40px; height:40px; border-radius:13px; border:3px solid var(--azul1);
+      background:white; color:white; font-size:25px; font-weight:900; display:flex;
+      align-items:center; justify-content:center; cursor:pointer; user-select:none;
+    }
+
+    .buy-item.checked .check { background:var(--verde); border-color:var(--verde); color:#fff; }
+
+    .buy-qtd { font-size:15px; font-weight:900; color:var(--azul1); margin-top:4px; }
+
+    .comprado-controle {
+      margin-top:0; min-width:0; background:white; border:1px solid var(--borda); border-radius:15px;
+      padding:7px 8px; display:flex; justify-content:center; align-items:center;
+    }
+
+    .comprado-stepper {
+      display:grid; grid-template-columns:38px 40px auto 38px;
+      gap:4px; align-items:center; text-align:center;
+    }
+
+    .comprado-unidade {
+      min-width:24px; color:var(--cinza); font-size:12px; font-weight:900;
+      text-align:left;
+    }
+
+    .comprado-stepper button {
+      border:0; background:#dbeafe; color:var(--azul1); border-radius:11px;
+      height:38px; font-size:22px; font-weight:900; cursor:pointer;
+    }
+
+    .comprado-num { font-size:20px; font-weight:900; }
+
+    .ia-card { font-size:14px; font-weight:800; line-height:1.35; color:#334155; background:white; }
+
+    .empty {
+      border:2px dashed #cbd5e1; background:#f8fafc; border-radius:17px; padding:22px 12px;
+      text-align:center; color:var(--cinza); font-size:16px; font-weight:800; line-height:1.35;
+    }
+
+    .footer { text-align:center; color:var(--cinza); font-size:12px; padding:8px 0 16px; font-weight:800; }
+
+    @media (max-width:380px) {
+      .stock-grid { gap:5px; }
+      .field-box { padding:6px 4px; min-height:78px; }
+      .field-box label { font-size:9px; }
+      .stepper { grid-template-columns:28px 1fr 28px; }
+      .stepper button { width:28px; height:36px; }
+      .num, .comprar-num { font-size:18px; }
+      .comprado-stepper { grid-template-columns:34px 36px auto 34px; }
+      .comprado-stepper button { height:36px; }
+    }
+
+    .login-screen {
+      position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center;
+      padding:20px; background:linear-gradient(135deg,var(--azul1),var(--azul2));
+    }
+
+    .login-screen.hidden { display:none; }
+
+    .login-card {
+      width:100%; max-width:390px; background:white; border-radius:28px; padding:26px 20px;
+      box-shadow:0 22px 55px rgba(15,23,42,.25); text-align:center;
+    }
+
+    .login-logo {
+      width:92px; height:92px; margin:0 auto 16px; border-radius:24px;
+      background:linear-gradient(135deg,var(--azul1),var(--azul2)); display:flex;
+      align-items:center; justify-content:center; font-size:48px; box-shadow:var(--sombra);
+    }
+
+    .login-logo img {
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      border-radius:24px;
+      display:block;
+    }
+
+    .login-card h2 { margin:0; font-size:27px; font-weight:900; color:var(--texto); }
+    .login-card p { margin:9px 0 20px; color:var(--cinza); font-size:14px; font-weight:700; line-height:1.4; }
+
+    .google-btn {
+      width:100%; min-height:54px; border:2px solid #dbeafe; border-radius:16px;
+      background:white; color:var(--texto); font-size:16px; font-weight:900;
+      display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer;
+      box-shadow:0 6px 16px rgba(15,23,42,.08);
+    }
+
+    .google-g {
+      width:30px; height:30px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; font-size:19px; font-weight:900; color:#2563eb; background:#eff6ff;
+    }
+
+    .login-status { min-height:20px; margin-top:13px; color:var(--cinza); font-size:13px; font-weight:800; }
+
+    #conteudoApp.hidden { display:none; }
+
+    .header-row {
+      display:flex; align-items:center; justify-content:space-between; gap:10px; text-align:left;
+    }
+
+    .header-brand { min-width:0; }
+    .header-brand h1 { text-align:left; }
+    .header-brand span {
+      display:block; margin-top:3px; font-size:11px; font-weight:800; opacity:.92;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:230px;
+    }
+
+    .header-user { display:flex; align-items:center; gap:7px; }
+
+    .family-btn {
+      width:42px; height:42px; border:1px solid rgba(255,255,255,.72);
+      background:rgba(255,255,255,.18); border-radius:14px;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; padding:5px; flex:0 0 42px;
+    }
+
+    .family-btn svg {
+      width:31px; height:31px; display:block;
+      filter:drop-shadow(0 2px 2px rgba(15,23,42,.22));
+    }
+
+    .family-btn:disabled {
+      opacity:.55; cursor:wait;
+    }
+
+
+    .app-modal-bg {
+      position:fixed;
+      inset:0;
+      z-index:500;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(15,23,42,.58);
+      backdrop-filter:blur(4px);
+    }
+
+    .app-modal-bg.active {
+      display:flex;
+    }
+
+    .app-modal {
+      width:100%;
+      max-width:390px;
+      background:white;
+      border-radius:24px;
+      padding:22px 20px 18px;
+      box-shadow:0 24px 60px rgba(15,23,42,.28);
+      text-align:center;
+      animation:modalEntrada .18s ease-out;
+    }
+
+    @keyframes modalEntrada {
+      from {
+        opacity:0;
+        transform:translateY(10px) scale(.98);
+      }
+      to {
+        opacity:1;
+        transform:translateY(0) scale(1);
+      }
+    }
+
+    .app-modal-icon {
+      width:58px;
+      height:58px;
+      margin:0 auto 12px;
+      border-radius:18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:30px;
+      font-weight:900;
+    }
+
+    .app-modal-icon.info {
+      background:#dbeafe;
+      color:#1d4ed8;
+    }
+
+    .app-modal-icon.success {
+      background:#dcfce7;
+      color:#166534;
+    }
+
+    .app-modal-icon.warning {
+      background:#fef3c7;
+      color:#92400e;
+    }
+
+    .app-modal-icon.danger {
+      background:#fee2e2;
+      color:#991b1b;
+    }
+
+    .app-modal h3 {
+      margin:0 0 8px;
+      font-size:22px;
+      font-weight:900;
+      color:var(--texto);
+    }
+
+    .app-modal p {
+      margin:0;
+      color:var(--cinza);
+      font-size:14px;
+      font-weight:700;
+      line-height:1.45;
+      white-space:pre-line;
+    }
+
+
+    .unit-options {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      margin-top:18px;
+    }
+
+    .unit-option-btn {
+      min-height:46px;
+      border:2px solid #dbeafe;
+      border-radius:14px;
+      background:white;
+      color:var(--texto);
+      font-size:14px;
+      font-weight:900;
+      cursor:pointer;
+    }
+
+    .unit-option-btn.active {
+      color:white;
+      border-color:var(--azul1);
+      background:linear-gradient(135deg,var(--azul1),var(--azul2));
+    }
+
+    .app-modal-actions {
+      display:grid;
+      grid-template-columns:1fr;
+      gap:9px;
+      margin-top:18px;
+    }
+
+    .app-modal-actions.dual {
+      grid-template-columns:1fr 1fr;
+    }
+
+    .app-modal-btn {
+      border:0;
+      border-radius:15px;
+      min-height:48px;
+      padding:12px 14px;
+      font-size:15px;
+      font-weight:900;
+      cursor:pointer;
+    }
+
+    .app-modal-btn.primary {
+      color:white;
+      background:linear-gradient(135deg,var(--azul1),var(--azul2));
+    }
+
+    .app-modal-btn.success {
+      color:white;
+      background:var(--verde);
+    }
+
+    .app-modal-btn.warning {
+      color:var(--amarelo-txt);
+      background:var(--amarelo-bg);
+    }
+
+    .app-modal-btn.danger {
+      color:white;
+      background:var(--vermelho);
+    }
+
+    .app-modal-btn.secondary {
+      color:var(--texto);
+      background:#eef2f7;
+    }
+
+    .share-modal-bg {
+      position:fixed; inset:0; z-index:300; display:none;
+      align-items:center; justify-content:center; padding:18px;
+      background:rgba(15,23,42,.58);
+    }
+
+    .share-modal-bg.active { display:flex; }
+
+    .share-modal {
+      width:100%; max-width:390px; background:white; border-radius:24px;
+      padding:20px; box-shadow:0 22px 55px rgba(15,23,42,.25);
+      text-align:center;
+    }
+
+    .share-modal h3 { margin:0 0 8px; font-size:22px; font-weight:900; }
+    .share-modal p { margin:0 0 16px; color:var(--cinza); font-size:14px; font-weight:700; line-height:1.4; }
+    .share-modal-actions { display:grid; grid-template-columns:1fr; gap:9px; }
+
+    .header-user img {
+      width:36px; height:36px; border-radius:50%; object-fit:cover; background:rgba(255,255,255,.25);
+      border:2px solid rgba(255,255,255,.8); display:none;
+    }
+
+    .logout-btn {
+      border:1px solid rgba(255,255,255,.65); background:rgba(255,255,255,.16); color:white;
+      border-radius:12px; min-height:36px; padding:0 10px; font-size:12px; font-weight:900; cursor:pointer;
+    }
+
+  </style>
+</head>
+
+<body>
+  <section id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo"><img src="icon-192.png" alt="Logo ListaLar"></div>
+      <h2>ListaLar</h2>
+      <p>Entre com sua conta Google para acessar a lista e manter os dados da sua família sincronizados.</p>
+      <button id="btnLoginGoogle" class="google-btn" onclick="entrarComGoogle()">
+        <span class="google-g">G</span>
+        Entrar com Google
+      </button>
+      <div id="loginStatus" class="login-status"></div>
+    </div>
+  </section>
+
+  <div id="conteudoApp" class="hidden">
+  <header>
+    
+    <div class="header-row">
+      <div class="header-brand">
+        <h1>ListaLar</h1>
+        <span id="nomeFamiliaHeader">Minha família</span>
+      </div>
+      <div class="header-user">
+        <button
+          id="btnConvidarFamilia"
+          class="family-btn"
+          onclick="compartilharFamilia()"
+          title="Compartilhar com a família"
+          aria-label="Compartilhar com a família"
+        >
+          <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <circle cx="19" cy="21" r="8" fill="#FACC15"/>
+            <circle cx="45" cy="21" r="8" fill="#FB7185"/>
+            <circle cx="32" cy="31" r="7" fill="#38BDF8"/>
+            <path d="M5 52c0-11 6-18 14-18s14 7 14 18v4H5z" fill="#FFFFFF"/>
+            <path d="M31 52c0-11 6-18 14-18s14 7 14 18v4H31z" fill="#FFFFFF"/>
+            <path d="M19 55c0-11 5-18 13-18s13 7 13 18v3H19z" fill="#DBEAFE"/>
+          </svg>
+        </button>
+        <img id="fotoUsuario" alt="Usuário" loading="lazy" referrerpolicy="no-referrer" />
+        <button class="logout-btn" onclick="sairDoApp()" title="Sair">Sair</button>
+      </div>
+    </div>
+    <p id="statusSistema" style="display:none;"></p>
+  </header>
+
+  <main class="app">
+    <section id="estoque" class="screen">
+      <div class="card">
+        <div class="title-row">
+          <div>
+            <h2 class="title">Estoque</h2>
+            <p class="subtitle">Ajuste pelas setinhas. A lista nasce automaticamente.</p>
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="mini-card"><strong id="totalProdutos">0</strong><span>Produtos</span></div>
+          <div class="mini-card"><strong id="totalLista">0</strong><span>Na lista</span></div>
+          <div class="mini-card"><strong id="totalOk">0</strong><span>OK</span></div>
+        </div>
+
+        <div class="search-box">
+          <input id="buscaEstoque" type="text" placeholder="🔎 Buscar no estoque" />
+        </div>
+
+        <div class="form">
+          <input id="novoProduto" type="text" placeholder="Novo produto" />
+          <button class="btn btn-primary" onclick="adicionarProduto()">Adicionar</button>
+        </div>
+
+        <div class="inventory-bar">
+          <button id="btnAtualizarEstoque" class="btn btn-primary btn-full" style="margin-top:0;" onclick="iniciarAtualizacaoEstoque()">
+            📦 Atualizar estoque
+          </button>
+          <button id="btnConcluirEstoque" class="btn btn-green btn-full" style="display:none; margin-top:0;" onclick="concluirAtualizacaoEstoque()">
+            Concluir atualização
+          </button>
+        </div>
+
+        <div id="avisoInventario" class="inventory-note">
+          Ajuste a quantidade atual dos produtos. Ao concluir, o ListaLar recalculará automaticamente a lista de compras.
+        </div>
+
+        <div id="listaEstoque" class="list"></div>
+      </div>
+    </section>
+
+    <section id="lista" class="screen active">
+      <div class="card">
+        <div class="title-row">
+          <div>
+            <h2 class="title">Lista</h2>
+            <p class="subtitle">Confirme a quantidade comprada e marque OK.</p>
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="mini-card"><strong id="listaItens">0</strong><span>Itens</span></div>
+          <div class="mini-card"><strong id="listaComprados">0</strong><span>OK</span></div>
+          <div class="mini-card"><strong id="listaPendentes">0</strong><span>Pendentes</span></div>
+        </div>
+
+        <div class="manual-box">
+          <div class="manual-title">Adicionar compra manual</div>
+          <div class="manual-grid">
+            <input id="produtoManual" type="text" placeholder="Digite ou busque produto" oninput="renderSugestoesManual()" autocomplete="off" />
+            <input id="qtdManual" type="number" min="1" value="1" />
+          </div>
+          <button class="btn btn-primary btn-full" style="margin-top:0;" onclick="adicionarItemManual()">Incluir na lista</button>
+          <div id="sugestoesManual" class="sugestoes"></div>
+        </div>
+
+        <div class="search-box">
+          <input id="buscaLista" type="text" placeholder="🔎 Buscar na lista" />
+        </div>
+
+        <div id="listaCompras" class="list"></div>
+
+        <button class="btn btn-green btn-full" onclick="finalizarCompra()">Finalizar compra</button>
+        <button class="btn btn-yellow btn-full" onclick="cancelarCompra()">Cancelar compra</button>
+      </div>
+    </section>
+
+    <section id="ia" class="screen">
+      <div class="card">
+        <div class="title-row">
+          <div>
+            <h2 class="title">IA</h2>
+            <p class="subtitle">Alertas rápidos para ajudar na compra.</p>
+          </div>
+          <span class="badge badge-ia">Inteligente</span>
+        </div>
+
+        <div class="summary">
+          <div class="mini-card"><strong id="iaCriticos">0</strong><span>Comprar</span></div>
+          <div class="mini-card"><strong id="iaExcesso">0</strong><span>Excesso</span></div>
+          <div class="mini-card"><strong id="iaSaudavel">0</strong><span>Saudável</span></div>
+        </div>
+
+        <div class="search-box">
+          <input id="buscaIa" type="text" placeholder="🔎 Buscar alerta/produto" />
+        </div>
+
+        <div id="listaIa" class="list"></div>
+      </div>
+    </section>
+
+    
+  </main>
+
+  <nav class="bottom-nav">
+    <button id="tab-lista" class="tab active" onclick="abrirTela('lista')">
+      <span class="ico">📝</span><span>Lista</span>
+    </button>
+    <button id="tab-estoque" class="tab" onclick="abrirTela('estoque')">
+      <span class="ico">📦</span><span>Estoque</span>
+    </button>
+    <button id="tab-ia" class="tab" onclick="abrirTela('ia')">
+      <span class="ico">🤖</span><span>IA</span>
+    </button>
+  </nav>
+
+
+
+  <div id="unitModal" class="app-modal-bg" role="dialog" aria-modal="true" aria-labelledby="unitModalTitulo">
+    <div class="app-modal">
+      <div class="app-modal-icon info">📏</div>
+      <h3 id="unitModalTitulo">Alterar unidade</h3>
+      <p id="unitModalTexto">Escolha a unidade usada para este produto.</p>
+
+      <div id="unitOptions" class="unit-options"></div>
+
+      <div class="app-modal-actions">
+        <button class="app-modal-btn secondary" onclick="fecharModalUnidade()">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="appModal" class="app-modal-bg" role="dialog" aria-modal="true" aria-labelledby="appModalTitulo">
+    <div class="app-modal">
+      <div id="appModalIcone" class="app-modal-icon info">ℹ️</div>
+      <h3 id="appModalTitulo">Aviso</h3>
+      <p id="appModalTexto"></p>
+      <div id="appModalAcoes" class="app-modal-actions">
+        <button id="appModalConfirmar" class="app-modal-btn primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="shareModal" class="share-modal-bg" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
+    <div class="share-modal">
+      <h3 id="shareModalTitle">Compartilhar com a família</h3>
+      <p>Escolha onde deseja enviar o convite ou copie o link.</p>
+      <div class="share-modal-actions">
+        <button class="btn btn-primary" onclick="compartilharConviteAgora()">Compartilhar</button>
+        <button class="btn btn-yellow" onclick="copiarLinkConvite()">Copiar link</button>
+        <button class="btn btn-red" onclick="fecharModalCompartilhar()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      obterUnidadePadrao
+    } from './unidades-produtos.js';
+
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signInWithRedirect,
+      onAuthStateChanged,
+      signOut,
+      setPersistence,
+      browserLocalPersistence
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import {
+      getFirestore,
+      collection,
+      doc,
+      addDoc,
+      setDoc,
+      deleteDoc,
+      onSnapshot,
+      serverTimestamp,
+      query,
+      orderBy,
+      getDocs,
+      getDoc,
+      limit
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC2U7q5HupxKyI3QiAyan-2Sio55NSir0Y",
+      authDomain: "compras-da-casa.firebaseapp.com",
+      projectId: "compras-da-casa",
+      storageBucket: "compras-da-casa.firebasestorage.app",
+      messagingSenderId: "63765433273",
+      appId: "1:63765433273:web:c478a3dd33ef3cd55a0468"
     };
 
-    const IDS = Object.freeze({
-        estilo: "listalar-gastos-estilo",
-        botaoMenu: "listalar-menu-gastos",
-        tela: "listalar-tela-gastos",
-        botaoFechar: "listalar-gastos-fechar",
-        botaoImportarPdf: "listalar-gastos-importar-pdf",
-        seletorPeriodo: "listalar-gastos-periodo",
-        aviso: "listalar-gastos-aviso",
-        carregando: "listalar-gastos-carregando",
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const providerGoogle = new GoogleAuthProvider();
 
-        totalPeriodo: "listalar-gastos-total-periodo",
-        totalCompras: "listalar-gastos-total-compras",
-        totalNotas: "listalar-gastos-total-notas",
-        totalManuais: "listalar-gastos-total-manuais",
-        ticketMedio: "listalar-gastos-ticket-medio",
-
-        graficoMensal: "listalar-gastos-grafico-mensal",
-        graficoOrigem: "listalar-gastos-grafico-origem",
-        historico: "listalar-gastos-historico",
-
-        modalManual: "listalar-gastos-modal-manual",
-        manualEstabelecimento: "listalar-gastos-manual-estabelecimento",
-        manualData: "listalar-gastos-manual-data",
-        manualResumo: "listalar-gastos-manual-resumo",
-        manualConfirmar: "listalar-gastos-manual-confirmar",
-        manualCancelar: "listalar-gastos-manual-cancelar"
+    // Mantém a sessão do Google salva neste navegador/dispositivo.
+    setPersistence(auth, browserLocalPersistence).catch((erro) => {
+      console.error('Não foi possível ativar a persistência local:', erro);
     });
 
-    const ESTADO = {
-        firebase: null,
-        usuario: null,
-        familiaId: "",
-        liberado: false,
-        interfaceInicializada: false,
-        unsubscribeGastos: null,
-        registros: [],
-        periodo: "mes_atual",
-        salvando: false,
-        ultimaNotaReferencia: null,
-        ultimaNotaRecebidaEm: 0,
-        resolverCompraManual: null,
-        contextoCompraManual: null
-    };
+    let usuarioAtual = null;
+    let familiaIdAtual = null;
+    let produtosRef = null;
+    let historicoRef = null;
+    let unsubscribeProdutos = null;
+    let telaAtiva = 'lista';
+    let historicoCarregado = false;
+    let carregandoHistorico = false;
+    let conviteCompartilhamento = null;
+    let atualizandoEstoque = false;
+    let unidadesAntigasVerificadas = false;
+    let produtoUnidadeEmEdicao = null;
 
-    // ========================================================
-    // UTILITÁRIOS
-    // ========================================================
+    const unidadesDisponiveis = [
+      'un',
+      'kg',
+      'g',
+      'L',
+      'ml',
+      'pct',
+      'cx',
+      'bdj',
+      'mç',
+      'lata',
+      'vd'
+    ];
 
-    function elemento(id) {
-        return document.getElementById(id);
+    let produtos = [];
+    let historicoCompras = [];
+    let carregouProdutos = false;
+    let inicializacaoEmAndamento = false;
+    let ultimoUidInicializado = null;
+    let conviteEmProcessamento = false;
+
+    const CHAVE_CONVITE_PENDENTE = 'comprasFacilConvitePendente';
+
+     const listaInicial = [
+    ["Leite", 0, 0],
+    ["Café", 0, 0],
+    ["Arroz", 0, 0],
+    ["Feijão", 0, 0],
+    ["Açúcar", 0, 0],
+    ["Sal", 0, 0],
+    ["Óleo", 0, 0],
+    ["Ovos", 0, 0],
+    ["Pão", 0, 0],
+    ["Manteiga", 0, 0],
+    ["Queijo", 0, 0],
+    ["Carne", 0, 0],
+    ["Frango", 0, 0],
+    ["Detergente", 0, 0],
+    ["Sabão em pó", 0, 0],
+    ["Amaciante", 0, 0],
+    ["Papel higiênico", 0, 0],
+    ["Creme dental", 0, 0],
+    ["Shampoo", 0, 0],
+    ["Saco de lixo", 0, 0]
+  ];
+
+
+
+    let resolverModalAtual = null;
+
+    function iconePorTipo(tipo) {
+      const mapa = {
+        info: 'ℹ️',
+        success: '✅',
+        warning: '⚠️',
+        danger: '🗑️'
+      };
+
+      return mapa[tipo] || mapa.info;
     }
 
-    function escaparHTML(valor) {
-        return String(valor ?? "")
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;")
-            .replaceAll('"', "&quot;")
-            .replaceAll("'", "&#039;");
+    function fecharAppModal(resultado) {
+      const modal = document.getElementById('appModal');
+      modal.classList.remove('active');
+
+      const resolver = resolverModalAtual;
+      resolverModalAtual = null;
+
+      if (resolver) {
+        resolver(resultado);
+      }
     }
 
-    function numeroSeguro(valor, padrao = 0) {
-        if (
-            valor === null ||
-            valor === undefined ||
-            valor === ""
-        ) {
-            return padrao;
+    window.mostrarMensagem = function({
+      titulo = 'Aviso',
+      texto = '',
+      tipo = 'info',
+      botaoTexto = 'OK'
+    } = {}) {
+      return new Promise((resolve) => {
+        resolverModalAtual = resolve;
+
+        const modal = document.getElementById('appModal');
+        const icone = document.getElementById('appModalIcone');
+        const tituloEl = document.getElementById('appModalTitulo');
+        const textoEl = document.getElementById('appModalTexto');
+        const acoes = document.getElementById('appModalAcoes');
+
+        icone.className = `app-modal-icon ${tipo}`;
+        icone.textContent = iconePorTipo(tipo);
+        tituloEl.textContent = titulo;
+        textoEl.textContent = texto;
+
+        acoes.className = 'app-modal-actions';
+        acoes.innerHTML = `
+          <button id="appModalConfirmar" class="app-modal-btn primary">
+            ${botaoTexto}
+          </button>
+        `;
+
+        document
+          .getElementById('appModalConfirmar')
+          .addEventListener('click', () => fecharAppModal(true), { once: true });
+
+        modal.classList.add('active');
+      });
+    }
+
+    window.confirmarAcao = function({
+      titulo = 'Confirmar ação',
+      texto = '',
+      tipo = 'warning',
+      confirmarTexto = 'Confirmar',
+      cancelarTexto = 'Cancelar',
+      confirmarClasse = 'primary'
+    } = {}) {
+      return new Promise((resolve) => {
+        resolverModalAtual = resolve;
+
+        const modal = document.getElementById('appModal');
+        const icone = document.getElementById('appModalIcone');
+        const tituloEl = document.getElementById('appModalTitulo');
+        const textoEl = document.getElementById('appModalTexto');
+        const acoes = document.getElementById('appModalAcoes');
+
+        icone.className = `app-modal-icon ${tipo}`;
+        icone.textContent = iconePorTipo(tipo);
+        tituloEl.textContent = titulo;
+        textoEl.textContent = texto;
+
+        acoes.className = 'app-modal-actions dual';
+        acoes.innerHTML = `
+          <button id="appModalCancelar" class="app-modal-btn secondary">
+            ${cancelarTexto}
+          </button>
+          <button id="appModalConfirmar" class="app-modal-btn ${confirmarClasse}">
+            ${confirmarTexto}
+          </button>
+        `;
+
+        document
+          .getElementById('appModalCancelar')
+          .addEventListener('click', () => fecharAppModal(false), { once: true });
+
+        document
+          .getElementById('appModalConfirmar')
+          .addEventListener('click', () => fecharAppModal(true), { once: true });
+
+        modal.classList.add('active');
+      });
+    }
+
+
+    function dataHojeLocalISO() {
+      const agora = new Date();
+      const ano = agora.getFullYear();
+      const mes = String(agora.getMonth() + 1).padStart(2, '0');
+      const dia = String(agora.getDate()).padStart(2, '0');
+      return `${ano}-${mes}-${dia}`;
+    }
+
+    function formatarMoedaBR(valor) {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(Number(valor || 0));
+    }
+
+    function solicitarDadosCompraComPrecos({
+      quantidadeItens = 0,
+      valorTotal = 0
+    } = {}) {
+      return new Promise((resolve) => {
+        resolverModalAtual = null;
+
+        const modal = document.getElementById('appModal');
+        const icone = document.getElementById('appModalIcone');
+        const tituloEl = document.getElementById('appModalTitulo');
+        const textoEl = document.getElementById('appModalTexto');
+        const acoes = document.getElementById('appModalAcoes');
+
+        icone.className = 'app-modal-icon success';
+        icone.textContent = '🛒';
+        tituloEl.textContent = 'Confirmar compra com preços';
+        textoEl.textContent =
+          'Informe o estabelecimento. A data de hoje já está preenchida e pode ser alterada.';
+
+        acoes.className = 'app-modal-actions';
+        acoes.innerHTML = `
+          <div style="text-align:left; display:grid; gap:12px;">
+            <label style="font-size:14px; font-weight:900; color:var(--texto);">
+              Estabelecimento
+              <input
+                id="finalizacaoEstabelecimento"
+                type="text"
+                autocomplete="organization"
+                placeholder="Ex.: Mercado do bairro"
+                style="margin-top:6px;"
+              >
+            </label>
+
+            <label style="font-size:14px; font-weight:900; color:var(--texto);">
+              Data da compra
+              <input
+                id="finalizacaoDataCompra"
+                type="date"
+                value="${dataHojeLocalISO()}"
+                style="margin-top:6px;"
+              >
+            </label>
+
+            <div style="
+              background:#dcfce7;
+              color:#166534;
+              border-radius:15px;
+              padding:13px 14px;
+              font-size:15px;
+              font-weight:900;
+            ">
+              ${quantidadeItens} ${quantidadeItens === 1 ? 'item' : 'itens'} ·
+              ${formatarMoedaBR(valorTotal)}
+            </div>
+
+            <div class="app-modal-actions dual" style="margin-top:2px;">
+              <button id="finalizacaoCancelar" class="app-modal-btn secondary">
+                Cancelar
+              </button>
+              <button id="finalizacaoSalvar" class="app-modal-btn success">
+                Salvar compra
+              </button>
+            </div>
+          </div>
+        `;
+
+        const finalizar = (resultado) => {
+          modal.classList.remove('active');
+          resolve(resultado);
+        };
+
+        document
+          .getElementById('finalizacaoCancelar')
+          .addEventListener('click', () => finalizar(null), { once: true });
+
+        document
+          .getElementById('finalizacaoSalvar')
+          .addEventListener('click', () => {
+            const estabelecimentoNome = document
+              .getElementById('finalizacaoEstabelecimento')
+              .value.trim();
+            const dataCompra = document
+              .getElementById('finalizacaoDataCompra')
+              .value || dataHojeLocalISO();
+
+            if (!estabelecimentoNome) {
+              const campo = document.getElementById('finalizacaoEstabelecimento');
+              campo.focus();
+              campo.style.borderColor = 'var(--vermelho)';
+              return;
+            }
+
+            finalizar({ estabelecimentoNome, dataCompra });
+          });
+
+        modal.classList.add('active');
+
+        window.setTimeout(() => {
+          document.getElementById('finalizacaoEstabelecimento')?.focus();
+        }, 0);
+      });
+    }
+
+    function guardarConvitePendente(token) {
+      if (!token) return;
+      sessionStorage.setItem(CHAVE_CONVITE_PENDENTE, token);
+    }
+
+    function limparConvitePendente() {
+      sessionStorage.removeItem(CHAVE_CONVITE_PENDENTE);
+    }
+
+    function obterTokenConviteDaUrl() {
+      const parametros = new URLSearchParams(window.location.search);
+      const tokenUrl = parametros.get('convite');
+
+      if (tokenUrl) {
+        guardarConvitePendente(tokenUrl);
+        return tokenUrl;
+      }
+
+      return sessionStorage.getItem(CHAVE_CONVITE_PENDENTE);
+    }
+
+    function conviteJaProcessado(user, token) {
+      if (!user || !token) return false;
+      return localStorage.getItem(
+        `comprasFacilConviteProcessado_${user.uid}_${token}`
+      ) === 'true';
+    }
+
+    function marcarConviteComoProcessado(user, token) {
+      if (!user || !token) return;
+      localStorage.setItem(
+        `comprasFacilConviteProcessado_${user.uid}_${token}`,
+        'true'
+      );
+    }
+
+    function removerConviteDaUrl() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('convite');
+      window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+    }
+
+    function gerarTokenConvite() {
+      const bytes = new Uint8Array(18);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function entrarNaFamiliaPorConvite(user, token) {
+      if (!token || conviteEmProcessamento) return false;
+
+      if (conviteJaProcessado(user, token)) {
+        limparConvitePendente();
+        removerConviteDaUrl();
+        return false;
+      }
+
+      conviteEmProcessamento = true;
+
+      try {
+        const conviteRef = doc(db, 'convites', token);
+        const conviteSnap = await getDoc(conviteRef);
+
+        if (!conviteSnap.exists()) {
+          throw new Error('CONVITE_NAO_ENCONTRADO');
         }
 
-        if (typeof valor === "number") {
-            return Number.isFinite(valor)
-                ? valor
-                : padrao;
+        const convite = conviteSnap.data();
+
+        if (convite.ativo !== true || !convite.familiaId) {
+          throw new Error('CONVITE_INVALIDO');
         }
 
-        let texto = String(valor)
-            .trim()
-            .replace(/\s/g, "")
-            .replace(/^R\$/i, "");
+        const usuarioRef = doc(db, 'usuarios', user.uid);
+        const usuarioSnap = await getDoc(usuarioRef);
+        const familiaAtual = usuarioSnap.exists()
+          ? usuarioSnap.data().familiaId
+          : null;
 
-        if (
-            texto.includes(",") &&
-            texto.includes(".")
+        if (familiaAtual && familiaAtual !== convite.familiaId) {
+          const confirmarTroca = await confirmarAcao({
+            titulo: 'Trocar de família',
+            texto:
+              `Você já pertence a outra família.\n\n` +
+              `Deseja entrar em "${convite.nomeFamilia || 'Família compartilhada'}"?`,
+            tipo: 'warning',
+            confirmarTexto: 'Entrar',
+            cancelarTexto: 'Cancelar',
+            confirmarClasse: 'primary'
+          });
+
+          if (!confirmarTroca) {
+            throw new Error('ENTRADA_FAMILIA_CANCELADA');
+          }
+        }
+
+        await setDoc(usuarioRef, {
+          nome: user.displayName || '',
+          email: user.email || '',
+          fotoUrl: user.photoURL || '',
+          familiaId: convite.familiaId,
+          papel: 'membro',
+          conviteToken: token,
+          atualizadoEm: serverTimestamp()
+        }, { merge: true });
+
+        await setDoc(
+          doc(db, 'familias', convite.familiaId, 'membros', user.uid),
+          {
+            uid: user.uid,
+            nome: user.displayName || '',
+            email: user.email || '',
+            fotoUrl: user.photoURL || '',
+            papel: 'membro',
+            ativo: true,
+            conviteToken: token,
+            entrouEm: serverTimestamp()
+          },
+          { merge: true }
+        );
+
+        salvarCacheFamilia(
+          user.uid,
+          convite.familiaId,
+          convite.nomeFamilia || 'Minha família'
+        );
+
+        marcarConviteComoProcessado(user, token);
+        limparConvitePendente();
+        removerConviteDaUrl();
+
+        if (familiaAtual !== convite.familiaId) {
+          await mostrarMensagem({
+            titulo: 'Bem-vindo à família',
+            texto: `Você entrou na ${convite.nomeFamilia || 'família compartilhada'} com sucesso!`,
+            tipo: 'success'
+          });
+        }
+
+        return true;
+      } finally {
+        conviteEmProcessamento = false;
+      }
+    }
+
+    async function copiarTextoSeguro(texto) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(texto);
+        return;
+      }
+
+      const area = document.createElement('textarea');
+      area.value = texto;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      document.body.removeChild(area);
+    }
+
+    function abrirModalCompartilhar() {
+      document.getElementById('shareModal').classList.add('active');
+    }
+
+    window.fecharModalCompartilhar = function() {
+      document.getElementById('shareModal').classList.remove('active');
+    }
+
+    window.compartilharConviteAgora = async function() {
+      if (!conviteCompartilhamento) return;
+
+      try {
+        if (navigator.share) {
+          await navigator.share({
+            title: 'ListaLar',
+            text: conviteCompartilhamento.texto,
+            url: conviteCompartilhamento.link
+          });
+          fecharModalCompartilhar();
+          return;
+        }
+
+        await copiarTextoSeguro(
+          `${conviteCompartilhamento.texto}\n\n${conviteCompartilhamento.link}`
+        );
+        fecharModalCompartilhar();
+        await mostrarMensagem({
+          titulo: 'Convite copiado',
+          texto: 'Agora é só colar no aplicativo que preferir.',
+          tipo: 'success'
+        });
+      } catch (erro) {
+        if (erro && erro.name === 'AbortError') return;
+        console.error('Erro no compartilhamento:', erro);
+        await mostrarMensagem({
+          titulo: 'Compartilhamento indisponível',
+          texto: 'Não foi possível abrir o compartilhamento. Use a opção Copiar link.',
+          tipo: 'warning'
+        });
+      }
+    }
+
+    window.copiarLinkConvite = async function() {
+      if (!conviteCompartilhamento) return;
+
+      try {
+        await copiarTextoSeguro(conviteCompartilhamento.link);
+        fecharModalCompartilhar();
+        await mostrarMensagem({
+          titulo: 'Link copiado',
+          texto: 'O link da família foi copiado com sucesso.',
+          tipo: 'success'
+        });
+      } catch (erro) {
+        console.error('Erro ao copiar convite:', erro);
+        await mostrarMensagem({
+          titulo: 'Erro ao copiar',
+          texto: 'Não foi possível copiar o link.',
+          tipo: 'danger'
+        });
+      }
+    }
+
+    window.compartilharFamilia = async function() {
+      const botao = document.getElementById('btnConvidarFamilia');
+
+      if (!usuarioAtual || !familiaIdAtual) {
+        await mostrarMensagem({
+          titulo: 'Acesso necessário',
+          texto: 'Entre no aplicativo antes de convidar familiares.',
+          tipo: 'warning'
+        });
+        return;
+      }
+
+      try {
+        botao.disabled = true;
+
+        const familiaRef = doc(db, 'familias', familiaIdAtual);
+        const familiaSnap = await getDoc(familiaRef);
+
+        if (!familiaSnap.exists()) {
+          await mostrarMensagem({
+          titulo: 'Família não encontrada',
+          texto: 'Não foi possível localizar sua família.',
+          tipo: 'warning'
+        });
+          return;
+        }
+
+        const familia = familiaSnap.data();
+        let token = familia.conviteTokenAtivo || '';
+
+        if (token) {
+          const conviteAtualSnap = await getDoc(doc(db, 'convites', token));
+
+          if (
+            !conviteAtualSnap.exists() ||
+            conviteAtualSnap.data().ativo !== true
+          ) {
+            token = '';
+          }
+        }
+
+        if (!token) {
+          token = gerarTokenConvite();
+
+          await setDoc(doc(db, 'convites', token), {
+            familiaId: familiaIdAtual,
+            nomeFamilia: familia.nome || 'Minha família',
+            criadoPorUid: usuarioAtual.uid,
+            criadoPorNome: usuarioAtual.displayName || '',
+            criadoPorEmail: usuarioAtual.email || '',
+            ativo: true,
+            criadoEm: serverTimestamp()
+          });
+
+          await setDoc(familiaRef, {
+            conviteTokenAtivo: token,
+            conviteAtualizadoEm: serverTimestamp(),
+            atualizadaEm: serverTimestamp()
+          }, { merge: true });
+        }
+
+        const baseUrl = `${window.location.origin}${window.location.pathname}`;
+        const link = `${baseUrl}?convite=${encodeURIComponent(token)}`;
+        const nomeFamilia = familia.nome || 'minha família';
+
+        conviteCompartilhamento = {
+          link,
+          texto:
+            `Olá! Entre na nossa lista de compras da ${nomeFamilia} no ListaLar.`
+        };
+
+        // Abre o compartilhamento nativo. Assim o usuário escolhe
+        // WhatsApp comum, WhatsApp Business, Mensagens, e-mail etc.
+        abrirModalCompartilhar();
+      } catch (erro) {
+        console.error('Erro ao compartilhar família:', erro);
+        await mostrarMensagem({
+          titulo: 'Convite não criado',
+          texto: 'Não foi possível gerar o convite da família.',
+          tipo: 'danger'
+        });
+      } finally {
+        botao.disabled = false;
+      }
+    }
+
+    function chaveCacheFamilia(uid) {
+      return `comprasFacilFamilia_${uid}`;
+    }
+
+    function salvarCacheFamilia(uid, familiaId, nomeFamilia) {
+      localStorage.setItem(
+        chaveCacheFamilia(uid),
+        JSON.stringify({
+          familiaId,
+          nomeFamilia,
+          salvoEm: Date.now()
+        })
+      );
+    }
+
+    function lerCacheFamilia(uid) {
+      try {
+        const valor = localStorage.getItem(chaveCacheFamilia(uid));
+        return valor ? JSON.parse(valor) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function configurarReferenciasFamilia(familiaId, nomeFamilia) {
+      familiaIdAtual = familiaId;
+      document.getElementById('nomeFamiliaHeader').textContent =
+        nomeFamilia || 'Minha família';
+
+      produtosRef = collection(
+        db,
+        'familias',
+        familiaIdAtual,
+        'produtos'
+      );
+
+      historicoRef = collection(
+        db,
+        'familias',
+        familiaIdAtual,
+        'historico_compras'
+      );
+    }
+
+    async function prepararFamiliaDoUsuario(user) {
+      const cache = lerCacheFamilia(user.uid);
+
+      if (cache?.familiaId) {
+        configurarReferenciasFamilia(
+          cache.familiaId,
+          cache.nomeFamilia
+        );
+        return;
+      }
+
+      const usuarioRef = doc(db, 'usuarios', user.uid);
+      const usuarioSnap = await getDoc(usuarioRef);
+
+      if (usuarioSnap.exists() && usuarioSnap.data().familiaId) {
+        familiaIdAtual = usuarioSnap.data().familiaId;
+      } else {
+        const primeiroNome = (user.displayName || 'Minha').split(' ')[0];
+        const nomePadrao = `Família ${primeiroNome}`;
+        const nomeInformado = prompt(
+          'Digite o nome da sua família:',
+          nomePadrao
+        );
+
+        if (nomeInformado === null) {
+          await signOut(auth);
+          throw new Error('CRIACAO_FAMILIA_CANCELADA');
+        }
+
+        const nomeFamilia = nomeInformado.trim() || nomePadrao;
+        familiaIdAtual = user.uid;
+
+        await setDoc(doc(db, 'familias', familiaIdAtual), {
+          nome: nomeFamilia,
+          donoId: user.uid,
+          criadoPorNome: user.displayName || '',
+          criadoPorEmail: user.email || '',
+          criadaEm: serverTimestamp(),
+          atualizadaEm: serverTimestamp()
+        }, { merge: true });
+
+        await setDoc(usuarioRef, {
+          nome: user.displayName || '',
+          email: user.email || '',
+          fotoUrl: user.photoURL || '',
+          familiaId: familiaIdAtual,
+          papel: 'admin',
+          atualizadoEm: serverTimestamp()
+        }, { merge: true });
+
+        await setDoc(
+          doc(db, 'familias', familiaIdAtual, 'membros', user.uid),
+          {
+            uid: user.uid,
+            nome: user.displayName || '',
+            email: user.email || '',
+            fotoUrl: user.photoURL || '',
+            papel: 'admin',
+            ativo: true,
+            entrouEm: serverTimestamp()
+          },
+          { merge: true }
+        );
+
+        salvarCacheFamilia(
+          user.uid,
+          familiaIdAtual,
+          nomeFamilia
+        );
+
+        configurarReferenciasFamilia(
+          familiaIdAtual,
+          nomeFamilia
+        );
+
+        return;
+      }
+
+      const familiaSnap = await getDoc(
+        doc(db, 'familias', familiaIdAtual)
+      );
+
+      const nomeFamilia = familiaSnap.exists()
+        ? (familiaSnap.data().nome || 'Minha família')
+        : 'Minha família';
+
+      salvarCacheFamilia(
+        user.uid,
+        familiaIdAtual,
+        nomeFamilia
+      );
+
+      configurarReferenciasFamilia(
+        familiaIdAtual,
+        nomeFamilia
+      );
+    }
+
+    function atualizarUsuarioNoCabecalho(user) {
+      const foto = document.getElementById('fotoUsuario');
+      if (user.photoURL) {
+        foto.src = user.photoURL;
+        foto.style.display = 'block';
+      } else {
+        foto.style.display = 'none';
+      }
+    }
+
+    function acessoPorCelular() {
+      return (
+        window.matchMedia('(max-width: 768px)').matches ||
+        /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+      );
+    }
+
+    window.entrarComGoogle = async function() {
+      const status = document.getElementById('loginStatus');
+      const botao = document.getElementById('btnLoginGoogle');
+
+      try {
+        const tokenConvite = obterTokenConviteDaUrl();
+        if (tokenConvite) guardarConvitePendente(tokenConvite);
+
+        status.textContent = 'Abrindo login do Google...';
+        botao.disabled = true;
+        await setPersistence(auth, browserLocalPersistence);
+
+        // Popup mantém o usuário na mesma página e evita o ciclo de
+        // redirecionamento observado no Safari/iPhone.
+        await signInWithPopup(auth, providerGoogle);
+      } catch (erro) {
+        console.error(erro);
+
+        if (erro.code === 'auth/popup-closed-by-user') {
+          status.textContent = 'Login cancelado.';
+        } else if (
+          erro.code === 'auth/popup-blocked' ||
+          erro.code === 'auth/cancelled-popup-request'
         ) {
-            texto = texto
-                .replace(/\./g, "")
-                .replace(",", ".");
+          try {
+            status.textContent = 'Continuando pelo Google...';
+            await signInWithRedirect(auth, providerGoogle);
+            return;
+          } catch (erroRedirect) {
+            console.error(erroRedirect);
+            status.textContent = 'Não foi possível abrir o Google. Tente novamente no Safari ou Chrome.';
+          }
         } else {
-            texto = texto.replace(",", ".");
+          status.textContent = 'Não foi possível entrar. Tente novamente.';
         }
-
-        const numero = Number(texto);
-
-        return Number.isFinite(numero)
-            ? numero
-            : padrao;
+      } finally {
+        botao.disabled = false;
+      }
     }
 
-    function arredondarMoeda(valor) {
-        return Math.round(
-            (numeroSeguro(valor, 0) + Number.EPSILON) * 100
-        ) / 100;
+    window.sairDoApp = async function() {
+      const confirmado = await confirmarAcao({
+        titulo: 'Sair do ListaLar',
+        texto: 'Deseja sair do aplicativo?',
+        tipo: 'warning',
+        confirmarTexto: 'Sair',
+        cancelarTexto: 'Continuar',
+        confirmarClasse: 'danger'
+      });
+
+      if (!confirmado) return;
+      await signOut(auth);
     }
 
-    function formatarMoeda(valor) {
-        return arredondarMoeda(valor).toLocaleString(
-            "pt-BR",
-            {
-                style: "currency",
-                currency: "BRL"
-            }
+    function limparListeners() {
+      if (unsubscribeProdutos) unsubscribeProdutos();
+      unsubscribeProdutos = null;
+    }
+
+    async function carregarHistoricoSeNecessario() {
+      if (
+        historicoCarregado ||
+        carregandoHistorico ||
+        !historicoRef
+      ) {
+        return;
+      }
+
+      carregandoHistorico = true;
+
+      try {
+        const snap = await getDocs(
+          query(
+            historicoRef,
+            orderBy('criadoEm', 'desc'),
+            limit(80)
+          )
         );
+
+        historicoCompras = [];
+        snap.forEach((d) => {
+          historicoCompras.push({ id: d.id, ...d.data() });
+        });
+
+        historicoCarregado = true;
+
+        if (telaAtiva === 'ia') {
+          renderIa();
+        }
+      } catch (erro) {
+        console.error('Erro ao carregar histórico:', erro);
+      } finally {
+        carregandoHistorico = false;
+      }
     }
 
-    function formatarQuantidade(valor) {
-        return numeroSeguro(valor, 0).toLocaleString(
-            "pt-BR",
-            {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 3
+    async function iniciarDadosDaFamilia() {
+      limparListeners();
+      carregouProdutos = false;
+      historicoCarregado = false;
+      carregandoHistorico = false;
+      unidadesAntigasVerificadas = false;
+      produtos = [];
+      historicoCompras = [];
+
+      unsubscribeProdutos = onSnapshot(
+        query(produtosRef, orderBy('nome')),
+        async (snap) => {
+          produtos = [];
+          snap.forEach((d) => {
+            produtos.push({ id: d.id, ...d.data() });
+          });
+
+          if (!carregouProdutos) {
+            carregouProdutos = true;
+
+            if (snap.empty) {
+              setStatus('Criando lista inicial...');
+              await criarListaInicialSeVazio();
+              return;
             }
+          }
+
+          setStatus('Salvo no Firebase');
+          renderizar();
+
+          // Não executa migração de unidades durante a abertura.
+          // A unidade continua sendo exibida normalmente por unidadeProduto(),
+          // sem gerar várias gravações e novos eventos do onSnapshot.
+        },
+        (erro) => {
+          console.error(erro);
+          setStatus(
+            'Erro ao conectar no Firebase. Verifique as regras.'
+          );
+        }
+      );
+    }
+
+    function setStatus(texto) {
+      document.getElementById('statusSistema').textContent = texto;
+    }
+
+    function unidadeProduto(produto) {
+      return String(
+        produto?.unidade ||
+        obterUnidadePadrao(produto?.nome) ||
+        'un'
+      ).trim();
+    }
+
+    function quantidadeComUnidade(quantidade, produto) {
+      return `${Number(quantidade || 0)} ${unidadeProduto(produto)}`;
+    }
+
+    async function garantirUnidadesProdutos() {
+      if (
+        unidadesAntigasVerificadas ||
+        !produtosRef ||
+        produtos.length === 0
+      ) {
+        return;
+      }
+
+      unidadesAntigasVerificadas = true;
+
+      const semUnidade = produtos.filter(
+        (produto) => !String(produto.unidade || '').trim()
+      );
+
+      if (semUnidade.length === 0) {
+        return;
+      }
+
+      try {
+        await Promise.all(
+          semUnidade.map((produto) =>
+            setDoc(
+              doc(produtosRef, produto.id),
+              {
+                unidade: obterUnidadePadrao(produto.nome),
+                atualizadoEm: serverTimestamp()
+              },
+              { merge: true }
+            )
+          )
         );
+      } catch (erro) {
+        unidadesAntigasVerificadas = false;
+        console.error('Erro ao preencher unidades antigas:', erro);
+      }
+    }
+
+
+    window.abrirModalUnidade = function(id) {
+      if (!atualizandoEstoque) {
+        mostrarMensagem({
+          titulo: 'Atualização bloqueada',
+          texto: 'Toque em "Atualizar estoque" antes de alterar a unidade.',
+          tipo: 'info'
+        });
+        return;
+      }
+
+      const produto = produtos.find((item) => item.id === id);
+      if (!produto) return;
+
+      produtoUnidadeEmEdicao = produto;
+
+      document.getElementById('unitModalTitulo').textContent =
+        `Alterar unidade de ${produto.nome}`;
+
+      document.getElementById('unitModalTexto').textContent =
+        'A unidade será alterada sem converter automaticamente as quantidades.';
+
+      const unidadeAtual = unidadeProduto(produto);
+      const area = document.getElementById('unitOptions');
+
+      area.innerHTML = unidadesDisponiveis.map((unidade) => `
+        <button
+          type="button"
+          class="unit-option-btn ${unidade === unidadeAtual ? 'active' : ''}"
+          onclick="salvarUnidadeProduto('${unidade}')"
+        >
+          ${unidade}
+        </button>
+      `).join('');
+
+      document.getElementById('unitModal').classList.add('active');
+    }
+
+    window.fecharModalUnidade = function() {
+      document.getElementById('unitModal').classList.remove('active');
+      produtoUnidadeEmEdicao = null;
+    }
+
+    window.salvarUnidadeProduto = async function(unidade) {
+      const produto = produtoUnidadeEmEdicao;
+      if (!produto) return;
+
+      try {
+        await setDoc(
+          doc(produtosRef, produto.id),
+          {
+            unidade,
+            atualizadoEm: serverTimestamp()
+          },
+          { merge: true }
+        );
+
+        fecharModalUnidade();
+
+        await mostrarMensagem({
+          titulo: 'Unidade atualizada',
+          texto: `A unidade de "${produto.nome}" foi alterada para "${unidade}".`,
+          tipo: 'success'
+        });
+      } catch (erro) {
+        console.error('Erro ao alterar unidade:', erro);
+
+        await mostrarMensagem({
+          titulo: 'Erro ao alterar unidade',
+          texto: 'Não foi possível salvar a nova unidade.',
+          tipo: 'danger'
+        });
+      }
+    }
+
+    function comprarQtd(produto) {
+      return Math.max(0, Number(produto.minimo || 0) - Number(produto.estoque || 0));
+    }
+
+    function excessoQtd(produto) {
+      return Math.max(0, Number(produto.estoque || 0) - Number(produto.minimo || 0));
+    }
+
+    function textoBusca(id) {
+      const campo = document.getElementById(id);
+      return campo ? campo.value.trim().toLowerCase() : '';
     }
 
     function normalizarTexto(valor) {
-        return String(valor ?? "")
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .trim()
-            .replace(/\s+/g, " ");
+      return String(valor || '')
+        .trim()
+        .toLocaleLowerCase('pt-BR')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ');
     }
 
-    function somenteDigitos(valor) {
-        return String(valor ?? "").replace(/\D/g, "");
+    function passaBusca(produto, termo) {
+      const busca = normalizarTexto(termo);
+      if (!busca) return true;
+      return normalizarTexto(produto.nome).includes(busca);
     }
 
-    function dataHojeISO() {
-        const agora = new Date();
-        const ano = agora.getFullYear();
-        const mes = String(agora.getMonth() + 1).padStart(2, "0");
-        const dia = String(agora.getDate()).padStart(2, "0");
-        return `${ano}-${mes}-${dia}`;
+    function encontrarProdutoPorNome(nome) {
+      const nomeNormalizado = normalizarTexto(nome);
+      if (!nomeNormalizado) return null;
+
+      return produtos.find(
+        (produto) => normalizarTexto(produto.nome) === nomeNormalizado
+      ) || null;
     }
 
-    function converterParaData(valor) {
-        if (!valor) {
-            return new Date();
-        }
+    function qtdParaLista(produto) {
+      if (produto.manualLista && comprarQtd(produto) === 0) {
+        return Math.max(1, Number(produto.qtdManual || 1));
+      }
 
-        if (
-            valor &&
-            typeof valor.toDate === "function"
-        ) {
-            return valor.toDate();
-        }
+      return comprarQtd(produto);
+    }
 
-        if (typeof valor === "number") {
-            const dataNumero = new Date(valor);
-            return Number.isNaN(dataNumero.getTime())
-                ? new Date()
-                : dataNumero;
-        }
+    function produtosLista() {
+      return produtos.filter(
+        (p) =>
+          p.manualLista === true ||
+          (
+            p.listaAutomatica === true &&
+            comprarQtd(p) > 0
+          )
+      );
+    }
 
-        const texto = String(valor).trim();
+    window.abrirTela = async function(tela) {
+      telaAtiva = tela;
 
-        const brasileiro = texto.match(
-            /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/
+      document.querySelectorAll('.screen').forEach((s) => {
+        s.classList.remove('active');
+      });
+
+      document.querySelectorAll('.tab').forEach((t) => {
+        t.classList.remove('active');
+      });
+
+      document.getElementById(tela).classList.add('active');
+      document.getElementById('tab-' + tela).classList.add('active');
+
+      window.scrollTo({ top: 0, behavior: 'auto' });
+
+      if (tela === 'ia') {
+        renderResumo();
+        renderIa();
+        await carregarHistoricoSeNecessario();
+        return;
+      }
+
+      renderizar();
+    }
+
+    async function criarListaInicialSeVazio() {
+      if (!produtosRef || !familiaIdAtual) return;
+
+      const snap = await getDocs(produtosRef);
+      if (!snap.empty) return;
+
+      const operacoes = listaInicial.map((item) => {
+        const nome = item[0];
+
+        const idSeguro = normalizarTexto(nome)
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+
+        return setDoc(
+          doc(produtosRef, `padrao-${idSeguro}`),
+          {
+            nome,
+            unidade: obterUnidadePadrao(nome),
+            estoque: item[1],
+            minimo: item[2],
+            comprado: false,
+            qtdComprada: 0,
+            historico: 0,
+            manualLista: false,
+            qtdManual: 0,
+            listaAutomatica: false,
+            criadoEm: serverTimestamp()
+          },
+          { merge: false }
         );
+      });
 
-        if (brasileiro) {
-            return new Date(
-                Number(brasileiro[3]),
-                Number(brasileiro[2]) - 1,
-                Number(brasileiro[1]),
-                Number(brasileiro[4] || 12),
-                Number(brasileiro[5] || 0)
-            );
-        }
-
-        const isoSomenteData = texto.match(
-            /^(\d{4})-(\d{2})-(\d{2})$/
-        );
-
-        if (isoSomenteData) {
-            return new Date(
-                Number(isoSomenteData[1]),
-                Number(isoSomenteData[2]) - 1,
-                Number(isoSomenteData[3]),
-                12,
-                0
-            );
-        }
-
-        const data = new Date(texto);
-
-        return Number.isNaN(data.getTime())
-            ? new Date()
-            : data;
+      await Promise.all(operacoes);
     }
 
-    function dataParaISO(data) {
-        const valor = converterParaData(data);
-        const ano = valor.getFullYear();
-        const mes = String(valor.getMonth() + 1).padStart(2, "0");
-        const dia = String(valor.getDate()).padStart(2, "0");
-        return `${ano}-${mes}-${dia}`;
+    window.adicionarProduto = async function() {
+      const input = document.getElementById('novoProduto');
+      const nome = input.value.trim();
+
+      if (!nome) {
+        await mostrarMensagem({
+          titulo: 'Produto não informado',
+          texto: 'Digite o nome do produto.',
+          tipo: 'warning'
+        });
+        return;
+      }
+
+      const existente = encontrarProdutoPorNome(nome);
+
+      if (existente) {
+        await mostrarMensagem({
+          titulo: 'Produto já cadastrado',
+          texto: `O produto "${existente.nome}" já está cadastrado no estoque com a unidade "${unidadeProduto(existente)}".`,
+          tipo: 'warning'
+        });
+        input.value = '';
+        return;
+      }
+
+      await addDoc(produtosRef, {
+        nome,
+        unidade: obterUnidadePadrao(nome),
+        estoque: 0,
+        minimo: 1,
+        comprado: false,
+        qtdComprada: 0,
+        historico: 0,
+        manualLista: false,
+        qtdManual: 0,
+        listaAutomatica: false,
+        criadoEm: serverTimestamp()
+      });
+
+      input.value = '';
     }
 
-    function competenciaDaData(data) {
-        return dataParaISO(data).slice(0, 7);
+    window.renderSugestoesManual = function() {
+      const inputProduto = document.getElementById('produtoManual');
+      const area = document.getElementById('sugestoesManual');
+      if (!inputProduto || !area) return;
+
+      const termo = inputProduto.value.trim().toLowerCase();
+
+      if (!termo) {
+        area.classList.remove('active');
+        area.innerHTML = '';
+        return;
+      }
+
+      const encontrados = produtos
+        .filter(p => String(p.nome || '').toLowerCase().startsWith(termo))
+        .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+        .slice(0, 6);
+
+      if (encontrados.length === 0) {
+        area.classList.remove('active');
+        area.innerHTML = '';
+        return;
+      }
+
+      area.innerHTML = encontrados.map(p => `
+        <button type="button" class="sugestao-item" onclick="selecionarSugestaoManual('${p.nome.replace(/'/g, "\\'")}')">
+          ${p.nome}
+        </button>
+      `).join('');
+
+      area.classList.add('active');
     }
 
-    function formatarData(valor) {
-        return converterParaData(valor).toLocaleDateString("pt-BR");
+    window.selecionarSugestaoManual = function(nome) {
+      const inputProduto = document.getElementById('produtoManual');
+      const area = document.getElementById('sugestoesManual');
+
+      inputProduto.value = nome;
+      area.classList.remove('active');
+      area.innerHTML = '';
+
+      const qtd = document.getElementById('qtdManual');
+      if (qtd) qtd.focus();
     }
 
-    function hashTexto(valor) {
-        let hash = 2166136261;
-        const texto = String(valor);
+    window.adicionarItemManual = async function() {
+      const inputProduto = document.getElementById('produtoManual');
+      const inputQtd = document.getElementById('qtdManual');
 
-        for (let indice = 0; indice < texto.length; indice += 1) {
-            hash ^= texto.charCodeAt(indice);
-            hash = Math.imul(hash, 16777619);
-        }
+      const nome = inputProduto.value.trim();
+      const quantidade = Math.max(1, Number(inputQtd.value || 1));
 
-        return (hash >>> 0).toString(36);
+      if (!nome) {
+        await mostrarMensagem({
+          titulo: 'Produto não informado',
+          texto: 'Digite o produto para incluir na lista.',
+          tipo: 'warning'
+        });
+        return;
+      }
+
+      const existente = encontrarProdutoPorNome(nome);
+
+      if (existente) {
+        await setDoc(doc(produtosRef, existente.id), {
+          unidade: unidadeProduto(existente),
+          manualLista: true,
+          qtdManual: quantidade,
+          comprado: false,
+          qtdComprada: quantidade,
+          atualizadoEm: serverTimestamp()
+        }, { merge: true });
+      } else {
+        await addDoc(produtosRef, {
+          nome,
+          unidade: obterUnidadePadrao(nome),
+          estoque: 0,
+          minimo: 0,
+          comprado: false,
+          qtdComprada: quantidade,
+          qtdManual: quantidade,
+          manualLista: true,
+          listaAutomatica: false,
+          historico: 0,
+          criadoEm: serverTimestamp()
+        });
+      }
+
+      inputProduto.value = '';
+      inputQtd.value = 1;
+      const areaSugestoes = document.getElementById('sugestoesManual');
+      if (areaSugestoes) {
+        areaSugestoes.classList.remove('active');
+        areaSugestoes.innerHTML = '';
+      }
+      abrirTela('lista');
     }
 
-    function mostrarAviso(mensagem, tipo = "info") {
-        const aviso = elemento(IDS.aviso);
+    window.iniciarAtualizacaoEstoque = function() {
+      atualizandoEstoque = true;
 
-        if (!aviso) {
-            return;
-        }
+      document.getElementById('btnAtualizarEstoque').style.display = 'none';
+      document.getElementById('btnConcluirEstoque').style.display = 'block';
+      document.getElementById('avisoInventario').classList.add('active');
 
-        aviso.textContent = mensagem;
-        aviso.className = `listalar-gastos-aviso ${tipo}`;
-        aviso.hidden = false;
+      renderEstoque();
+    }
 
-        window.clearTimeout(mostrarAviso.timeout);
+    window.concluirAtualizacaoEstoque = async function() {
+      if (!atualizandoEstoque) return;
 
-        mostrarAviso.timeout = window.setTimeout(
-            () => {
-                aviso.hidden = true;
+      const confirmar = await confirmarAcao({
+        titulo: 'Concluir atualização',
+        texto: 'Deseja concluir a atualização do estoque e recalcular a lista de compras?',
+        tipo: 'warning',
+        confirmarTexto: 'Concluir',
+        cancelarTexto: 'Continuar editando',
+        confirmarClasse: 'success'
+      });
+
+      if (!confirmar) return;
+
+      try {
+        const operacoes = produtos.map((produto) =>
+          setDoc(
+            doc(produtosRef, produto.id),
+            {
+              listaAutomatica: comprarQtd(produto) > 0,
+              comprado: false,
+              qtdComprada: 0,
+              atualizadoEm: serverTimestamp()
             },
-            4500
-        );
-    }
-
-    function definirCarregando(ativo, texto = "Carregando...") {
-        const carregando = elemento(IDS.carregando);
-
-        if (!carregando) {
-            return;
-        }
-
-        carregando.textContent = texto;
-        carregando.hidden = !ativo;
-    }
-
-    // ========================================================
-    // FIREBASE E ACESSO
-    // ========================================================
-
-    async function carregarFirebase() {
-        if (ESTADO.firebase) {
-            return ESTADO.firebase;
-        }
-
-        const [
-            moduloApp,
-            moduloAuth,
-            moduloFirestore
-        ] = await Promise.all([
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"
-            ),
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"
-            ),
-            import(
-                "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
-            )
-        ]);
-
-        const app = moduloApp.getApps().length
-            ? moduloApp.getApp()
-            : moduloApp.initializeApp(FIREBASE_CONFIG);
-
-        ESTADO.firebase = {
-            auth: moduloAuth.getAuth(app),
-            db: moduloFirestore.getFirestore(app),
-
-            onAuthStateChanged:
-                moduloAuth.onAuthStateChanged,
-
-            doc: moduloFirestore.doc,
-            getDoc: moduloFirestore.getDoc,
-            setDoc: moduloFirestore.setDoc,
-            deleteDoc: moduloFirestore.deleteDoc,
-            collection: moduloFirestore.collection,
-            query: moduloFirestore.query,
-            orderBy: moduloFirestore.orderBy,
-            limit: moduloFirestore.limit,
-            onSnapshot: moduloFirestore.onSnapshot,
-            getDocs: moduloFirestore.getDocs,
-            writeBatch: moduloFirestore.writeBatch,
-            serverTimestamp:
-                moduloFirestore.serverTimestamp
-        };
-
-        return ESTADO.firebase;
-    }
-
-    function referenciaFamilia() {
-        if (
-            !ESTADO.firebase ||
-            !ESTADO.familiaId
-        ) {
-            return null;
-        }
-
-        return ESTADO.firebase.doc(
-            ESTADO.firebase.db,
-            "familias",
-            ESTADO.familiaId
-        );
-    }
-
-    function colecaoGastos() {
-        const familia = referenciaFamilia();
-
-        if (!familia) {
-            return null;
-        }
-
-        return ESTADO.firebase.collection(
-            familia,
-            "gastos"
-        );
-    }
-
-    function definirVisibilidade(liberado) {
-        ESTADO.liberado = liberado === true;
-
-        const botao = elemento(IDS.botaoMenu);
-
-        if (!ESTADO.liberado) {
-            if (botao) {
-                botao.hidden = true;
-            }
-
-            fecharTela();
-            pararHistorico();
-            return;
-        }
-
-        if (!ESTADO.interfaceInicializada) {
-            criarTela();
-            criarBotaoMenu();
-            configurarEventos();
-            ESTADO.interfaceInicializada = true;
-        } else if (botao) {
-            botao.hidden = false;
-        }
-
-        iniciarHistorico();
-    }
-
-    async function carregarContexto(usuario) {
-        const firebase = await carregarFirebase();
-
-        const usuarioSnapshot = await firebase.getDoc(
-            firebase.doc(
-                firebase.db,
-                "usuarios",
-                usuario.uid
-            )
+            { merge: true }
+          )
         );
 
-        if (!usuarioSnapshot.exists()) {
-            ESTADO.usuario = null;
-            ESTADO.familiaId = "";
-            definirVisibilidade(false);
-            return;
-        }
+        await Promise.all(operacoes);
 
-        const dadosUsuario = usuarioSnapshot.data();
-        const familiaId = String(
-            dadosUsuario.familiaId || ""
-        ).trim();
+        atualizandoEstoque = false;
 
-        if (!familiaId) {
-            ESTADO.usuario = null;
-            ESTADO.familiaId = "";
-            definirVisibilidade(false);
-            return;
-        }
+        document.getElementById('btnAtualizarEstoque').style.display = 'block';
+        document.getElementById('btnConcluirEstoque').style.display = 'none';
+        document.getElementById('avisoInventario').classList.remove('active');
 
-        const modulosSnapshot = await firebase.getDoc(
-            firebase.doc(
-                firebase.db,
-                "configuracoes",
-                "modulos"
-            )
-        );
+        abrirTela('lista');
 
-        const modulos = modulosSnapshot.exists()
-            ? modulosSnapshot.data()
-            : {};
-
-        ESTADO.usuario = usuario;
-        ESTADO.familiaId = familiaId;
-
-        const liberado =
-            modulos.gastosLiberados === true ||
-            modulos.familiaPilotoId === familiaId ||
-            (
-                ADMIN_COMO_PILOTO_SEM_CONFIG &&
-                !modulosSnapshot.exists() &&
-                dadosUsuario.adminSistema === true
-            );
-
-        definirVisibilidade(liberado);
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "listalar:gastos-pronto",
-                {
-                    detail: {
-                        familiaId,
-                        liberado
-                    }
-                }
-            )
-        );
+        await mostrarMensagem({
+          titulo: 'Estoque atualizado',
+          texto: 'A lista de compras foi recalculada automaticamente.',
+          tipo: 'success'
+        });
+      } catch (erro) {
+        console.error('Erro ao concluir atualização do estoque:', erro);
+        await mostrarMensagem({
+          titulo: 'Erro ao atualizar estoque',
+          texto: 'Não foi possível concluir a atualização do estoque.',
+          tipo: 'danger'
+        });
+      }
     }
 
-    async function iniciarControleAcesso() {
+    window.excluirProduto = async function(id) {
+      const produto = produtos.find(p => p.id === id);
+      if (!produto) return;
+
+      const confirmado = await confirmarAcao({
+        titulo: 'Excluir produto',
+        texto: `Deseja excluir "${produto.nome}" do estoque?`,
+        tipo: 'danger',
+        confirmarTexto: 'Excluir',
+        cancelarTexto: 'Cancelar',
+        confirmarClasse: 'danger'
+      });
+
+      if (!confirmado) return;
+
+      await deleteDoc(doc(produtosRef, id));
+
+      await mostrarMensagem({
+        titulo: 'Produto excluído',
+        texto: `"${produto.nome}" foi removido do estoque.`,
+        tipo: 'success'
+      });
+    }
+
+    window.alterarValor = async function(id, campo, delta) {
+      if (!atualizandoEstoque) {
+        await mostrarMensagem({
+          titulo: 'Atualização bloqueada',
+          texto: 'Toque em "Atualizar estoque" para alterar as quantidades.',
+          tipo: 'info'
+        });
+        return;
+      }
+
+      const produto = produtos.find(p => p.id === id);
+      if (!produto) return;
+
+      const valorAtual = Number(produto[campo] || 0);
+      const novoValor = Math.max(0, valorAtual + delta);
+
+      await setDoc(doc(produtosRef, id), {
+        [campo]: novoValor,
+        atualizadoEm: serverTimestamp()
+      }, { merge: true });
+    }
+
+    window.alterarQtdComprada = async function(id, delta) {
+      const produto = produtos.find(p => p.id === id);
+      if (!produto) return;
+
+      const sugerido = qtdParaLista(produto);
+      const atual = Number(produto.qtdComprada || sugerido || 1);
+      const novo = Math.max(0, atual + delta);
+
+      await setDoc(doc(produtosRef, id), {
+        qtdComprada: novo,
+        comprado: novo > 0 ? produto.comprado : false,
+        atualizadoEm: serverTimestamp()
+      }, { merge: true });
+    }
+
+    window.removerItemDaLista = async function(id) {
+      const produto = produtos.find(p => p.id === id);
+      if (!produto) return;
+
+      const confirmado = await confirmarAcao({
+        titulo: 'Remover item da lista',
+        texto: `Deseja remover "${produto.nome}" da lista de compras?`,
+        tipo: 'danger',
+        confirmarTexto: 'Remover',
+        cancelarTexto: 'Cancelar',
+        confirmarClasse: 'danger'
+      });
+
+      if (!confirmado) return;
+
+      await setDoc(doc(produtosRef, id), {
+        manualLista: false,
+        qtdManual: 0,
+        listaAutomatica: false,
+        comprado: false,
+        qtdComprada: 0,
+        atualizadoEm: serverTimestamp()
+      }, { merge: true });
+    }
+
+    window.alternarComprado = async function(id) {
+      const produto = produtos.find(p => p.id === id);
+      if (!produto) return;
+
+      const sugerido = qtdParaLista(produto);
+      if (sugerido <= 0) return;
+
+      const qtdAtual = Number(produto.qtdComprada || 0);
+      const qtdFinal = qtdAtual > 0 ? qtdAtual : sugerido;
+
+      await setDoc(doc(produtosRef, id), {
+        qtdComprada: qtdFinal,
+        comprado: !produto.comprado,
+        atualizadoEm: serverTimestamp()
+      }, { merge: true });
+    }
+
+    window.finalizarCompra = async function() {
+      const lista = produtosLista();
+      const comprados = lista.filter(p => p.comprado);
+
+      if (lista.length === 0) {
+        await mostrarMensagem({
+          titulo: 'Lista vazia',
+          texto: 'Não existe item na lista de compras.',
+          tipo: 'info'
+        });
+        return;
+      }
+
+      if (comprados.length === 0) {
+        await mostrarMensagem({
+          titulo: 'Nenhum item confirmado',
+          texto: 'Marque pelo menos um item como OK antes de finalizar.',
+          tipo: 'warning'
+        });
+        return;
+      }
+
+      const confirmarFinalizacao = await confirmarAcao({
+        titulo: 'Finalizar compra',
+        texto: 'Deseja finalizar a compra e atualizar o estoque dos itens marcados?',
+        tipo: 'warning',
+        confirmarTexto: 'Finalizar',
+        cancelarTexto: 'Voltar',
+        confirmarClasse: 'success'
+      });
+
+      if (!confirmarFinalizacao) return;
+
+      const apiGastos = window.ListaLarGastos;
+
+      if (
+        apiGastos &&
+        typeof apiGastos.obterResumoCompraManualAoFinalizar === 'function' &&
+        typeof apiGastos.salvarCompraManualAoFinalizar === 'function'
+      ) {
+        let resumoGasto;
+
         try {
-            const firebase = await carregarFirebase();
-
-            firebase.onAuthStateChanged(
-                firebase.auth,
-                async (usuario) => {
-                    if (!usuario) {
-                        ESTADO.usuario = null;
-                        ESTADO.familiaId = "";
-                        definirVisibilidade(false);
-                        return;
-                    }
-
-                    try {
-                        await carregarContexto(usuario);
-                    } catch (erro) {
-                        console.error(
-                            "ListaLar Gastos: erro ao carregar contexto:",
-                            erro
-                        );
-
-                        ESTADO.usuario = null;
-                        ESTADO.familiaId = "";
-                        definirVisibilidade(false);
-                    }
-                }
-            );
+          resumoGasto = apiGastos.obterResumoCompraManualAoFinalizar({
+            produtoIds: comprados.map(p => p.id)
+          });
         } catch (erro) {
-            console.error(
-                "ListaLar Gastos: Firebase indisponível:",
-                erro
-            );
+          console.error('Erro ao verificar os preços da compra:', erro);
+          resumoGasto = { necessario: false };
         }
+
+        if (resumoGasto?.necessario === true) {
+          const dadosCompra = await solicitarDadosCompraComPrecos({
+            quantidadeItens: resumoGasto.quantidadeItens,
+            valorTotal: resumoGasto.valorTotal
+          });
+
+          if (!dadosCompra) {
+            return;
+          }
+
+          let resultadoGasto;
+
+          try {
+            resultadoGasto = await apiGastos.salvarCompraManualAoFinalizar({
+              produtoIds: comprados.map(p => p.id),
+              estabelecimentoNome: dadosCompra.estabelecimentoNome,
+              dataCompra: dadosCompra.dataCompra
+            });
+          } catch (erro) {
+            console.error('Erro ao registrar a compra em Gastos:', erro);
+
+            await mostrarMensagem({
+              titulo: 'Compra não finalizada',
+              texto: 'Não foi possível registrar os valores da compra. O estoque e a lista não foram alterados.',
+              tipo: 'danger'
+            });
+            return;
+          }
+
+          if (resultadoGasto?.salvo !== true) {
+            await mostrarMensagem({
+              titulo: 'Compra não finalizada',
+              texto: 'Os valores não foram salvos. O estoque e a lista permanecem como estavam.',
+              tipo: 'warning'
+            });
+            return;
+          }
+        }
+      }
+
+      try {
+        for (const p of comprados) {
+          const sugerido = qtdParaLista(p);
+          const qtdFinal = Number(p.qtdComprada || sugerido);
+          const estoqueAntes = Number(p.estoque || 0);
+          const estoqueDepois = estoqueAntes + qtdFinal;
+
+          await addDoc(historicoRef, {
+            produtoId: p.id,
+            nome: p.nome,
+            unidade: unidadeProduto(p),
+            quantidade: qtdFinal,
+            quantidadeSugerida: sugerido,
+            origemManual: !!p.manualLista,
+            estoqueAntes,
+            estoqueDepois,
+            minimoNoMomento: Number(p.minimo || 0),
+            criadoEm: serverTimestamp()
+          });
+
+          await setDoc(doc(produtosRef, p.id), {
+            estoque: estoqueDepois,
+            comprado: false,
+            qtdComprada: 0,
+            manualLista: false,
+            qtdManual: 0,
+            listaAutomatica: false,
+            historico: Number(p.historico || 0) + qtdFinal,
+            ultimaCompraEm: serverTimestamp(),
+            atualizadoEm: serverTimestamp()
+          }, { merge: true });
+        }
+      } catch (erro) {
+        console.error('Erro ao finalizar a compra:', erro);
+
+        await mostrarMensagem({
+          titulo: 'Falha ao finalizar',
+          texto: 'O histórico de gastos foi salvo, mas ocorreu uma falha ao atualizar o estoque. Verifique sua conexão antes de tentar novamente.',
+          tipo: 'danger'
+        });
+        return;
+      }
+
+      historicoCarregado = false;
+      historicoCompras = [];
+
+      abrirTela('lista');
+      await mostrarMensagem({
+        titulo: 'Compra finalizada',
+        texto: 'O estoque foi atualizado. Os preços informados foram registrados em Gastos.',
+        tipo: 'success'
+      });
     }
 
-    // ========================================================
-    // ESTILOS
-    // ========================================================
+    window.cancelarCompra = async function() {
+      const marcado = produtos.some(p => p.comprado || p.qtdComprada > 0);
 
-    function criarEstilos() {
-        if (elemento(IDS.estilo)) {
-            return;
+      if (!marcado) {
+        await mostrarMensagem({
+          titulo: 'Nenhuma compra em andamento',
+          texto: 'Não existe compra em andamento.',
+          tipo: 'info'
+        });
+        return;
+      }
+
+      const confirmarCancelamento = await confirmarAcao({
+        titulo: 'Cancelar compra',
+        texto: 'Deseja cancelar as marcações e quantidades compradas? A lista continuará igual.',
+        tipo: 'warning',
+        confirmarTexto: 'Cancelar compra',
+        cancelarTexto: 'Continuar',
+        confirmarClasse: 'danger'
+      });
+
+      if (!confirmarCancelamento) return;
+
+      for (const p of produtos) {
+        if (p.comprado || p.qtdComprada > 0) {
+          await setDoc(doc(produtosRef, p.id), {
+            comprado: false,
+            qtdComprada: 0,
+            atualizadoEm: serverTimestamp()
+          }, { merge: true });
+        }
+      }
+    }
+
+    function renderResumo() {
+      const lista = produtosLista();
+      const comprados = lista.filter(p => p.comprado);
+      const ok = produtos.filter(p => comprarQtd(p) === 0).length;
+      const excesso = produtos.filter(p => excessoQtd(p) > 0).length;
+
+      document.getElementById('totalProdutos').textContent = produtos.length;
+      document.getElementById('totalLista').textContent = lista.length;
+      document.getElementById('totalOk').textContent = ok;
+
+      document.getElementById('listaItens').textContent = lista.length;
+      document.getElementById('listaComprados').textContent = comprados.length;
+      document.getElementById('listaPendentes').textContent = lista.length - comprados.length;
+
+      document.getElementById('iaCriticos').textContent = lista.length;
+      document.getElementById('iaExcesso').textContent = excesso;
+      document.getElementById('iaSaudavel').textContent = ok;
+    }
+
+    function renderEstoque() {
+      const area = document.getElementById('listaEstoque');
+
+      const termo = textoBusca('buscaEstoque');
+      const listaEstoque = produtos
+        .filter(p => passaBusca(p, termo))
+        .sort((a, b) => {
+          const listaA = produtosLista().some(p => p.id === a.id) ? 1 : 0;
+          const listaB = produtosLista().some(p => p.id === b.id) ? 1 : 0;
+          if (listaA !== listaB) return listaB - listaA;
+
+          const histA = Number(a.historico || 0);
+          const histB = Number(b.historico || 0);
+          if (histA !== histB) return histB - histA;
+
+          return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
+        });
+
+      if (listaEstoque.length === 0) {
+        area.innerHTML = '<div class="empty">Nenhum produto encontrado.</div>';
+        return;
+      }
+
+      area.innerHTML = listaEstoque.map(p => {
+        const comprar = comprarQtd(p);
+        const excesso = excessoQtd(p);
+        const unidade = unidadeProduto(p);
+
+        let badge = '<span class="badge badge-ok">OK</span>';
+        if (comprar > 0) {
+          badge = `<span class="badge badge-low">Comprar ${quantidadeComUnidade(comprar, p)}</span>`;
+        }
+        if (excesso > 0) {
+          badge = `<span class="badge badge-extra">Excesso ${quantidadeComUnidade(excesso, p)}</span>`;
         }
 
-        const style = document.createElement("style");
-        style.id = IDS.estilo;
-
-        style.textContent = `
-            body.listalar-gastos-aberto {
-                overflow: hidden !important;
-            }
-
-            .listalar-menu-gastos {
-                border: 0;
-                background: transparent;
-                color: inherit;
-                font: inherit;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 6px;
-                min-width: 62px;
-                min-height: 48px;
-                padding: 7px 9px;
-                border-radius: 12px;
-            }
-
-            .listalar-menu-gastos:active {
-                transform: scale(0.96);
-            }
-
-            .listalar-menu-gastos-icone {
-                font-size: 21px;
-                line-height: 1;
-            }
-
-            .listalar-menu-gastos-texto {
-                font-size: 12px;
-                font-weight: 700;
-                line-height: 1;
-                white-space: nowrap;
-            }
-
-            #bottom-nav:has(#listalar-menu-gastos),
-            #bottomNav:has(#listalar-menu-gastos),
-            #menu-inferior:has(#listalar-menu-gastos),
-            #menuInferior:has(#listalar-menu-gastos),
-            .bottom-nav:has(#listalar-menu-gastos),
-            .bottom-navigation:has(#listalar-menu-gastos),
-            .menu-inferior:has(#listalar-menu-gastos),
-            .menu-bottom:has(#listalar-menu-gastos),
-            .nav-bottom:has(#listalar-menu-gastos),
-            .mobile-nav:has(#listalar-menu-gastos),
-            [data-menu-principal]:has(#listalar-menu-gastos) {
-                width: 100% !important;
-                display: flex !important;
-                flex-wrap: nowrap !important;
-                align-items: stretch !important;
-                gap: 4px !important;
-            }
-
-            #bottom-nav:has(#listalar-menu-gastos) > *,
-            #bottomNav:has(#listalar-menu-gastos) > *,
-            #menu-inferior:has(#listalar-menu-gastos) > *,
-            #menuInferior:has(#listalar-menu-gastos) > *,
-            .bottom-nav:has(#listalar-menu-gastos) > *,
-            .bottom-navigation:has(#listalar-menu-gastos) > *,
-            .menu-inferior:has(#listalar-menu-gastos) > *,
-            .menu-bottom:has(#listalar-menu-gastos) > *,
-            .nav-bottom:has(#listalar-menu-gastos) > *,
-            .mobile-nav:has(#listalar-menu-gastos) > *,
-            [data-menu-principal]:has(#listalar-menu-gastos) > * {
-                flex: 1 1 0 !important;
-                width: auto !important;
-                min-width: 0 !important;
-                max-width: none !important;
-                margin-left: 0 !important;
-                margin-right: 0 !important;
-            }
-
-            #bottom-nav:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            #bottomNav:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            #menu-inferior:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            #menuInferior:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            .bottom-nav:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            .bottom-navigation:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            .menu-inferior:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            .menu-bottom:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            .nav-bottom:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            .mobile-nav:has(#listalar-menu-gastos)
-            .listalar-menu-gastos,
-            [data-menu-principal]:has(#listalar-menu-gastos)
-            .listalar-menu-gastos {
-                width: auto !important;
-                min-width: 0 !important;
-                min-height: 56px;
-                padding: 6px 2px;
-                flex-direction: column;
-                gap: 2px;
-            }
-
-            .listalar-gastos-tela {
-                position: fixed;
-                inset: 0;
-                z-index: 10000;
-                display: none;
-                background: #f4f7fb;
-                color: #172033;
-                overflow-y: auto;
-                overscroll-behavior: contain;
-            }
-
-            .listalar-gastos-tela.aberta {
-                display: block;
-            }
-
-            .listalar-gastos-cabecalho {
-                position: sticky;
-                top: 0;
-                z-index: 5;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 14px;
-                min-height: 68px;
-                padding:
-                    max(14px, env(safe-area-inset-top))
-                    18px
-                    14px;
-                color: #ffffff;
-                background:
-                    linear-gradient(135deg, #1d4ed8, #2563eb);
-                box-shadow:
-                    0 4px 16px rgba(15, 23, 42, 0.18);
-            }
-
-            .listalar-gastos-cabecalho-titulo {
-                display: flex;
-                align-items: center;
-                gap: 11px;
-                min-width: 0;
-            }
-
-            .listalar-gastos-cabecalho-icone {
-                display: grid;
-                place-items: center;
-                width: 42px;
-                height: 42px;
-                border-radius: 13px;
-                font-size: 23px;
-                background: rgba(255, 255, 255, 0.16);
-            }
-
-            .listalar-gastos-cabecalho h1 {
-                margin: 0;
-                font-size: 21px;
-                line-height: 1.15;
-            }
-
-            .listalar-gastos-cabecalho p {
-                margin: 3px 0 0;
-                font-size: 12px;
-                opacity: 0.88;
-            }
-
-            .listalar-gastos-fechar {
-                display: grid;
-                place-items: center;
-                width: 42px;
-                height: 42px;
-                border: 0;
-                border-radius: 50%;
-                color: #ffffff;
-                background: rgba(255, 255, 255, 0.17);
-                font-size: 25px;
-                cursor: pointer;
-            }
-
-            .listalar-gastos-conteudo {
-                width: min(100%, 960px);
-                margin: 0 auto;
-                padding: 16px 16px 110px;
-                box-sizing: border-box;
-            }
-
-            .listalar-gastos-filtro {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 12px;
-                margin-bottom: 14px;
-            }
-
-            .listalar-gastos-filtro strong {
-                font-size: 16px;
-            }
-
-            .listalar-gastos-select {
-                min-height: 42px;
-                padding: 8px 34px 8px 12px;
-                border: 1px solid #dbe4f0;
-                border-radius: 12px;
-                background: #ffffff;
-                color: #172033;
-                font: inherit;
-                font-size: 14px;
-                font-weight: 700;
-            }
-
-            .listalar-gastos-grade-resumo {
-                display: grid;
-                grid-template-columns:
-                    repeat(4, minmax(0, 1fr));
-                gap: 11px;
-                margin-bottom: 14px;
-            }
-
-            .listalar-gastos-card-resumo {
-                min-height: 96px;
-                padding: 14px;
-                border: 1px solid #e3e9f2;
-                border-radius: 16px;
-                background: #ffffff;
-                box-shadow:
-                    0 5px 15px rgba(15, 23, 42, 0.05);
-                box-sizing: border-box;
-            }
-
-            .listalar-gastos-card-resumo span {
-                display: block;
-                margin-bottom: 8px;
-                color: #64748b;
-                font-size: 11px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-card-resumo strong {
-                display: block;
-                color: #172033;
-                font-size: 19px;
-                line-height: 1.2;
-                overflow-wrap: anywhere;
-            }
-
-            .listalar-gastos-card-resumo.principal {
-                color: #ffffff;
-                border-color: transparent;
-                background:
-                    linear-gradient(135deg, #0f766e, #14b8a6);
-            }
-
-            .listalar-gastos-card-resumo.principal span,
-            .listalar-gastos-card-resumo.principal strong {
-                color: #ffffff;
-            }
-
-            .listalar-gastos-card {
-                margin-bottom: 14px;
-                padding: 17px;
-                border: 1px solid #e3e9f2;
-                border-radius: 18px;
-                background: #ffffff;
-                box-shadow:
-                    0 5px 16px rgba(15, 23, 42, 0.05);
-            }
-
-            .listalar-gastos-card-topo {
-                display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: 14px;
-                margin-bottom: 14px;
-            }
-
-            .listalar-gastos-card-topo h2 {
-                margin: 0 0 4px;
-                font-size: 17px;
-            }
-
-            .listalar-gastos-card-topo p {
-                margin: 0;
-                color: #64748b;
-                font-size: 12px;
-                line-height: 1.4;
-            }
-
-            .listalar-gastos-acoes {
-                display: grid;
-                grid-template-columns:
-                    repeat(2, minmax(0, 1fr));
-                gap: 10px;
-            }
-
-            .listalar-gastos-botao {
-                min-height: 52px;
-                padding: 11px 13px;
-                border: 0;
-                border-radius: 14px;
-                color: #ffffff;
-                background: #2563eb;
-                font: inherit;
-                font-size: 14px;
-                font-weight: 800;
-                cursor: pointer;
-            }
-
-            .listalar-gastos-botao.secundario {
-                color: #166534;
-                border: 1px solid #86efac;
-                background: #dcfce7;
-            }
-
-            .listalar-gastos-botao:disabled {
-                opacity: 0.55;
-                cursor: wait;
-            }
-
-            .listalar-gastos-graficos {
-                display: grid;
-                grid-template-columns:
-                    minmax(0, 1.45fr)
-                    minmax(240px, 0.75fr);
-                gap: 14px;
-                margin-bottom: 14px;
-            }
-
-            .listalar-gastos-graficos .listalar-gastos-card {
-                margin-bottom: 0;
-            }
-
-            .listalar-gastos-barras {
-                display: grid;
-                grid-template-columns:
-                    repeat(6, minmax(42px, 1fr));
-                gap: 9px;
-                align-items: end;
-                min-height: 190px;
-                padding-top: 10px;
-            }
-
-            .listalar-gastos-barra-coluna {
-                display: grid;
-                grid-template-rows:
-                    1fr auto auto;
-                gap: 6px;
-                min-width: 0;
-                height: 180px;
-                text-align: center;
-            }
-
-            .listalar-gastos-barra-area {
-                display: flex;
-                align-items: flex-end;
-                justify-content: center;
-                min-height: 112px;
-            }
-
-            .listalar-gastos-barra {
-                width: min(34px, 75%);
-                min-height: 4px;
-                border-radius: 9px 9px 4px 4px;
-                background:
-                    linear-gradient(180deg, #2563eb, #60a5fa);
-            }
-
-            .listalar-gastos-barra-coluna strong {
-                font-size: 10px;
-                white-space: nowrap;
-            }
-
-            .listalar-gastos-barra-coluna small {
-                color: #64748b;
-                font-size: 10px;
-            }
-
-            .listalar-gastos-origem-linha {
-                margin-bottom: 17px;
-            }
-
-            .listalar-gastos-origem-linha:last-child {
-                margin-bottom: 0;
-            }
-
-            .listalar-gastos-origem-cabecalho {
-                display: flex;
-                justify-content: space-between;
-                gap: 10px;
-                margin-bottom: 6px;
-                font-size: 12px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-origem-trilho {
-                height: 12px;
-                overflow: hidden;
-                border-radius: 999px;
-                background: #e2e8f0;
-            }
-
-            .listalar-gastos-origem-preenchimento {
-                height: 100%;
-                min-width: 0;
-                border-radius: inherit;
-                background: #2563eb;
-            }
-
-            .listalar-gastos-origem-preenchimento.manual {
-                background: #16a34a;
-            }
-
-            .listalar-gastos-historico-lista {
-                display: grid;
-                gap: 10px;
-            }
-
-            .listalar-gastos-registro {
-                display: grid;
-                grid-template-columns:
-                    auto minmax(0, 1fr) auto;
-                gap: 11px;
-                align-items: center;
-                padding: 12px;
-                border: 1px solid #e5eaf2;
-                border-radius: 14px;
-                background: #f8fafc;
-            }
-
-            .listalar-gastos-registro-icone {
-                display: grid;
-                place-items: center;
-                width: 40px;
-                height: 40px;
-                border-radius: 12px;
-                background: #dbeafe;
-                font-size: 20px;
-            }
-
-            .listalar-gastos-registro.manual
-            .listalar-gastos-registro-icone {
-                background: #dcfce7;
-            }
-
-            .listalar-gastos-registro-conteudo {
-                min-width: 0;
-            }
-
-            .listalar-gastos-registro-conteudo strong {
-                display: block;
-                overflow: hidden;
-                font-size: 14px;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .listalar-gastos-registro-conteudo small {
-                display: block;
-                margin-top: 4px;
-                color: #64748b;
-                font-size: 11px;
-            }
-
-            .listalar-gastos-registro-valor {
-                font-size: 14px;
-                font-weight: 900;
-                white-space: nowrap;
-            }
-
-            .listalar-gastos-vazio {
-                padding: 22px 14px;
-                border: 1px dashed #cbd5e1;
-                border-radius: 14px;
-                text-align: center;
-                color: #64748b;
-                background: #f8fafc;
-                font-size: 13px;
-            }
-
-            .listalar-gastos-carregando {
-                position: sticky;
-                top: 74px;
-                z-index: 4;
-                margin-bottom: 10px;
-                padding: 10px 13px;
-                border-radius: 12px;
-                color: #1e3a8a;
-                background: #dbeafe;
-                text-align: center;
-                font-size: 13px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-aviso {
-                position: fixed;
-                left: 50%;
-                bottom:
-                    max(22px, env(safe-area-inset-bottom));
-                z-index: 13000;
-                width: min(calc(100% - 32px), 480px);
-                transform: translateX(-50%);
-                padding: 13px 16px;
-                border-radius: 13px;
-                color: #ffffff;
-                background: #334155;
-                font-size: 14px;
-                font-weight: 700;
-                text-align: center;
-                box-shadow:
-                    0 10px 28px rgba(0, 0, 0, 0.24);
-            }
-
-            .listalar-gastos-aviso.sucesso {
-                background: #15803d;
-            }
-
-            .listalar-gastos-aviso.erro {
-                background: #b91c1c;
-            }
-
-            .listalar-gastos-modal {
-                position: fixed;
-                inset: 0;
-                z-index: 12000;
-                display: none;
-                align-items: center;
-                justify-content: center;
-                padding:
-                    max(18px, env(safe-area-inset-top))
-                    16px
-                    max(18px, env(safe-area-inset-bottom));
-                background: rgba(15, 23, 42, 0.62);
-                backdrop-filter: blur(3px);
-            }
-
-            .listalar-gastos-modal.aberto {
-                display: flex;
-            }
-
-            .listalar-gastos-modal-conteudo {
-                width: min(100%, 460px);
-                max-height: calc(100vh - 36px);
-                overflow-y: auto;
-                padding: 21px;
-                border-radius: 20px;
-                background: #ffffff;
-                box-shadow:
-                    0 24px 60px rgba(15, 23, 42, 0.34);
-            }
-
-            .listalar-gastos-modal h2 {
-                margin: 0 0 7px;
-                font-size: 20px;
-            }
-
-            .listalar-gastos-modal p {
-                margin: 0 0 16px;
-                color: #64748b;
-                font-size: 13px;
-                line-height: 1.45;
-            }
-
-            .listalar-gastos-campo {
-                display: grid;
-                gap: 6px;
-                margin-bottom: 12px;
-            }
-
-            .listalar-gastos-campo label {
-                color: #475569;
-                font-size: 12px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-campo input {
-                width: 100%;
-                min-height: 46px;
-                padding: 10px 12px;
-                border: 1px solid #cbd5e1;
-                border-radius: 12px;
-                background: #ffffff;
-                color: #172033;
-                font: inherit;
-                font-size: 16px;
-                box-sizing: border-box;
-            }
-
-            .listalar-gastos-manual-resumo {
-                margin: 13px 0;
-                padding: 12px;
-                border-radius: 13px;
-                color: #166534;
-                background: #dcfce7;
-                font-size: 13px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-modal-acoes {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 9px;
-                margin-top: 15px;
-            }
-
-            .listalar-gastos-modal-acoes button {
-                min-height: 47px;
-                border: 0;
-                border-radius: 13px;
-                font: inherit;
-                font-size: 14px;
-                font-weight: 800;
-                cursor: pointer;
-            }
-
-            .listalar-gastos-modal-cancelar {
-                color: #475569;
-                background: #e2e8f0;
-            }
-
-            .listalar-gastos-modal-confirmar {
-                color: #ffffff;
-                background: #16a34a;
-            }
-
-            @media (max-width: 720px) {
-                .listalar-gastos-cabecalho {
-                    min-height: 62px;
-                    padding-left: 14px;
-                    padding-right: 14px;
-                }
-
-                .listalar-gastos-cabecalho h1 {
-                    font-size: 19px;
-                }
-
-                .listalar-gastos-cabecalho p {
-                    display: none;
-                }
-
-                .listalar-gastos-conteudo {
-                    padding: 13px 11px 100px;
-                }
-
-                .listalar-gastos-grade-resumo {
-                    grid-template-columns: 1fr 1fr;
-                    gap: 9px;
-                }
-
-                .listalar-gastos-card-resumo {
-                    min-height: 88px;
-                    padding: 12px;
-                }
-
-                .listalar-gastos-card-resumo.principal {
-                    grid-column: 1 / -1;
-                }
-
-                .listalar-gastos-graficos {
-                    grid-template-columns: 1fr;
-                }
-
-                .listalar-gastos-acoes {
-                    grid-template-columns: 1fr;
-                }
-
-                .listalar-gastos-barras {
-                    gap: 5px;
-                }
-
-                .listalar-gastos-registro {
-                    grid-template-columns:
-                        auto minmax(0, 1fr);
-                }
-
-                .listalar-gastos-registro-valor {
-                    grid-column: 2;
-                }
-            }
-
-            @media (max-width: 390px) {
-                .listalar-menu-gastos-texto {
-                    max-width: 100%;
-                    overflow: hidden;
-                    font-size: 10px;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-
-                .listalar-gastos-card-resumo strong {
-                    font-size: 17px;
-                }
-
-                .listalar-gastos-barras {
-                    overflow-x: auto;
-                    grid-template-columns:
-                        repeat(6, minmax(48px, 1fr));
-                }
-            }
+        return `
+          <div class="stock-item ${atualizandoEstoque ? 'inventory-active' : 'inventory-locked'}">
+            <div class="item-top">
+              <div class="item-name">${p.nome}</div>
+
+              <div class="stock-top-actions">
+                ${badge}
+
+                <button
+                  type="button"
+                  class="stock-unit-btn"
+                  onclick="abrirModalUnidade('${p.id}')"
+                  ${atualizandoEstoque ? '' : 'disabled'}
+                  title="Alterar unidade de ${p.nome}"
+                  aria-label="Alterar unidade de ${p.nome}"
+                >
+                  ${unidade}
+                </button>
+
+                <button
+                  type="button"
+                  class="stock-delete-icon"
+                  onclick="excluirProduto('${p.id}')"
+                  title="Excluir ${p.nome}"
+                  aria-label="Excluir ${p.nome}"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+
+            <div class="stock-grid">
+              <div class="field-box">
+                <label>Atual</label>
+                <div class="stepper">
+                  <button onclick="alterarValor('${p.id}', 'estoque', -1)">−</button>
+                  <div class="num">${p.estoque || 0}</div>
+                  <span class="stock-unit">${unidade}</span>
+                  <button onclick="alterarValor('${p.id}', 'estoque', 1)">+</button>
+                </div>
+              </div>
+
+              <div class="field-box">
+                <label>Mínimo</label>
+                <div class="stepper">
+                  <button onclick="alterarValor('${p.id}', 'minimo', -1)">−</button>
+                  <div class="num">${p.minimo || 0}</div>
+                  <span class="stock-unit">${unidade}</span>
+                  <button onclick="alterarValor('${p.id}', 'minimo', 1)">+</button>
+                </div>
+              </div>
+
+              <div class="field-box">
+                <label>Comprar</label>
+                <div class="comprar-num">${quantidadeComUnidade(comprar, p)}</div>
+              </div>
+            </div>
+          </div>
         `;
-
-        document.head.appendChild(style);
+      }).join('');
     }
 
-    // ========================================================
-    // TELA E MENU
-    // ========================================================
+    function renderLista() {
+      const area = document.getElementById('listaCompras');
+      const termo = textoBusca('buscaLista');
+      const lista = produtosLista()
+        .filter(p => passaBusca(p, termo))
+        .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
 
-    function criarTela() {
-        if (elemento(IDS.tela)) {
-            return;
-        }
+      if (lista.length === 0) {
+        area.innerHTML = '<div class="empty">Nenhum item para comprar.<br>Seu estoque está em dia.</div>';
+        return;
+      }
 
-        const tela = document.createElement("section");
-        tela.id = IDS.tela;
-        tela.className = "listalar-gastos-tela";
-        tela.setAttribute("aria-hidden", "true");
+      area.innerHTML = lista.map(p => {
+        const comprar = qtdParaLista(p);
+        const qtdComprada = Number(p.qtdComprada || comprar);
 
-        tela.innerHTML = `
-            <header class="listalar-gastos-cabecalho">
-                <div class="listalar-gastos-cabecalho-titulo">
-                    <div
-                        class="listalar-gastos-cabecalho-icone"
-                        aria-hidden="true"
-                    >
-                        💰
-                    </div>
+        return `
+          <div class="buy-item ${p.comprado ? 'checked' : ''}">
+            <div class="buy-row">
+              <div class="item-name">${p.nome}</div>
 
-                    <div>
-                        <h1>Meus Gastos</h1>
-                        <p>
-                            Histórico e análise das compras da família
-                        </p>
-                    </div>
+              <div class="lista-controles-linha">
+                <div
+                  class="check"
+                  onclick="alternarComprado('${p.id}')"
+                  title="${p.comprado ? 'Desmarcar item' : 'Marcar item como OK'}"
+                  aria-label="${p.comprado ? 'Desmarcar' : 'Marcar'} ${p.nome}"
+                >${p.comprado ? '✓' : ''}</div>
+
+                <div class="comprado-controle">
+                  <div class="comprado-stepper">
+                    <button onclick="alterarQtdComprada('${p.id}', -1)" aria-label="Diminuir quantidade de ${p.nome}">−</button>
+                    <div class="comprado-num">${qtdComprada}</div>
+                    <span class="comprado-unidade">${unidadeProduto(p)}</span>
+                    <button onclick="alterarQtdComprada('${p.id}', 1)" aria-label="Aumentar quantidade de ${p.nome}">+</button>
+                  </div>
                 </div>
 
                 <button
-                    id="${IDS.botaoFechar}"
-                    class="listalar-gastos-fechar"
-                    type="button"
-                    aria-label="Fechar tela de gastos"
-                    title="Fechar"
+                  type="button"
+                  class="remover-lista-icon"
+                  onclick="removerItemDaLista('${p.id}')"
+                  title="Remover item da lista"
+                  aria-label="Remover ${p.nome} da lista"
                 >
-                    ×
+                  🗑️
                 </button>
-            </header>
-
-            <main class="listalar-gastos-conteudo">
-                <div
-                    id="${IDS.carregando}"
-                    class="listalar-gastos-carregando"
-                    hidden
-                >
-                    Carregando...
-                </div>
-
-                <section class="listalar-gastos-filtro">
-                    <strong>Visão financeira</strong>
-
-                    <select
-                        id="${IDS.seletorPeriodo}"
-                        class="listalar-gastos-select"
-                        aria-label="Período do painel"
-                    >
-                        <option value="mes_atual">
-                            Este mês
-                        </option>
-                        <option value="ultimos_3_meses">
-                            Últimos 3 meses
-                        </option>
-                        <option value="ano_atual">
-                            Este ano
-                        </option>
-                        <option value="todos">
-                            Todo o histórico
-                        </option>
-                    </select>
-                </section>
-
-                <section class="listalar-gastos-grade-resumo">
-                    <article
-                        class="listalar-gastos-card-resumo principal"
-                    >
-                        <span>Total no período</span>
-                        <strong id="${IDS.totalPeriodo}">
-                            R$ 0,00
-                        </strong>
-                    </article>
-
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Compras</span>
-                        <strong id="${IDS.totalCompras}">
-                            0
-                        </strong>
-                    </article>
-
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Notas fiscais</span>
-                        <strong id="${IDS.totalNotas}">
-                            R$ 0,00
-                        </strong>
-                    </article>
-
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Compras manuais</span>
-                        <strong id="${IDS.totalManuais}">
-                            R$ 0,00
-                        </strong>
-                    </article>
-
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Ticket médio</span>
-                        <strong id="${IDS.ticketMedio}">
-                            R$ 0,00
-                        </strong>
-                    </article>
-                </section>
-
-                <section class="listalar-gastos-card">
-                    <div class="listalar-gastos-card-topo">
-                        <div>
-                            <h2>Registrar compra</h2>
-                            <p>
-                                A nota fiscal e a compra manual são
-                                armazenadas separadamente.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="listalar-gastos-acoes">
-                        <button
-                            id="${IDS.botaoImportarPdf}"
-                            class="listalar-gastos-botao"
-                            type="button"
-                        >
-                            📄 Importar nota fiscal em PDF
-                        </button>
-                    </div>
-                </section>
-
-                <section class="listalar-gastos-graficos">
-                    <article class="listalar-gastos-card">
-                        <div class="listalar-gastos-card-topo">
-                            <div>
-                                <h2>Evolução dos gastos</h2>
-                                <p>Totais dos últimos seis meses.</p>
-                            </div>
-                        </div>
-
-                        <div
-                            id="${IDS.graficoMensal}"
-                            class="listalar-gastos-barras"
-                        ></div>
-                    </article>
-
-                    <article class="listalar-gastos-card">
-                        <div class="listalar-gastos-card-topo">
-                            <div>
-                                <h2>Origem dos gastos</h2>
-                                <p>PDF versus compra manual.</p>
-                            </div>
-                        </div>
-
-                        <div id="${IDS.graficoOrigem}"></div>
-                    </article>
-                </section>
-
-                <section class="listalar-gastos-card">
-                    <div class="listalar-gastos-card-topo">
-                        <div>
-                            <h2>Histórico</h2>
-                            <p>
-                                Compras salvas no período selecionado.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        id="${IDS.historico}"
-                        class="listalar-gastos-historico-lista"
-                    ></div>
-                </section>
-            </main>
-
-            <div
-                id="${IDS.aviso}"
-                class="listalar-gastos-aviso info"
-                role="status"
-                hidden
-            ></div>
-
-            <div
-                id="${IDS.modalManual}"
-                class="listalar-gastos-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-hidden="true"
-                aria-labelledby="listalar-gastos-manual-titulo"
-            >
-                <div class="listalar-gastos-modal-conteudo">
-                    <h2 id="listalar-gastos-manual-titulo">
-                        Confirmar compra com preços
-                    </h2>
-
-                    <p>
-                        Informe o estabelecimento. A data de hoje já
-                        está preenchida e pode ser alterada.
-                    </p>
-
-                    <div class="listalar-gastos-campo">
-                        <label
-                            for="${IDS.manualEstabelecimento}"
-                        >
-                            Estabelecimento
-                        </label>
-
-                        <input
-                            id="${IDS.manualEstabelecimento}"
-                            type="text"
-                            autocomplete="organization"
-                            placeholder="Ex.: Mercado do bairro"
-                        >
-                    </div>
-
-                    <div class="listalar-gastos-campo">
-                        <label for="${IDS.manualData}">
-                            Data da compra
-                        </label>
-
-                        <input
-                            id="${IDS.manualData}"
-                            type="date"
-                        >
-                    </div>
-
-                    <div
-                        id="${IDS.manualResumo}"
-                        class="listalar-gastos-manual-resumo"
-                    ></div>
-
-                    <div class="listalar-gastos-modal-acoes">
-                        <button
-                            id="${IDS.manualCancelar}"
-                            class="listalar-gastos-modal-cancelar"
-                            type="button"
-                        >
-                            Cancelar
-                        </button>
-
-                        <button
-                            id="${IDS.manualConfirmar}"
-                            class="listalar-gastos-modal-confirmar"
-                            type="button"
-                        >
-                            Salvar compra
-                        </button>
-                    </div>
-                </div>
+              </div>
             </div>
+          </div>
         `;
-
-        document.body.appendChild(tela);
+      }).join('');
     }
 
-    function localizarContainerMenu() {
-        const seletores = [
-            "#bottom-nav",
-            "#bottomNav",
-            "#menu-inferior",
-            "#menuInferior",
-            ".bottom-nav",
-            ".bottom-navigation",
-            ".menu-inferior",
-            ".menu-bottom",
-            ".nav-bottom",
-            ".mobile-nav",
-            "[data-menu-principal]"
-        ];
+    function comprasPorProduto() {
+      const mapa = {};
 
-        for (const seletor of seletores) {
-            const container = document.querySelector(seletor);
+      historicoCompras.forEach((compra) => {
+        const nome = compra.nome || 'Produto';
 
-            if (container) {
-                return container;
-            }
+        if (!mapa[nome]) {
+          mapa[nome] = {
+            nome,
+            total: 0,
+            compras: 0,
+            ultimaQuantidade: 0,
+            penultimaQuantidade: 0
+          };
         }
 
-        return null;
+        mapa[nome].penultimaQuantidade = mapa[nome].ultimaQuantidade;
+        mapa[nome].ultimaQuantidade = Number(compra.quantidade || 0);
+        mapa[nome].total += Number(compra.quantidade || 0);
+        mapa[nome].compras += 1;
+      });
+
+      return Object.values(mapa);
     }
 
-    function criarBotaoMenu() {
-        if (elemento(IDS.botaoMenu)) {
-            return;
+    function gerarMensagensHistorico() {
+      const mensagens = [];
+      const resumo = comprasPorProduto();
+
+      resumo.forEach((item) => {
+        if (item.compras >= 2 && item.ultimaQuantidade > item.penultimaQuantidade) {
+          mensagens.push(`📈 Você comprou mais ${item.nome} na última compra. Pode estar usando mais que o normal.`);
         }
 
-        const botao = document.createElement("button");
-        botao.id = IDS.botaoMenu;
-        botao.type = "button";
-        botao.className = "listalar-menu-gastos";
-        botao.title = "Gastos";
-        botao.setAttribute("aria-label", "Abrir Gastos");
-
-        botao.innerHTML = `
-            <span
-                class="listalar-menu-gastos-icone"
-                aria-hidden="true"
-            >
-                💰
-            </span>
-
-            <span class="listalar-menu-gastos-texto">
-                Gastos
-            </span>
-        `;
-
-        const menu = localizarContainerMenu();
-
-        if (menu) {
-            menu.appendChild(botao);
-        } else {
-            botao.style.position = "fixed";
-            botao.style.right = "16px";
-            botao.style.bottom = "18px";
-            botao.style.zIndex = "9990";
-            botao.style.background = "#2563eb";
-            botao.style.color = "#ffffff";
-            document.body.appendChild(botao);
+        if (item.compras >= 2 && item.ultimaQuantidade < item.penultimaQuantidade) {
+          mensagens.push(`📉 Você reduziu a compra de ${item.nome} em relação à compra anterior.`);
         }
+
+        const produtoAtual = produtos.find(p => p.nome === item.nome);
+        if (produtoAtual && item.total >= Math.max(4, Number(produtoAtual.minimo || 0) * 2)) {
+          mensagens.push(`🧠 ${item.nome} tem consumo acumulado alto. Avalie se o estoque mínimo está adequado.`);
+        }
+      });
+
+      return mensagens;
     }
 
-    function abrirTela() {
-        if (!ESTADO.liberado) {
-            return;
-        }
+    function renderIa() {
+      const area = document.getElementById('listaIa');
+      const lista = produtosLista();
+      const excessos = produtos.filter(p => excessoQtd(p) > 0);
+      const comprados = lista.filter(p => p.comprado);
+      const mensagens = [];
 
-        const tela = elemento(IDS.tela);
+      if (lista.length === 0) {
+        mensagens.push('✅ Nenhum produto precisa de reposição agora. Sua lista está limpa.');
+      } else {
+        mensagens.push(`🛒 Existem ${lista.length} produto(s) para comprar. ${comprados.length} já foram marcados como OK.`);
+      }
 
-        if (!tela) {
-            return;
-        }
+      if (lista.length > 0) {
+        const nomes = lista
+          .slice(0, 4)
+          .map((p) => `${p.nome} (${quantidadeComUnidade(comprarQtd(p), p)})`)
+          .join(', ');
+        mensagens.push(`⚠️ Reposição necessária: ${nomes}${lista.length > 4 ? '...' : ''}.`);
+      }
 
-        tela.classList.add("aberta");
-        tela.setAttribute("aria-hidden", "false");
-        document.body.classList.add("listalar-gastos-aberto");
-        tela.scrollTo({ top: 0, behavior: "instant" });
-        renderizarPainel();
+      if (excessos.length > 0) {
+        const nomes = excessos.slice(0, 3).map(p => p.nome).join(', ');
+        mensagens.push(`💡 Você possui excesso em: ${nomes}${excessos.length > 3 ? '...' : ''}. Evite comprar agora.`);
+      }
+
+      const altoConsumo = produtos.filter(p => Number(p.historico || 0) >= Math.max(3, Number(p.minimo || 0) * 2));
+      if (altoConsumo.length > 0) {
+        const nomes = altoConsumo.slice(0, 3).map(p => p.nome).join(', ');
+        mensagens.push(`📊 Consumo alto detectado em ${nomes}. Considere aumentar o estoque mínimo.`);
+      }
+
+      const zerados = lista.filter(p => Number(p.estoque || 0) === 0);
+      if (zerados.length > 0) {
+        const nomes = zerados.slice(0, 3).map(p => p.nome).join(', ');
+        mensagens.push(`🚨 Atenção: ${nomes}${zerados.length > 3 ? '...' : ''} estão zerados.`);
+      }
+
+      const mensagensHistorico = gerarMensagensHistorico();
+      mensagensHistorico.slice(0, 3).forEach((m) => mensagens.push(m));
+
+      const termo = textoBusca('buscaIa');
+      const mensagensFiltradas = termo
+        ? mensagens.filter(m => m.toLowerCase().includes(termo))
+        : mensagens;
+
+      if (mensagensFiltradas.length === 0) {
+        area.innerHTML = '<div class="empty">Nenhum alerta encontrado.</div>';
+        return;
+      }
+
+      area.innerHTML = mensagensFiltradas.map(m => `<div class="ia-card">${m}</div>`).join('');
     }
 
-    function fecharTela() {
-        const tela = elemento(IDS.tela);
+    function renderizar() {
+      renderResumo();
 
-        if (!tela) {
-            return;
-        }
+      if (telaAtiva === 'estoque') {
+        renderEstoque();
+        return;
+      }
 
-        fecharModalManual();
-        tela.classList.remove("aberta");
-        tela.setAttribute("aria-hidden", "true");
-        document.body.classList.remove("listalar-gastos-aberto");
+      if (telaAtiva === 'ia') {
+        renderIa();
+        return;
+      }
+
+      renderLista();
     }
 
-    // ========================================================
-    // NORMALIZAÇÃO DA NOTA
-    // ========================================================
-
-    function obterListaItens(nota) {
-        const possibilidades = [
-            nota?.produtos,
-            nota?.itens,
-            nota?.items,
-            nota?.dados?.produtos,
-            nota?.dados?.itens,
-            nota?.nota?.produtos,
-            nota?.nota?.itens
-        ];
-
-        return possibilidades.find(Array.isArray) || [];
-    }
-
-    function obterPrimeiroValor(objeto, caminhos) {
-        for (const caminho of caminhos) {
-            const partes = caminho.split(".");
-            let atual = objeto;
-
-            for (const parte of partes) {
-                atual = atual?.[parte];
-            }
-
-            if (
-                atual !== undefined &&
-                atual !== null &&
-                atual !== ""
-            ) {
-                return atual;
-            }
-        }
-
-        return "";
-    }
-
-    function obterNomeEstabelecimento(nota) {
-        const valor = obterPrimeiroValor(
-            nota,
-            [
-                "mercadoNome",
-                "estabelecimento",
-                "supermercado",
-                "emitente.nome",
-                "emitente.razaoSocial",
-                "razaoSocial",
-                "nomeEmpresa",
-                "dados.mercadoNome",
-                "dados.estabelecimento",
-                "dados.emitente.nome",
-                "dados.emitente.razaoSocial",
-                "nota.mercadoNome",
-                "nota.estabelecimento",
-                "nota.emitente.nome",
-                "nota.emitente.razaoSocial"
-            ]
-        );
-
-        if (
-            typeof nota?.emitente === "string" &&
-            !valor
-        ) {
-            return normalizarTexto(nota.emitente);
-        }
-
-        return normalizarTexto(valor) ||
-            "Estabelecimento não identificado";
-    }
-
-    function obterCnpjEstabelecimento(nota) {
-        return somenteDigitos(
-            obterPrimeiroValor(
-                nota,
-                [
-                    "cnpj",
-                    "emitente.cnpj",
-                    "estabelecimentoCnpj",
-                    "dados.cnpj",
-                    "dados.emitente.cnpj",
-                    "nota.cnpj",
-                    "nota.emitente.cnpj"
-                ]
-            )
-        );
-    }
-
-    function obterDataCompraNota(nota) {
-        const valor = obterPrimeiroValor(
-            nota,
-            [
-                "dataCompra",
-                "data",
-                "dataEmissao",
-                "emissao",
-                "dados.dataCompra",
-                "dados.data",
-                "dados.dataEmissao",
-                "nota.dataCompra",
-                "nota.data",
-                "nota.dataEmissao"
-            ]
-        );
-
-        return converterParaData(valor || new Date());
-    }
-
-    function obterValorTotalNota(nota, itens) {
-        const valor = obterPrimeiroValor(
-            nota,
-            [
-                "total",
-                "valorTotal",
-                "totalNota",
-                "valor_total",
-                "dados.total",
-                "dados.valorTotal",
-                "nota.total",
-                "nota.valorTotal"
-            ]
-        );
-
-        const totalInformado = numeroSeguro(valor, NaN);
-
-        if (Number.isFinite(totalInformado)) {
-            return arredondarMoeda(totalInformado);
-        }
-
-        return arredondarMoeda(
-            itens.reduce(
-                (soma, item) =>
-                    soma + obterTotalItem(item),
-                0
-            )
-        );
-    }
-
-    function obterCodigoItem(item) {
-        return normalizarTexto(
-            obterPrimeiroValor(
-                item,
-                [
-                    "codigoItem",
-                    "codigo",
-                    "codigoProduto",
-                    "cod",
-                    "idProduto",
-                    "sku"
-                ]
-            )
-        );
-    }
-
-    function obterGtinItem(item) {
-        const valor = somenteDigitos(
-            obterPrimeiroValor(
-                item,
-                [
-                    "gtin",
-                    "ean",
-                    "codigoBarras",
-                    "codigoDeBarras",
-                    "cEAN"
-                ]
-            )
-        );
-
-        return [8, 12, 13, 14].includes(valor.length)
-            ? valor
-            : "";
-    }
-
-    function obterDescricaoItem(item, indice) {
-        return normalizarTexto(
-            obterPrimeiroValor(
-                item,
-                [
-                    "descricaoEditada",
-                    "produtoNome",
-                    "descricaoOriginal",
-                    "nome",
-                    "descricao",
-                    "produto",
-                    "item"
-                ]
-            )
-        ) || `Item ${indice + 1}`;
-    }
-
-    function obterDescricaoOriginalItem(item, indice) {
-        return normalizarTexto(
-            obterPrimeiroValor(
-                item,
-                [
-                    "descricaoOriginal",
-                    "descricao",
-                    "produtoNome",
-                    "nome",
-                    "produto",
-                    "item"
-                ]
-            )
-        ) || `Item ${indice + 1}`;
-    }
-
-    function obterQuantidadeItem(item) {
-        return Math.max(
-            0,
-            numeroSeguro(
-                obterPrimeiroValor(
-                    item,
-                    [
-                        "quantidade",
-                        "qtd",
-                        "qtde"
-                    ]
-                ),
-                1
-            )
-        );
-    }
-
-    function obterUnidadeItem(item) {
-        return normalizarTexto(
-            obterPrimeiroValor(
-                item,
-                [
-                    "unidade",
-                    "un",
-                    "tipoUnidade"
-                ]
-            )
-        ).toUpperCase().slice(0, 6);
-    }
-
-    function obterPrecoUnitarioItem(item) {
-        return arredondarMoeda(
-            numeroSeguro(
-                obterPrimeiroValor(
-                    item,
-                    [
-                        "precoUnitario",
-                        "valorUnitario",
-                        "preco",
-                        "valor"
-                    ]
-                ),
-                0
-            )
-        );
-    }
-
-    function obterTotalItem(item) {
-        const total = numeroSeguro(
-            obterPrimeiroValor(
-                item,
-                [
-                    "precoTotal",
-                    "total",
-                    "valorTotal",
-                    "subtotal",
-                    "valor_total"
-                ]
-            ),
-            NaN
-        );
-
-        if (Number.isFinite(total)) {
-            return arredondarMoeda(total);
-        }
-
-        return arredondarMoeda(
-            obterQuantidadeItem(item) *
-            obterPrecoUnitarioItem(item)
-        );
-    }
-
-    function normalizarNota(nota) {
-        const itensOriginais = obterListaItens(nota);
-        const estabelecimentoNome =
-            obterNomeEstabelecimento(nota);
-        const estabelecimentoCnpj =
-            obterCnpjEstabelecimento(nota);
-        const dataCompra =
-            obterDataCompraNota(nota);
-
-        const itens = itensOriginais.map(
-            (item, indice) => {
-                const codigoItem =
-                    obterCodigoItem(item);
-                const gtin = obterGtinItem(item);
-
-                return {
-                    ordem: indice + 1,
-                    codigoItem,
-                    gtin,
-                    descricaoOriginal:
-                        obterDescricaoOriginalItem(
-                            item,
-                            indice
-                        ),
-                    descricao:
-                        obterDescricaoItem(
-                            item,
-                            indice
-                        ),
-                    quantidade:
-                        obterQuantidadeItem(item),
-                    unidade:
-                        obterUnidadeItem(item),
-                    precoUnitario:
-                        obterPrecoUnitarioItem(item),
-                    valorTotal:
-                        obterTotalItem(item),
-                    identificadorFiscal:
-                        gtin ||
-                        (
-                            estabelecimentoCnpj &&
-                            codigoItem
-                                ? `${estabelecimentoCnpj}_${codigoItem}`
-                                : ""
-                        )
-                };
-            }
-        );
-
-        const valorTotal =
-            obterValorTotalNota(nota, itens);
-
-        const chaveAcesso = somenteDigitos(
-            obterPrimeiroValor(
-                nota,
-                [
-                    "chaveAcesso",
-                    "chave",
-                    "nota.chaveAcesso",
-                    "dados.chaveAcesso"
-                ]
-            )
-        );
-
-        const assinaturaBase = [
-            estabelecimentoCnpj,
-            dataParaISO(dataCompra),
-            valorTotal.toFixed(2),
-            itens.length,
-            itens.map(
-                (item) =>
-                    `${item.codigoItem}:${item.valorTotal}`
-            ).join("|")
-        ].join("::");
-
-        return {
-            id:
-                chaveAcesso ||
-                `pdf_${hashTexto(assinaturaBase)}`,
-
-            tipoRegistro: "nota_fiscal",
-            origem: "PDF",
-
-            estabelecimentoNome,
-            estabelecimentoCnpj,
-
-            dataCompra: dataParaISO(dataCompra),
-            dataCompraMs: dataCompra.getTime(),
-            competencia: competenciaDaData(dataCompra),
-
-            valorTotal,
-            quantidadeItens: itens.length,
-
-            chaveAcesso,
-            itens
-        };
-    }
-
-    // ========================================================
-    // GRAVAÇÃO
-    // ========================================================
-
-    async function apagarItensExistentes(
-        referenciaGasto
-    ) {
-        const firebase = ESTADO.firebase;
-        const itensSnapshot = await firebase.getDocs(
-            firebase.collection(
-                referenciaGasto,
-                "itens"
-            )
-        );
-
-        if (itensSnapshot.empty) {
-            return;
-        }
-
-        let batch = firebase.writeBatch(firebase.db);
-        let operacoes = 0;
-
-        for (const documento of itensSnapshot.docs) {
-            batch.delete(documento.ref);
-            operacoes += 1;
-
-            if (operacoes >= 400) {
-                await batch.commit();
-                batch = firebase.writeBatch(firebase.db);
-                operacoes = 0;
-            }
-        }
-
-        if (operacoes > 0) {
-            await batch.commit();
-        }
-    }
-
-    async function salvarRegistroComItens(
-        registro,
-        itens
-    ) {
-        if (
-            ESTADO.salvando ||
-            !ESTADO.firebase ||
-            !ESTADO.usuario ||
-            !ESTADO.familiaId
-        ) {
-            return;
-        }
-
-        ESTADO.salvando = true;
-        definirCarregando(true, "Salvando compra...");
-
-        const firebase = ESTADO.firebase;
-        const gastos = colecaoGastos();
-
-        if (!gastos) {
-            ESTADO.salvando = false;
-            definirCarregando(false);
-            throw new Error("FAMILIA_NAO_IDENTIFICADA");
-        }
-
-        const referenciaGasto = firebase.doc(
-            gastos,
-            registro.id
-        );
-
-        try {
-            await apagarItensExistentes(
-                referenciaGasto
-            );
-
-            await firebase.setDoc(
-                referenciaGasto,
-                {
-                    tipoRegistro:
-                        registro.tipoRegistro,
-                    origem:
-                        registro.origem,
-
-                    estabelecimentoNome:
-                        registro.estabelecimentoNome || "",
-                    estabelecimentoCnpj:
-                        registro.estabelecimentoCnpj || "",
-
-                    dataCompra:
-                        registro.dataCompra,
-                    dataCompraMs:
-                        registro.dataCompraMs,
-                    competencia:
-                        registro.competencia,
-
-                    valorTotal:
-                        arredondarMoeda(
-                            registro.valorTotal
-                        ),
-                    quantidadeItens:
-                        Number(
-                            registro.quantidadeItens ||
-                            itens.length
-                        ),
-
-                    chaveAcesso:
-                        registro.chaveAcesso || "",
-
-                    familiaId:
-                        ESTADO.familiaId,
-                    usuarioId:
-                        ESTADO.usuario.uid,
-
-                    atualizadoEm:
-                        firebase.serverTimestamp(),
-
-                    criadoEm:
-                        registro.criadoEm ||
-                        firebase.serverTimestamp()
-                },
-                {
-                    merge: true
-                }
-            );
-
-            let batch = firebase.writeBatch(firebase.db);
-            let operacoes = 0;
-
-            for (
-                let indice = 0;
-                indice < itens.length;
-                indice += 1
-            ) {
-                const item = itens[indice];
-                const idItem = String(
-                    item.ordem || indice + 1
-                ).padStart(4, "0");
-
-                const referenciaItem = firebase.doc(
-                    firebase.collection(
-                        referenciaGasto,
-                        "itens"
-                    ),
-                    idItem
-                );
-
-                batch.set(
-                    referenciaItem,
-                    {
-                        ordem:
-                            item.ordem || indice + 1,
-                        codigoItem:
-                            item.codigoItem || "",
-                        produtoId:
-                            item.produtoId || "",
-                        gtin:
-                            item.gtin || "",
-                        descricaoOriginal:
-                            item.descricaoOriginal ||
-                            item.descricao ||
-                            "",
-                        descricao:
-                            item.descricao || "",
-                        quantidade:
-                            numeroSeguro(
-                                item.quantidade,
-                                0
-                            ),
-                        unidade:
-                            item.unidade || "",
-                        precoUnitario:
-                            arredondarMoeda(
-                                item.precoUnitario
-                            ),
-                        valorTotal:
-                            arredondarMoeda(
-                                item.valorTotal
-                            ),
-                        identificadorFiscal:
-                            item.identificadorFiscal || ""
-                    }
-                );
-
-                operacoes += 1;
-
-                if (operacoes >= 400) {
-                    await batch.commit();
-                    batch = firebase.writeBatch(
-                        firebase.db
-                    );
-                    operacoes = 0;
-                }
-            }
-
-            if (operacoes > 0) {
-                await batch.commit();
-            }
-
-            mostrarAviso(
-                registro.tipoRegistro === "nota_fiscal"
-                    ? "Nota fiscal salva com sucesso."
-                    : "Compra manual salva com sucesso.",
-                "sucesso"
-            );
-
-            window.dispatchEvent(
-                new CustomEvent(
-                    "listalar:gasto-salvo",
-                    {
-                        detail: {
-                            gastoId:
-                                registro.id,
-                            tipoRegistro:
-                                registro.tipoRegistro,
-                            familiaId:
-                                ESTADO.familiaId
-                        }
-                    }
-                )
-            );
-        } finally {
-            ESTADO.salvando = false;
-            definirCarregando(false);
-        }
-    }
-
-    // ========================================================
-    // IMPORTAÇÃO PDF
-    // ========================================================
-
-    function abrirImportadorPdf() {
-        if (!ESTADO.liberado) {
-            return;
-        }
-
-        const importador =
-            window.ListaLarConferenciaNota ||
-            window.ImportadorNotaPDF;
-
-        if (
-            !importador ||
-            typeof importador.abrir !== "function"
-        ) {
-            mostrarAviso(
-                "O importador de PDF não está disponível.",
-                "erro"
-            );
-            return;
-        }
-
-        try {
-            importador.abrir();
-        } catch (erro) {
-            console.error(
-                "ListaLar Gastos: erro ao abrir PDF:",
-                erro
-            );
-
-            mostrarAviso(
-                "Não foi possível abrir o PDF da nota.",
-                "erro"
-            );
-        }
-    }
-
-    function extrairNotaDoEvento(evento) {
-        const detalhe = evento?.detail;
-
-        return (
-            detalhe?.data?.nota ||
-            detalhe?.data?.dados ||
-            detalhe?.data ||
-            detalhe?.nota ||
-            detalhe?.dados ||
-            detalhe
-        );
-    }
-
-    function notaJaRecebida(nota) {
-        const agora = Date.now();
-
-        if (
-            nota === ESTADO.ultimaNotaReferencia &&
-            agora - ESTADO.ultimaNotaRecebidaEm < 1800
-        ) {
-            return true;
-        }
-
-        ESTADO.ultimaNotaReferencia = nota;
-        ESTADO.ultimaNotaRecebidaEm = agora;
-        return false;
-    }
-
-    async function receberNotaImportada(evento) {
-        if (!ESTADO.liberado) {
-            return;
-        }
-
-        const nota = extrairNotaDoEvento(evento);
-
-        if (
-            !nota ||
-            typeof nota !== "object" ||
-            notaJaRecebida(nota)
-        ) {
-            return;
-        }
-
-        try {
-            const registro = normalizarNota(nota);
-
-            if (!registro.itens.length) {
-                throw new Error("NOTA_SEM_ITENS");
-            }
-
-            if (registro.valorTotal <= 0) {
-                throw new Error("NOTA_SEM_VALOR");
-            }
-
-            await salvarRegistroComItens(
-                registro,
-                registro.itens
-            );
-
-            abrirTela();
-        } catch (erro) {
-            console.error(
-                "ListaLar Gastos: erro ao salvar nota:",
-                erro
-            );
-
-            mostrarAviso(
-                erro?.message === "NOTA_SEM_ITENS"
-                    ? "A nota não possui itens válidos."
-                    : "A nota foi lida, mas não pôde ser salva.",
-                "erro"
-            );
-        }
-    }
-
-    // ========================================================
-    // COMPRA MANUAL
-    // ========================================================
-
-    function obterItensManuaisAtuais(
-        produtoIdsPermitidos = null
-    ) {
-        try {
-            if (
-                !window.ListaLarPrecos ||
-                typeof window.ListaLarPrecos
-                    .obterItens !== "function"
-            ) {
-                return [];
-            }
-
-            const idsPermitidos =
-                Array.isArray(produtoIdsPermitidos)
-                    ? new Set(
-                        produtoIdsPermitidos
-                            .map((id) => String(id || ""))
-                            .filter(Boolean)
-                    )
-                    : null;
-
-            return window.ListaLarPrecos
-                .obterItens()
-                .filter((item) => {
-                    const produtoId = String(
-                        item.produtoId || ""
-                    );
-
-                    if (
-                        idsPermitidos &&
-                        !idsPermitidos.has(produtoId)
-                    ) {
-                        return false;
-                    }
-
-                    return (
-                        numeroSeguro(
-                            item.quantidade,
-                            0
-                        ) > 0 &&
-                        numeroSeguro(
-                            item.precoUnitario,
-                            0
-                        ) > 0
-                    );
-                })
-                .map(
-                    (item, indice) => ({
-                        ordem: indice + 1,
-                        produtoId:
-                            String(
-                                item.produtoId || ""
-                            ),
-                        codigoItem: "",
-                        gtin: "",
-                        descricaoOriginal:
-                            normalizarTexto(
-                                item.nome
-                            ) ||
-                            `Produto ${indice + 1}`,
-                        descricao:
-                            normalizarTexto(
-                                item.nome
-                            ) ||
-                            `Produto ${indice + 1}`,
-                        quantidade:
-                            numeroSeguro(
-                                item.quantidade,
-                                0
-                            ),
-                        unidade: "",
-                        precoUnitario:
-                            arredondarMoeda(
-                                item.precoUnitario
-                            ),
-                        valorTotal:
-                            arredondarMoeda(
-                                item.subtotal
-                            ),
-                        identificadorFiscal: ""
-                    })
-                );
-        } catch (erro) {
-            console.error(
-                "ListaLar Gastos: erro ao ler preços manuais:",
-                erro
-            );
-
-            return [];
-        }
-    }
-
-    function resolverFluxoCompraManual(resultado) {
-        const resolver =
-            ESTADO.resolverCompraManual;
-
-        ESTADO.resolverCompraManual = null;
-        ESTADO.contextoCompraManual = null;
-
-        if (typeof resolver === "function") {
-            resolver(resultado);
-        }
-    }
-
-    function abrirModalManual({
-        produtoIds = null,
-        origem = "tela_gastos"
-    } = {}) {
-        if (ESTADO.resolverCompraManual) {
-            return Promise.resolve({
-                necessario: true,
-                salvo: false,
-                cancelado: true,
-                motivo: "FLUXO_JA_ABERTO"
-            });
-        }
-
-        const itens =
-            obterItensManuaisAtuais(produtoIds);
-
-        if (!itens.length) {
-            return Promise.resolve({
-                necessario: false,
-                salvo: false,
-                cancelado: false
-            });
-        }
-
-        const total = arredondarMoeda(
-            itens.reduce(
-                (soma, item) =>
-                    soma + item.valorTotal,
-                0
-            )
-        );
-
-        elemento(IDS.manualData).value =
-            dataHojeISO();
-
-        elemento(IDS.manualResumo).textContent =
-            `${itens.length} ${
-                itens.length === 1
-                    ? "item"
-                    : "itens"
-            } · ${formatarMoeda(total)}`;
-
-        const modal = elemento(IDS.modalManual);
-        modal.dataset.itens = JSON.stringify(itens);
-        modal.classList.add("aberto");
-        modal.setAttribute("aria-hidden", "false");
-
-        ESTADO.contextoCompraManual = {
-            origem,
-            total,
-            quantidadeItens: itens.length
-        };
-
-        window.setTimeout(
-            () =>
-                elemento(
-                    IDS.manualEstabelecimento
-                )?.focus(),
-            0
-        );
-
-        return new Promise((resolve) => {
-            ESTADO.resolverCompraManual = resolve;
-        });
-    }
-
-    function fecharModalManual({
-        resolver = true,
-        resultado = {
-            necessario: true,
-            salvo: false,
-            cancelado: true
-        }
-    } = {}) {
-        const modal = elemento(IDS.modalManual);
-
-        if (modal) {
-            modal.classList.remove("aberto");
-            modal.setAttribute(
-                "aria-hidden",
-                "true"
-            );
-            delete modal.dataset.itens;
-        }
-
-        if (resolver) {
-            resolverFluxoCompraManual(resultado);
-        }
-    }
-
-    async function confirmarCompraManual() {
-        if (ESTADO.salvando) {
-            return;
-        }
-
-        const modal = elemento(IDS.modalManual);
-        const estabelecimentoNome =
-            normalizarTexto(
-                elemento(
-                    IDS.manualEstabelecimento
-                )?.value
-            );
-
-        const dataCompraValor =
-            elemento(IDS.manualData)?.value ||
-            dataHojeISO();
-
-        let itens = [];
-
-        try {
-            itens = JSON.parse(
-                modal?.dataset?.itens || "[]"
-            );
-        } catch {
-            itens = [];
-        }
-
-        if (!estabelecimentoNome) {
-            mostrarAviso(
-                "Informe o estabelecimento.",
-                "erro"
-            );
-            elemento(
-                IDS.manualEstabelecimento
-            )?.focus();
-            return;
-        }
-
-        if (!itens.length) {
-            fecharModalManual({
-                resultado: {
-                    necessario: false,
-                    salvo: false,
-                    cancelado: true,
-                    motivo: "SEM_ITENS_COM_PRECO"
-                }
-            });
-            mostrarAviso(
-                "Nenhum item com preço foi encontrado.",
-                "erro"
-            );
-            return;
-        }
-
-        const dataCompra =
-            converterParaData(dataCompraValor);
-
-        const valorTotal = arredondarMoeda(
-            itens.reduce(
-                (soma, item) =>
-                    soma +
-                    numeroSeguro(
-                        item.valorTotal,
-                        0
-                    ),
-                0
-            )
-        );
-
-        const assinatura = [
-            ESTADO.familiaId,
-            dataParaISO(dataCompra),
-            normalizarTexto(
-                estabelecimentoNome
-            ).toLowerCase(),
-            valorTotal.toFixed(2),
-            itens.map(
-                (item) =>
-                    `${item.produtoId}:${item.valorTotal}`
-            ).join("|")
-        ].join("::");
-
-        const registro = {
-            id: `manual_${hashTexto(assinatura)}`,
-            tipoRegistro: "compra_manual",
-            origem: "MANUAL",
-            estabelecimentoNome,
-            estabelecimentoCnpj: "",
-            dataCompra: dataParaISO(dataCompra),
-            dataCompraMs: dataCompra.getTime(),
-            competencia: competenciaDaData(dataCompra),
-            valorTotal,
-            quantidadeItens: itens.length,
-            chaveAcesso: ""
-        };
-
-        const botao = elemento(IDS.manualConfirmar);
-        botao.disabled = true;
-
-        try {
-            await salvarRegistroComItens(
-                registro,
-                itens
-            );
-
-            elemento(
-                IDS.manualEstabelecimento
-            ).value = "";
-
-            fecharModalManual({
-                resultado: {
-                    necessario: true,
-                    salvo: true,
-                    cancelado: false,
-                    gastoId: registro.id,
-                    valorTotal,
-                    quantidadeItens: itens.length,
-                    dataCompra: registro.dataCompra,
-                    estabelecimentoNome
-                }
-            });
-        } catch (erro) {
-            console.error(
-                "ListaLar Gastos: erro ao salvar compra manual:",
-                erro
-            );
-
-            mostrarAviso(
-                "Não foi possível salvar a compra. A lista não será finalizada.",
-                "erro"
-            );
-        } finally {
-            botao.disabled = false;
-        }
-    }
-
-
-    function obterResumoCompraManualAoFinalizar({
-        produtoIds = []
-    } = {}) {
-        const itens = obterItensManuaisAtuais(produtoIds);
-
-        if (!itens.length) {
-            return {
-                necessario: false,
-                quantidadeItens: 0,
-                valorTotal: 0
-            };
-        }
-
-        return {
-            necessario: true,
-            quantidadeItens: itens.length,
-            valorTotal: arredondarMoeda(
-                itens.reduce(
-                    (soma, item) =>
-                        soma + numeroSeguro(item.valorTotal, 0),
-                    0
-                )
-            )
-        };
-    }
-
-    async function salvarCompraManualAoFinalizar({
-        produtoIds = [],
-        estabelecimentoNome = "",
-        dataCompra = ""
-    } = {}) {
-        if (ESTADO.salvando) {
-            throw new Error("SALVAMENTO_EM_ANDAMENTO");
-        }
-
-        const itens = obterItensManuaisAtuais(produtoIds);
-
-        if (!itens.length) {
-            return {
-                necessario: false,
-                salvo: false,
-                cancelado: false
-            };
-        }
-
-        const nome = normalizarTexto(estabelecimentoNome);
-
-        if (!nome) {
-            throw new Error("ESTABELECIMENTO_OBRIGATORIO");
-        }
-
-        const dataCompraConvertida = converterParaData(
-            dataCompra || dataHojeISO()
-        );
-
-        const valorTotal = arredondarMoeda(
-            itens.reduce(
-                (soma, item) =>
-                    soma + numeroSeguro(item.valorTotal, 0),
-                0
-            )
-        );
-
-        const assinatura = [
-            ESTADO.familiaId,
-            dataParaISO(dataCompraConvertida),
-            nome.toLowerCase(),
-            valorTotal.toFixed(2),
-            itens.map(
-                (item) => `${item.produtoId}:${item.valorTotal}`
-            ).join("|")
-        ].join("::");
-
-        const registro = {
-            id: `manual_${hashTexto(assinatura)}`,
-            tipoRegistro: "compra_manual",
-            origem: "MANUAL",
-            estabelecimentoNome: nome,
-            estabelecimentoCnpj: "",
-            dataCompra: dataParaISO(dataCompraConvertida),
-            dataCompraMs: dataCompraConvertida.getTime(),
-            competencia: competenciaDaData(dataCompraConvertida),
-            valorTotal,
-            quantidadeItens: itens.length,
-            chaveAcesso: ""
-        };
-
-        await salvarRegistroComItens(registro, itens);
-
-        return {
-            necessario: true,
-            salvo: true,
-            cancelado: false,
-            gastoId: registro.id,
-            valorTotal,
-            quantidadeItens: itens.length,
-            dataCompra: registro.dataCompra,
-            estabelecimentoNome: nome
-        };
-    }
-
-    // ========================================================
-    // HISTÓRICO E DASHBOARD
-    // ========================================================
-
-    function pararHistorico() {
-        if (ESTADO.unsubscribeGastos) {
-            ESTADO.unsubscribeGastos();
-            ESTADO.unsubscribeGastos = null;
-        }
-
-        ESTADO.registros = [];
-        renderizarPainel();
-    }
-
-    function iniciarHistorico() {
-        pararHistorico();
-
-        const gastos = colecaoGastos();
-
-        if (!gastos) {
-            return;
-        }
-
-        definirCarregando(
-            true,
-            "Carregando histórico..."
-        );
-
-        const firebase = ESTADO.firebase;
-        const consulta = firebase.query(
-            gastos,
-            firebase.orderBy(
-                "dataCompraMs",
-                "desc"
-            ),
-            firebase.limit(
-                LIMITE_HISTORICO
-            )
-        );
-
-        ESTADO.unsubscribeGastos =
-            firebase.onSnapshot(
-                consulta,
-                (snapshot) => {
-                    ESTADO.registros =
-                        snapshot.docs.map(
-                            (documento) => ({
-                                id: documento.id,
-                                ...documento.data()
-                            })
-                        );
-
-                    definirCarregando(false);
-                    renderizarPainel();
-                },
-                (erro) => {
-                    console.error(
-                        "ListaLar Gastos: erro ao carregar histórico:",
-                        erro
-                    );
-
-                    definirCarregando(false);
-                    mostrarAviso(
-                        "Não foi possível carregar o histórico.",
-                        "erro"
-                    );
-                }
-            );
-    }
-
-    function inicioDoPeriodo(periodo) {
-        const agora = new Date();
-        agora.setHours(0, 0, 0, 0);
-
-        if (periodo === "mes_atual") {
-            return new Date(
-                agora.getFullYear(),
-                agora.getMonth(),
-                1
-            ).getTime();
-        }
-
-        if (periodo === "ultimos_3_meses") {
-            return new Date(
-                agora.getFullYear(),
-                agora.getMonth() - 2,
-                1
-            ).getTime();
-        }
-
-        if (periodo === "ano_atual") {
-            return new Date(
-                agora.getFullYear(),
-                0,
-                1
-            ).getTime();
-        }
-
-        return 0;
-    }
-
-    function registrosFiltrados() {
-        const inicio = inicioDoPeriodo(
-            ESTADO.periodo
-        );
-
-        return ESTADO.registros.filter(
-            (registro) =>
-                numeroSeguro(
-                    registro.dataCompraMs,
-                    0
-                ) >= inicio
-        );
-    }
-
-    function atualizarIndicadores(registros) {
-        const total = arredondarMoeda(
-            registros.reduce(
-                (soma, registro) =>
-                    soma +
-                    numeroSeguro(
-                        registro.valorTotal,
-                        0
-                    ),
-                0
-            )
-        );
-
-        const notas = arredondarMoeda(
-            registros
-                .filter(
-                    (registro) =>
-                        registro.tipoRegistro ===
-                        "nota_fiscal"
-                )
-                .reduce(
-                    (soma, registro) =>
-                        soma +
-                        numeroSeguro(
-                            registro.valorTotal,
-                            0
-                        ),
-                    0
-                )
-        );
-
-        const manuais = arredondarMoeda(
-            registros
-                .filter(
-                    (registro) =>
-                        registro.tipoRegistro ===
-                        "compra_manual"
-                )
-                .reduce(
-                    (soma, registro) =>
-                        soma +
-                        numeroSeguro(
-                            registro.valorTotal,
-                            0
-                        ),
-                    0
-                )
-        );
-
-        const ticket = registros.length
-            ? arredondarMoeda(
-                total / registros.length
-            )
-            : 0;
-
-        elemento(IDS.totalPeriodo).textContent =
-            formatarMoeda(total);
-        elemento(IDS.totalCompras).textContent =
-            String(registros.length);
-        elemento(IDS.totalNotas).textContent =
-            formatarMoeda(notas);
-        elemento(IDS.totalManuais).textContent =
-            formatarMoeda(manuais);
-        elemento(IDS.ticketMedio).textContent =
-            formatarMoeda(ticket);
-    }
-
-    function ultimosSeisMeses() {
-        const agora = new Date();
-        const meses = [];
-
-        for (let deslocamento = 5; deslocamento >= 0; deslocamento -= 1) {
-            const data = new Date(
-                agora.getFullYear(),
-                agora.getMonth() - deslocamento,
-                1
-            );
-
-            meses.push({
-                competencia:
-                    competenciaDaData(data),
-                rotulo:
-                    data.toLocaleDateString(
-                        "pt-BR",
-                        {
-                            month: "short"
-                        }
-                    ).replace(".", "")
-            });
-        }
-
-        return meses;
-    }
-
-    function renderizarGraficoMensal() {
-        const container =
-            elemento(IDS.graficoMensal);
-
-        if (!container) {
-            return;
-        }
-
-        const meses = ultimosSeisMeses();
-        const totais = meses.map(
-            (mes) =>
-                ESTADO.registros
-                    .filter(
-                        (registro) =>
-                            registro.competencia ===
-                            mes.competencia
-                    )
-                    .reduce(
-                        (soma, registro) =>
-                            soma +
-                            numeroSeguro(
-                                registro.valorTotal,
-                                0
-                            ),
-                        0
-                    )
-        );
-
-        const maior = Math.max(...totais, 0);
-
-        container.innerHTML = meses.map(
-            (mes, indice) => {
-                const total = totais[indice];
-                const altura = maior > 0
-                    ? Math.max(
-                        4,
-                        Math.round(
-                            (total / maior) * 112
-                        )
-                    )
-                    : 4;
-
-                return `
-                    <div class="listalar-gastos-barra-coluna">
-                        <div class="listalar-gastos-barra-area">
-                            <div
-                                class="listalar-gastos-barra"
-                                style="height: ${altura}px"
-                                title="${escaparHTML(
-                                    formatarMoeda(total)
-                                )}"
-                            ></div>
-                        </div>
-
-                        <strong>
-                            ${escaparHTML(
-                                total > 0
-                                    ? formatarMoeda(total)
-                                        .replace("R$", "")
-                                        .trim()
-                                    : "0"
-                            )}
-                        </strong>
-
-                        <small>
-                            ${escaparHTML(mes.rotulo)}
-                        </small>
-                    </div>
-                `;
-            }
-        ).join("");
-    }
-
-    function renderizarGraficoOrigem(registros) {
-        const container =
-            elemento(IDS.graficoOrigem);
-
-        if (!container) {
-            return;
-        }
-
-        const totalPdf = registros
-            .filter(
-                (registro) =>
-                    registro.tipoRegistro ===
-                    "nota_fiscal"
-            )
-            .reduce(
-                (soma, registro) =>
-                    soma +
-                    numeroSeguro(
-                        registro.valorTotal,
-                        0
-                    ),
-                0
-            );
-
-        const totalManual = registros
-            .filter(
-                (registro) =>
-                    registro.tipoRegistro ===
-                    "compra_manual"
-            )
-            .reduce(
-                (soma, registro) =>
-                    soma +
-                    numeroSeguro(
-                        registro.valorTotal,
-                        0
-                    ),
-                0
-            );
-
-        const totalGeral =
-            totalPdf + totalManual;
-
-        const percentualPdf = totalGeral > 0
-            ? (totalPdf / totalGeral) * 100
-            : 0;
-
-        const percentualManual = totalGeral > 0
-            ? (totalManual / totalGeral) * 100
-            : 0;
-
-        container.innerHTML = `
-            <div class="listalar-gastos-origem-linha">
-                <div class="listalar-gastos-origem-cabecalho">
-                    <span>Nota fiscal em PDF</span>
-                    <strong>${formatarMoeda(totalPdf)}</strong>
-                </div>
-
-                <div class="listalar-gastos-origem-trilho">
-                    <div
-                        class="listalar-gastos-origem-preenchimento"
-                        style="width: ${percentualPdf}%"
-                    ></div>
-                </div>
-            </div>
-
-            <div class="listalar-gastos-origem-linha">
-                <div class="listalar-gastos-origem-cabecalho">
-                    <span>Compra manual</span>
-                    <strong>${formatarMoeda(totalManual)}</strong>
-                </div>
-
-                <div class="listalar-gastos-origem-trilho">
-                    <div
-                        class="listalar-gastos-origem-preenchimento manual"
-                        style="width: ${percentualManual}%"
-                    ></div>
-                </div>
-            </div>
-        `;
-    }
-
-    function renderizarHistorico(registros) {
-        const container = elemento(IDS.historico);
-
-        if (!container) {
-            return;
-        }
-
-        if (!registros.length) {
-            container.innerHTML = `
-                <div class="listalar-gastos-vazio">
-                    Nenhuma compra salva neste período.
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = registros.map(
-            (registro) => {
-                const manual =
-                    registro.tipoRegistro ===
-                    "compra_manual";
-
-                const estabelecimento =
-                    registro.estabelecimentoNome ||
-                    (
-                        manual
-                            ? "Compra manual"
-                            : "Estabelecimento não identificado"
-                    );
-
-                const quantidade =
-                    Number(
-                        registro.quantidadeItens || 0
-                    );
-
-                return `
-                    <article
-                        class="listalar-gastos-registro ${
-                            manual ? "manual" : ""
-                        }"
-                    >
-                        <div
-                            class="listalar-gastos-registro-icone"
-                            aria-hidden="true"
-                        >
-                            ${manual ? "💵" : "🧾"}
-                        </div>
-
-                        <div
-                            class="listalar-gastos-registro-conteudo"
-                        >
-                            <strong>
-                                ${escaparHTML(estabelecimento)}
-                            </strong>
-
-                            <small>
-                                ${manual
-                                    ? "Compra manual"
-                                    : "Nota fiscal em PDF"
-                                }
-                                · ${escaparHTML(
-                                    formatarData(
-                                        registro.dataCompra ||
-                                        registro.dataCompraMs
-                                    )
-                                )}
-                                · ${quantidade}
-                                ${quantidade === 1
-                                    ? "item"
-                                    : "itens"
-                                }
-                            </small>
-                        </div>
-
-                        <div
-                            class="listalar-gastos-registro-valor"
-                        >
-                            ${formatarMoeda(
-                                registro.valorTotal
-                            )}
-                        </div>
-                    </article>
-                `;
-            }
-        ).join("");
-    }
-
-    function renderizarPainel() {
-        if (!ESTADO.interfaceInicializada) {
-            return;
-        }
-
-        const registros = registrosFiltrados();
-
-        atualizarIndicadores(registros);
-        renderizarGraficoMensal();
-        renderizarGraficoOrigem(registros);
-        renderizarHistorico(registros);
-    }
-
-    // ========================================================
-    // EVENTOS E API
-    // ========================================================
-
-    function configurarEventos() {
-        elemento(IDS.botaoMenu)?.addEventListener(
-            "click",
-            abrirTela
-        );
-
-        elemento(IDS.botaoFechar)?.addEventListener(
-            "click",
-            fecharTela
-        );
-
-        elemento(IDS.botaoImportarPdf)?.addEventListener(
-            "click",
-            abrirImportadorPdf
-        );
-
-        elemento(IDS.manualCancelar)?.addEventListener(
-            "click",
-            () => fecharModalManual()
-        );
-
-        elemento(IDS.manualConfirmar)?.addEventListener(
-            "click",
-            confirmarCompraManual
-        );
-
-        elemento(IDS.seletorPeriodo)?.addEventListener(
-            "change",
-            (evento) => {
-                ESTADO.periodo =
-                    evento.target.value;
-                renderizarPainel();
-            }
-        );
-
-        elemento(IDS.modalManual)?.addEventListener(
-            "click",
-            (evento) => {
-                if (
-                    evento.target ===
-                    elemento(IDS.modalManual)
-                ) {
-                    fecharModalManual();
-                }
-            }
-        );
-
-        document.addEventListener(
-            "keydown",
-            (evento) => {
-                if (evento.key !== "Escape") {
-                    return;
-                }
-
-                if (
-                    elemento(IDS.modalManual)
-                        ?.classList
-                        .contains("aberto")
-                ) {
-                    fecharModalManual();
-                    return;
-                }
-
-                fecharTela();
-            }
-        );
-
-        window.addEventListener(
-            "listalar:nota-importada",
-            receberNotaImportada
-        );
-
-        window.addEventListener(
-            "listalar:nota-pdf-importada",
-            receberNotaImportada
-        );
-    }
-
-    window.ListaLarGastos = Object.freeze({
-        versao: VERSAO,
-        abrir: abrirTela,
-        fechar: fecharTela,
-        importarCompra: abrirImportadorPdf,
-        importarNF: abrirImportadorPdf,
-        abrirImportadorPdf,
-        salvarCompraManual: abrirModalManual,
-        obterResumoCompraManualAoFinalizar,
-        salvarCompraManualAoFinalizar,
-        obterFamiliaId() {
-            return ESTADO.familiaId;
-        },
-        estaLiberado() {
-            return ESTADO.liberado;
-        },
-        obterRegistros() {
-            return [...ESTADO.registros];
-        }
+    document.getElementById('novoProduto').addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') adicionarProduto();
     });
 
-    function iniciar() {
-        criarEstilos();
-        iniciarControleAcesso();
+    document.getElementById('buscaEstoque').addEventListener('input', function() {
+      if (telaAtiva === 'estoque') {
+        renderEstoque();
+      }
+    });
 
-        console.log(
-            `✅ Módulo Gastos carregado — versão ${VERSAO}`
-        );
-    }
+    document.getElementById('buscaLista').addEventListener('input', function() {
+      if (telaAtiva === 'lista') {
+        renderLista();
+      }
+    });
 
-    window.addEventListener(
-        "beforeunload",
-        pararHistorico
-    );
+    document.getElementById('buscaIa').addEventListener('input', function() {
+      if (telaAtiva === 'ia') {
+        renderIa();
+      }
+    });
 
-    if (document.readyState === "loading") {
-        document.addEventListener(
-            "DOMContentLoaded",
-            iniciar,
-            { once: true }
-        );
-    } else {
-        iniciar();
-    }
-})();
+    document.getElementById('unitModal').addEventListener('click', function(event) {
+      if (event.target.id === 'unitModal') {
+        fecharModalUnidade();
+      }
+    });
+
+    document.getElementById('appModal').addEventListener('click', function(event) {
+      if (
+        event.target.id === 'appModal' &&
+        document.querySelectorAll('#appModalAcoes .app-modal-btn').length === 1
+      ) {
+        fecharAppModal(true);
+      }
+    });
+
+    document.getElementById('shareModal').addEventListener('click', function(event) {
+      if (event.target.id === 'shareModal') fecharModalCompartilhar();
+    });
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        fecharModalCompartilhar();
+        fecharModalUnidade();
+      }
+    });
+
+
+    onAuthStateChanged(auth, async (user) => {
+      const loginScreen = document.getElementById('loginScreen');
+      const conteudoApp = document.getElementById('conteudoApp');
+      const loginStatus = document.getElementById('loginStatus');
+
+      if (!user) {
+        limparListeners();
+        usuarioAtual = null;
+        familiaIdAtual = null;
+        produtos = [];
+        historicoCompras = [];
+        historicoCarregado = false;
+        carregandoHistorico = false;
+        unidadesAntigasVerificadas = false;
+        telaAtiva = 'lista';
+        ultimoUidInicializado = null;
+        inicializacaoEmAndamento = false;
+        loginScreen.classList.remove('hidden');
+        conteudoApp.classList.add('hidden');
+
+        const tokenConvite = obterTokenConviteDaUrl();
+        loginStatus.textContent = tokenConvite
+          ? 'Convite recebido. Entre com o Google para participar da família.'
+          : '';
+
+        return;
+      }
+
+      if (inicializacaoEmAndamento) return;
+
+      const tokenConvite = obterTokenConviteDaUrl();
+      if (ultimoUidInicializado === user.uid && !tokenConvite) return;
+
+      inicializacaoEmAndamento = true;
+
+      try {
+        loginStatus.textContent = tokenConvite
+          ? 'Entrando na família...'
+          : 'Preparando sua família...';
+
+        usuarioAtual = user;
+        atualizarUsuarioNoCabecalho(user);
+
+        if (tokenConvite) {
+          await entrarNaFamiliaPorConvite(user, tokenConvite);
+        }
+
+        await prepararFamiliaDoUsuario(user);
+        await iniciarDadosDaFamilia();
+
+        ultimoUidInicializado = user.uid;
+        loginScreen.classList.add('hidden');
+        conteudoApp.classList.remove('hidden');
+        await abrirTela('lista');
+      } catch (erro) {
+        console.error(erro);
+
+        if (erro.message === 'CRIACAO_FAMILIA_CANCELADA') {
+          loginStatus.textContent = 'Criação da família cancelada.';
+        } else if (erro.message === 'ENTRADA_FAMILIA_CANCELADA') {
+          limparConvitePendente();
+          removerConviteDaUrl();
+          loginStatus.textContent = 'Entrada na família cancelada.';
+        } else if (
+          erro.message === 'CONVITE_NAO_ENCONTRADO' ||
+          erro.message === 'CONVITE_INVALIDO'
+        ) {
+          limparConvitePendente();
+          removerConviteDaUrl();
+          loginStatus.textContent = 'Este convite não existe ou não está mais ativo.';
+        } else {
+          loginStatus.textContent = 'Erro ao preparar o aplicativo. Verifique sua conexão e tente novamente.';
+        }
+      } finally {
+        inicializacaoEmAndamento = false;
+      }
+    });
+
+</script>
+
+<script src="./pwa-update.js" defer></script>
+
+<script type="module" src="./admin-menu.js"></script>
+<script type="module" src="./lista-audio.js"></script>
+<script type="module" src="./central-ajuda.js"></script>
+<script type="module" src="./controle-precos.js?v=1.0.0"></script>
+<script type="module" src="./registro-ultimo-acesso.js?v=1.0.2"></script>
+
+<script type="module" src="./tarefas.js?v=3.0.2"></script>
+<script type="module" src="./tarefas-audio.js?v=1.2.0"></script>
+<script type="module" src="./tarefas-medicamentos.js?v=1.0.1"></script>
+
+<script type="module" src="./importar-nota-pdf.js?v=1.1.0"></script>
+<script src="./importar-nfce-qr.js?v=1.2.0"></script>
+<script src="./importar-compra.js?v=1.0.0"></script>
+<script type="module" src="./gastos.js?v=2.2.0"></script>
+
+</body>
+</html>
