@@ -32,28 +32,122 @@ const ImportadorNotaPDF = (() => {
     // CARREGAMENTO SOB DEMANDA DO PDF.JS
     // ============================================================
 
-    async function carregarPDFJS() {
+  async function carregarPDFJS() {
+    if (
+        window.pdfjsLib &&
+        typeof window.pdfjsLib.getDocument === "function"
+    ) {
+        return window.pdfjsLib;
+    }
+
     if (promessaPDFJS) {
         return promessaPDFJS;
     }
 
-    promessaPDFJS = import(
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/legacy/build/pdf.mjs"
-    )
-        .then((moduloPDF) => {
-            moduloPDF.GlobalWorkerOptions.workerSrc =
-                "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/legacy/build/pdf.worker.mjs";
+    promessaPDFJS = new Promise(
+        (resolver, rejeitar) => {
+            const scriptExistente =
+                document.querySelector(
+                    'script[data-listalar-pdfjs="1"]'
+                );
 
-            return moduloPDF;
-        })
-        .catch((erro) => {
-            promessaPDFJS = null;
-            throw erro;
-        });
+            const concluir = () => {
+                if (
+                    !window.pdfjsLib ||
+                    typeof window.pdfjsLib.getDocument !==
+                        "function"
+                ) {
+                    rejeitar(
+                        new Error(
+                            "A biblioteca de leitura de PDF não ficou disponível."
+                        )
+                    );
+
+                    return;
+                }
+
+                window.pdfjsLib
+                    .GlobalWorkerOptions
+                    .workerSrc =
+                    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+
+                resolver(window.pdfjsLib);
+            };
+
+            if (scriptExistente) {
+                if (
+                    window.pdfjsLib &&
+                    typeof window.pdfjsLib
+                        .getDocument === "function"
+                ) {
+                    concluir();
+                    return;
+                }
+
+                scriptExistente.addEventListener(
+                    "load",
+                    concluir,
+                    {
+                        once: true
+                    }
+                );
+
+                scriptExistente.addEventListener(
+                    "error",
+                    () => {
+                        rejeitar(
+                            new Error(
+                                "Não foi possível carregar o leitor de PDF."
+                            )
+                        );
+                    },
+                    {
+                        once: true
+                    }
+                );
+
+                return;
+            }
+
+            const script =
+                document.createElement("script");
+
+            script.src =
+                "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+
+            script.async = true;
+
+            script.dataset.listalarPdfjs =
+                "1";
+
+            script.onload =
+                concluir;
+
+            script.onerror =
+                () => {
+                    script.remove();
+
+                    promessaPDFJS =
+                        null;
+
+                    rejeitar(
+                        new Error(
+                            "Não foi possível carregar o leitor de PDF."
+                        )
+                    );
+                };
+
+            document.head.appendChild(
+                script
+            );
+        }
+    ).catch((erro) => {
+        promessaPDFJS = null;
+        throw erro;
+    });
 
     return promessaPDFJS;
 }
-
     // ============================================================
     // ESTILOS
     // ============================================================
