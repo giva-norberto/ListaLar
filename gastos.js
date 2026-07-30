@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 2.0.0
+// Versão: 2.1.0
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "2.0.0";
+    const VERSAO = "2.1.0";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -35,7 +35,6 @@
         tela: "listalar-tela-gastos",
         botaoFechar: "listalar-gastos-fechar",
         botaoImportarPdf: "listalar-gastos-importar-pdf",
-        botaoSalvarManual: "listalar-gastos-salvar-manual",
         seletorPeriodo: "listalar-gastos-periodo",
         aviso: "listalar-gastos-aviso",
         carregando: "listalar-gastos-carregando",
@@ -69,7 +68,9 @@
         periodo: "mes_atual",
         salvando: false,
         ultimaNotaReferencia: null,
-        ultimaNotaRecebidaEm: 0
+        ultimaNotaRecebidaEm: 0,
+        resolverCompraManual: null,
+        contextoCompraManual: null
     };
 
     // ========================================================
@@ -1352,14 +1353,6 @@
                         >
                             📄 Importar nota fiscal em PDF
                         </button>
-
-                        <button
-                            id="${IDS.botaoSalvarManual}"
-                            class="listalar-gastos-botao secundario"
-                            type="button"
-                        >
-                            💵 Salvar compra manual atual
-                        </button>
                     </div>
                 </section>
 
@@ -1424,12 +1417,12 @@
             >
                 <div class="listalar-gastos-modal-conteudo">
                     <h2 id="listalar-gastos-manual-titulo">
-                        Salvar compra manual
+                        Confirmar compra com preços
                     </h2>
 
                     <p>
-                        Serão usados os preços e as quantidades
-                        atualmente informados na Lista de Compras.
+                        Informe o estabelecimento. A data de hoje já
+                        está preenchida e pode ser alterada.
                     </p>
 
                     <div class="listalar-gastos-campo">
@@ -2303,7 +2296,9 @@
     // COMPRA MANUAL
     // ========================================================
 
-    function obterItensManuaisAtuais() {
+    function obterItensManuaisAtuais(
+        produtoIdsPermitidos = null
+    ) {
         try {
             if (
                 !window.ListaLarPrecos ||
@@ -2313,10 +2308,30 @@
                 return [];
             }
 
+            const idsPermitidos =
+                Array.isArray(produtoIdsPermitidos)
+                    ? new Set(
+                        produtoIdsPermitidos
+                            .map((id) => String(id || ""))
+                            .filter(Boolean)
+                    )
+                    : null;
+
             return window.ListaLarPrecos
                 .obterItens()
-                .filter(
-                    (item) =>
+                .filter((item) => {
+                    const produtoId = String(
+                        item.produtoId || ""
+                    );
+
+                    if (
+                        idsPermitidos &&
+                        !idsPermitidos.has(produtoId)
+                    ) {
+                        return false;
+                    }
+
+                    return (
                         numeroSeguro(
                             item.quantidade,
                             0
@@ -2325,7 +2340,8 @@
                             item.precoUnitario,
                             0
                         ) > 0
-                )
+                    );
+                })
                 .map(
                     (item, indice) => ({
                         ordem: indice + 1,
@@ -2372,15 +2388,40 @@
         }
     }
 
-    function abrirModalManual() {
-        const itens = obterItensManuaisAtuais();
+    function resolverFluxoCompraManual(resultado) {
+        const resolver =
+            ESTADO.resolverCompraManual;
+
+        ESTADO.resolverCompraManual = null;
+        ESTADO.contextoCompraManual = null;
+
+        if (typeof resolver === "function") {
+            resolver(resultado);
+        }
+    }
+
+    function abrirModalManual({
+        produtoIds = null,
+        origem = "tela_gastos"
+    } = {}) {
+        if (ESTADO.resolverCompraManual) {
+            return Promise.resolve({
+                necessario: true,
+                salvo: false,
+                cancelado: true,
+                motivo: "FLUXO_JA_ABERTO"
+            });
+        }
+
+        const itens =
+            obterItensManuaisAtuais(produtoIds);
 
         if (!itens.length) {
-            mostrarAviso(
-                "Informe preços na Lista de Compras antes de salvar.",
-                "erro"
-            );
-            return;
+            return Promise.resolve({
+                necessario: false,
+                salvo: false,
+                cancelado: false
+            });
         }
 
         const total = arredondarMoeda(
@@ -2406,6 +2447,12 @@
         modal.classList.add("aberto");
         modal.setAttribute("aria-hidden", "false");
 
+        ESTADO.contextoCompraManual = {
+            origem,
+            total,
+            quantidadeItens: itens.length
+        };
+
         window.setTimeout(
             () =>
                 elemento(
@@ -2413,21 +2460,41 @@
                 )?.focus(),
             0
         );
+
+        return new Promise((resolve) => {
+            ESTADO.resolverCompraManual = resolve;
+        });
     }
 
-    function fecharModalManual() {
+    function fecharModalManual({
+        resolver = true,
+        resultado = {
+            necessario: true,
+            salvo: false,
+            cancelado: true
+        }
+    } = {}) {
         const modal = elemento(IDS.modalManual);
 
-        if (!modal) {
-            return;
+        if (modal) {
+            modal.classList.remove("aberto");
+            modal.setAttribute(
+                "aria-hidden",
+                "true"
+            );
+            delete modal.dataset.itens;
         }
 
-        modal.classList.remove("aberto");
-        modal.setAttribute("aria-hidden", "true");
-        delete modal.dataset.itens;
+        if (resolver) {
+            resolverFluxoCompraManual(resultado);
+        }
     }
 
     async function confirmarCompraManual() {
+        if (ESTADO.salvando) {
+            return;
+        }
+
         const modal = elemento(IDS.modalManual);
         const estabelecimentoNome =
             normalizarTexto(
@@ -2462,7 +2529,14 @@
         }
 
         if (!itens.length) {
-            fecharModalManual();
+            fecharModalManual({
+                resultado: {
+                    necessario: false,
+                    salvo: false,
+                    cancelado: true,
+                    motivo: "SEM_ITENS_COM_PRECO"
+                }
+            });
             mostrarAviso(
                 "Nenhum item com preço foi encontrado.",
                 "erro"
@@ -2521,10 +2595,22 @@
                 itens
             );
 
-            fecharModalManual();
             elemento(
                 IDS.manualEstabelecimento
             ).value = "";
+
+            fecharModalManual({
+                resultado: {
+                    necessario: true,
+                    salvo: true,
+                    cancelado: false,
+                    gastoId: registro.id,
+                    valorTotal,
+                    quantidadeItens: itens.length,
+                    dataCompra: registro.dataCompra,
+                    estabelecimentoNome
+                }
+            });
         } catch (erro) {
             console.error(
                 "ListaLar Gastos: erro ao salvar compra manual:",
@@ -2532,7 +2618,7 @@
             );
 
             mostrarAviso(
-                "Não foi possível salvar a compra manual.",
+                "Não foi possível salvar a compra. A lista não será finalizada.",
                 "erro"
             );
         } finally {
@@ -3024,14 +3110,9 @@
             abrirImportadorPdf
         );
 
-        elemento(IDS.botaoSalvarManual)?.addEventListener(
-            "click",
-            abrirModalManual
-        );
-
         elemento(IDS.manualCancelar)?.addEventListener(
             "click",
-            fecharModalManual
+            () => fecharModalManual()
         );
 
         elemento(IDS.manualConfirmar)?.addEventListener(
@@ -3099,6 +3180,14 @@
         importarNF: abrirImportadorPdf,
         abrirImportadorPdf,
         salvarCompraManual: abrirModalManual,
+        salvarCompraManualAoFinalizar({
+            produtoIds = []
+        } = {}) {
+            return abrirModalManual({
+                produtoIds,
+                origem: "finalizacao_lista"
+            });
+        },
         obterFamiliaId() {
             return ESTADO.familiaId;
         },
