@@ -2256,36 +2256,87 @@
 
       if (!confirmarFinalizacao) return;
 
-      for (const p of comprados) {
-        const sugerido = qtdParaLista(p);
-        const qtdFinal = Number(p.qtdComprada || sugerido);
-        const estoqueAntes = Number(p.estoque || 0);
-        const estoqueDepois = estoqueAntes + qtdFinal;
+      const apiGastos = window.ListaLarGastos;
 
-        await addDoc(historicoRef, {
-          produtoId: p.id,
-          nome: p.nome,
-          unidade: unidadeProduto(p),
-          quantidade: qtdFinal,
-          quantidadeSugerida: sugerido,
-          origemManual: !!p.manualLista,
-          estoqueAntes,
-          estoqueDepois,
-          minimoNoMomento: Number(p.minimo || 0),
-          criadoEm: serverTimestamp()
+      if (
+        apiGastos &&
+        typeof apiGastos.salvarCompraManualAoFinalizar === 'function'
+      ) {
+        let resultadoGasto;
+
+        try {
+          resultadoGasto = await apiGastos.salvarCompraManualAoFinalizar({
+            produtoIds: comprados.map(p => p.id)
+          });
+        } catch (erro) {
+          console.error('Erro ao registrar a compra em Gastos:', erro);
+
+          await mostrarMensagem({
+            titulo: 'Compra não finalizada',
+            texto: 'Não foi possível registrar os valores da compra. O estoque e a lista não foram alterados.',
+            tipo: 'danger'
+          });
+          return;
+        }
+
+        if (resultadoGasto?.cancelado) {
+          return;
+        }
+
+        if (
+          resultadoGasto?.necessario === true &&
+          resultadoGasto?.salvo !== true
+        ) {
+          await mostrarMensagem({
+            titulo: 'Compra não finalizada',
+            texto: 'Os valores não foram salvos. O estoque e a lista permanecem como estavam.',
+            tipo: 'warning'
+          });
+          return;
+        }
+      }
+
+      try {
+        for (const p of comprados) {
+          const sugerido = qtdParaLista(p);
+          const qtdFinal = Number(p.qtdComprada || sugerido);
+          const estoqueAntes = Number(p.estoque || 0);
+          const estoqueDepois = estoqueAntes + qtdFinal;
+
+          await addDoc(historicoRef, {
+            produtoId: p.id,
+            nome: p.nome,
+            unidade: unidadeProduto(p),
+            quantidade: qtdFinal,
+            quantidadeSugerida: sugerido,
+            origemManual: !!p.manualLista,
+            estoqueAntes,
+            estoqueDepois,
+            minimoNoMomento: Number(p.minimo || 0),
+            criadoEm: serverTimestamp()
+          });
+
+          await setDoc(doc(produtosRef, p.id), {
+            estoque: estoqueDepois,
+            comprado: false,
+            qtdComprada: 0,
+            manualLista: false,
+            qtdManual: 0,
+            listaAutomatica: false,
+            historico: Number(p.historico || 0) + qtdFinal,
+            ultimaCompraEm: serverTimestamp(),
+            atualizadoEm: serverTimestamp()
+          }, { merge: true });
+        }
+      } catch (erro) {
+        console.error('Erro ao finalizar a compra:', erro);
+
+        await mostrarMensagem({
+          titulo: 'Falha ao finalizar',
+          texto: 'O histórico de gastos foi salvo, mas ocorreu uma falha ao atualizar o estoque. Verifique sua conexão antes de tentar novamente.',
+          tipo: 'danger'
         });
-
-        await setDoc(doc(produtosRef, p.id), {
-          estoque: estoqueDepois,
-          comprado: false,
-          qtdComprada: 0,
-          manualLista: false,
-          qtdManual: 0,
-          listaAutomatica: false,
-          historico: Number(p.historico || 0) + qtdFinal,
-          ultimaCompraEm: serverTimestamp(),
-          atualizadoEm: serverTimestamp()
-        }, { merge: true });
+        return;
       }
 
       historicoCarregado = false;
@@ -2294,7 +2345,7 @@
       abrirTela('lista');
       await mostrarMensagem({
         titulo: 'Compra finalizada',
-        texto: 'O estoque foi atualizado. Uma nova lista automática será gerada quando você atualizar o estoque novamente.',
+        texto: 'O estoque foi atualizado. Os preços informados foram registrados em Gastos.',
         tipo: 'success'
       });
     }
@@ -2765,7 +2816,7 @@
 <script type="module" src="./importar-nota-pdf.js?v=1.1.0"></script>
 <script src="./importar-nfce-qr.js?v=1.2.0"></script>
 <script src="./importar-compra.js?v=1.0.0"></script>
-<script type="module" src="./gastos.js?v=1.2.0"></script>
+<script type="module" src="./gastos.js?v=2.1.0"></script>
 
 </body>
 </html>
