@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.1.0
+ * Versão: 1.2.0
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -17,7 +17,7 @@
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.1.0";
+    const VERSAO = "1.2.0";
 
     const ESTADO = {
         arquivo: null,
@@ -379,6 +379,28 @@ const ImportadorNotaPDF = (() => {
                 line-height: 1.45;
             }
 
+            .nota-pdf-conferencia-aviso {
+                margin-top: 16px;
+                padding: 14px;
+                border: 1px solid #f59e0b;
+                border-radius: 14px;
+                color: #78350f;
+                background: #fffbeb;
+                line-height: 1.45;
+                font-weight: 700;
+            }
+
+            .nota-pdf-conferencia-ok {
+                margin-top: 16px;
+                padding: 12px 14px;
+                border: 1px solid #86efac;
+                border-radius: 14px;
+                color: #166534;
+                background: #f0fdf4;
+                line-height: 1.4;
+                font-weight: 700;
+            }
+
             @media (max-width: 600px) {
                 .nota-pdf-overlay {
                     align-items: flex-end;
@@ -564,9 +586,13 @@ const ImportadorNotaPDF = (() => {
             validarNota(nota);
             exibirNota(nota);
 
+            const quantidadeOficial =
+                Math.trunc(converterNumero(nota.quantidadeTotalItens));
+
             atualizarStatus(
-                `${nota.itens.length} item(ns) encontrado(s). ` +
-                "Confira os dados antes de importar."
+                quantidadeOficial > 0
+                    ? `${nota.itens.length} de ${quantidadeOficial} item(ns) extraído(s). Confira os dados antes de importar.`
+                    : `${nota.itens.length} item(ns) encontrado(s). Confira os dados antes de importar.`
             );
         } catch (erro) {
             console.error(
@@ -626,9 +652,13 @@ const ImportadorNotaPDF = (() => {
             validarNota(nota);
             exibirNota(nota);
 
+            const quantidadeOficial =
+                Math.trunc(converterNumero(nota.quantidadeTotalItens));
+
             atualizarStatus(
-                `${nota.itens.length} item(ns) encontrado(s). ` +
-                "Confira os dados antes de importar."
+                quantidadeOficial > 0
+                    ? `${nota.itens.length} de ${quantidadeOficial} item(ns) extraído(s). Confira os dados antes de importar.`
+                    : `${nota.itens.length} item(ns) encontrado(s). Confira os dados antes de importar.`
             );
         } catch (erro) {
             console.error(
@@ -990,9 +1020,10 @@ const ImportadorNotaPDF = (() => {
             extrairItensTabelaSEFMG(linhas);
 
         if (itensTabela.length) {
-            return removerItensDuplicados(
-                itensTabela
-            );
+            // Cada linha da NFC-e representa um item comprado.
+            // Não remover duplicados: produtos iguais podem aparecer
+            // várias vezes na mesma nota e contam no total oficial.
+            return itensTabela;
         }
 
         const itens = [];
@@ -1036,9 +1067,8 @@ const ImportadorNotaPDF = (() => {
         }
 
         if (itens.length) {
-            return removerItensDuplicados(
-                itens
-            );
+            // Preserva ocorrências repetidas da nota fiscal.
+            return itens;
         }
 
         return extrairItensPorLinhas(
@@ -1240,9 +1270,8 @@ const ImportadorNotaPDF = (() => {
             }
         }
 
-        return removerItensDuplicados(
-            itens
-        );
+        // Preserva ocorrências repetidas da nota fiscal.
+        return itens;
     }
 
     function criarItemInterpretado({
@@ -1706,6 +1735,38 @@ const ImportadorNotaPDF = (() => {
     // CONFERÊNCIA
     // ============================================================
 
+    function obterConferenciaNota(nota) {
+        const quantidadeOficial = Math.max(
+            0,
+            Math.trunc(converterNumero(nota?.quantidadeTotalItens))
+        );
+        const quantidadeExtraida = Array.isArray(nota?.itens)
+            ? nota.itens.length
+            : 0;
+        const valorOficial = arredondarMoeda(
+            converterNumero(nota?.valorTotal)
+        );
+        const valorItens = arredondarMoeda(
+            (nota?.itens || []).reduce(
+                (total, item) => total + converterNumero(item?.precoTotal),
+                0
+            )
+        );
+
+        return {
+            quantidadeOficial,
+            quantidadeExtraida,
+            quantidadeDiferente:
+                quantidadeOficial > 0 &&
+                quantidadeOficial !== quantidadeExtraida,
+            valorOficial,
+            valorItens,
+            valorDiferente:
+                valorOficial > 0 &&
+                Math.abs(valorOficial - valorItens) >= 0.01
+        };
+    }
+
     function exibirNota(nota) {
         const resultado =
             document.getElementById(
@@ -1715,6 +1776,11 @@ const ImportadorNotaPDF = (() => {
         if (!resultado) {
             return;
         }
+
+        const conferencia = obterConferenciaNota(nota);
+        const possuiDivergencia =
+            conferencia.quantidadeDiferente ||
+            conferencia.valorDiferente;
 
         resultado.innerHTML = `
             <div class="nota-pdf-resumo">
@@ -1741,23 +1807,55 @@ const ImportadorNotaPDF = (() => {
                 </div>
 
                 <div class="nota-pdf-card">
-                    <span>Produtos encontrados</span>
+                    <span>Itens informados na nota</span>
 
                     <strong>
-                        ${nota.itens.length}
+                        ${conferencia.quantidadeOficial || conferencia.quantidadeExtraida}
                     </strong>
                 </div>
 
                 <div class="nota-pdf-card">
-                    <span>Valor total</span>
+                    <span>Itens extraídos</span>
+
+                    <strong>
+                        ${conferencia.quantidadeExtraida}
+                    </strong>
+                </div>
+
+                <div class="nota-pdf-card">
+                    <span>Valor total oficial</span>
 
                     <strong>
                         ${formatarMoeda(
-                            nota.valorTotal
+                            conferencia.valorOficial
+                        )}
+                    </strong>
+                </div>
+
+                <div class="nota-pdf-card">
+                    <span>Soma dos itens extraídos</span>
+
+                    <strong>
+                        ${formatarMoeda(
+                            conferencia.valorItens
                         )}
                     </strong>
                 </div>
             </div>
+
+            ${possuiDivergencia
+                ? `
+                    <div class="nota-pdf-conferencia-aviso">
+                        Atenção: os dados extraídos não conferem completamente com o resumo oficial da nota.
+                        O valor salvo será o valor total oficial de ${formatarMoeda(conferencia.valorOficial)}.
+                        Confira a lista de itens antes de confirmar.
+                    </div>
+                `
+                : `
+                    <div class="nota-pdf-conferencia-ok">
+                        Quantidade e valor conferem com o resumo oficial da nota.
+                    </div>
+                `}
 
             <div class="nota-pdf-tabela-wrapper">
                 <table class="nota-pdf-tabela">
@@ -1999,7 +2097,7 @@ const ImportadorNotaPDF = (() => {
             return;
         }
 
-        const valorTotalRevisado =
+        const valorItensRevisados =
             arredondarMoeda(
                 itensRevisados.reduce(
                     (total, item) =>
@@ -2008,6 +2106,19 @@ const ImportadorNotaPDF = (() => {
                     0
                 )
             );
+
+        const valorTotalOficial = arredondarMoeda(
+            converterNumero(ESTADO.nota.valorTotal)
+        );
+
+        const quantidadeTotalOficial = Math.max(
+            0,
+            Math.trunc(
+                converterNumero(
+                    ESTADO.nota.quantidadeTotalItens
+                )
+            )
+        );
 
         const notaConfirmada = {
             ...ESTADO.nota,
@@ -2020,11 +2131,32 @@ const ImportadorNotaPDF = (() => {
             itens:
                 itensRevisados,
 
+            // Mantém o total oficial impresso na NFC-e.
+            // A quantidade extraída é registrada separadamente.
             quantidadeTotalItens:
+                quantidadeTotalOficial || itensRevisados.length,
+
+            quantidadeItensExtraidos:
                 itensRevisados.length,
 
             valorTotal:
-                valorTotalRevisado,
+                valorTotalOficial > 0
+                    ? valorTotalOficial
+                    : valorItensRevisados,
+
+            valorItensExtraidos:
+                valorItensRevisados,
+
+            possuiDivergenciaExtracao:
+                (
+                    quantidadeTotalOficial > 0 &&
+                    quantidadeTotalOficial !== itensRevisados.length
+                ) || (
+                    valorTotalOficial > 0 &&
+                    Math.abs(
+                        valorTotalOficial - valorItensRevisados
+                    ) >= 0.01
+                ),
 
             revisadaEm:
                 new Date().toISOString()
