@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "2.4.0";
+    const VERSAO = "2.4.1";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -3219,10 +3219,18 @@
     }
 
     async function confirmarExclusaoNota(registro) {
-        const texto = `Excluir a nota de ${registro.estabelecimentoNome || "estabelecimento não identificado"} no valor de ${formatarMoeda(registro.valorTotal)}?\n\nA nota e todos os itens serão apagados definitivamente.`;
-        if (typeof window.confirmarAcao === "function") {
-            return window.confirmarAcao({ titulo:"Excluir nota fiscal", texto, tipo:"danger", confirmarTexto:"Excluir nota", cancelarTexto:"Cancelar", confirmarClasse:"danger" });
-        }
+        const estabelecimento =
+            registro.estabelecimentoNome ||
+            "estabelecimento não identificado";
+
+        const texto =
+            `Excluir a nota de ${estabelecimento} no valor de ` +
+            `${formatarMoeda(registro.valorTotal)}?\n\n` +
+            "A nota e todos os itens serão apagados definitivamente.";
+
+        // O modal global do index usa z-index menor que a tela de Gastos
+        // e pode abrir escondido atrás dela. O confirm nativo permanece
+        // visível acima da aplicação e devolve um booleano confiável.
         return window.confirm(texto);
     }
 
