@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.2.0
+ * Versão: 1.3.0
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -17,7 +17,7 @@
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.2.0";
+    const VERSAO = "1.3.0";
 
     const ESTADO = {
         arquivo: null,
