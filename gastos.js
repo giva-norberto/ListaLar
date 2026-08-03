@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.0.0";
+    const VERSAO = "3.0.1";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -73,7 +73,12 @@
         dataFinal: "listalar-gastos-data-final",
         botaoExportar: "listalar-gastos-exportar",
         detalhesEditarItens: "listalar-gastos-detalhes-editar-itens",
-        detalhesSalvarItens: "listalar-gastos-detalhes-salvar-itens"
+        detalhesSalvarItens: "listalar-gastos-detalhes-salvar-itens",
+        modalExcluir: "listalar-gastos-modal-excluir",
+        excluirTitulo: "listalar-gastos-excluir-titulo",
+        excluirResumo: "listalar-gastos-excluir-resumo",
+        excluirConfirmar: "listalar-gastos-excluir-confirmar",
+        excluirCancelar: "listalar-gastos-excluir-cancelar"
     });
 
     const ESTADO = {
@@ -99,7 +104,8 @@
         dataInicial: "",
         dataFinal: "",
         itensDetalhes: [],
-        editandoItens: false
+        editandoItens: false,
+        resolverExclusao: null
     };
 
     // ========================================================
@@ -1291,6 +1297,72 @@
                 background: #16a34a;
             }
 
+            .listalar-gastos-modal-excluir-conteudo {
+                width: min(100%, 420px);
+                padding: 24px 22px 21px;
+                border: 1px solid #fecaca;
+                border-radius: 24px;
+                background: linear-gradient(180deg, #ffffff, #fff7f7);
+                box-shadow: 0 28px 70px rgba(127, 29, 29, 0.28);
+                text-align: center;
+            }
+
+            .listalar-gastos-excluir-icone {
+                display: grid;
+                place-items: center;
+                width: 68px;
+                height: 68px;
+                margin: 0 auto 14px;
+                border: 1px solid #fecaca;
+                border-radius: 22px;
+                color: #b91c1c;
+                background: #fee2e2;
+                font-size: 34px;
+                box-shadow: 0 10px 22px rgba(185, 28, 28, 0.14);
+            }
+
+            .listalar-gastos-modal-excluir-conteudo h2 {
+                margin: 0 0 8px;
+                color: #7f1d1d;
+                font-size: 22px;
+            }
+
+            .listalar-gastos-excluir-texto {
+                margin: 0 0 14px !important;
+                color: #475569 !important;
+                font-size: 14px !important;
+            }
+
+            .listalar-gastos-excluir-resumo {
+                display: grid;
+                gap: 7px;
+                margin: 15px 0;
+                padding: 14px;
+                border: 1px solid #fecaca;
+                border-radius: 15px;
+                color: #7f1d1d;
+                background: #fff1f2;
+                text-align: left;
+                font-size: 13px;
+                font-weight: 800;
+            }
+
+            .listalar-gastos-excluir-aviso {
+                margin: 0 0 17px !important;
+                color: #991b1b !important;
+                font-size: 12px !important;
+                font-weight: 800;
+            }
+
+            .listalar-gastos-modal-excluir {
+                color: #ffffff;
+                background: #dc2626;
+            }
+
+            .listalar-gastos-modal-excluir:hover {
+                background: #b91c1c;
+            }
+
             .listalar-gastos-filtros-avancados {
                 display:grid; grid-template-columns:2fr 1.2fr 1fr 1fr auto; gap:8px; margin-bottom:14px;
             }
@@ -1687,6 +1759,27 @@
                     </div>
                 </div>
             </div>
+
+            <div
+                id="${IDS.modalExcluir}"
+                class="listalar-gastos-modal"
+                role="alertdialog"
+                aria-modal="true"
+                aria-hidden="true"
+                aria-labelledby="${IDS.excluirTitulo}"
+            >
+                <div class="listalar-gastos-modal-excluir-conteudo">
+                    <div class="listalar-gastos-excluir-icone" aria-hidden="true">🗑️</div>
+                    <h2 id="${IDS.excluirTitulo}">Excluir nota fiscal?</h2>
+                    <p class="listalar-gastos-excluir-texto">Confirme os dados antes de apagar.</p>
+                    <div id="${IDS.excluirResumo}" class="listalar-gastos-excluir-resumo"></div>
+                    <p class="listalar-gastos-excluir-aviso">Esta ação é permanente. A nota e todos os itens serão excluídos.</p>
+                    <div class="listalar-gastos-modal-acoes">
+                        <button id="${IDS.excluirCancelar}" class="listalar-gastos-modal-cancelar" type="button">Cancelar</button>
+                        <button id="${IDS.excluirConfirmar}" class="listalar-gastos-modal-excluir" type="button">Excluir nota</button>
+                    </div>
+                </div>
+            </div>
         `;
 
         document.body.appendChild(tela);
@@ -1786,6 +1879,7 @@
         fecharModalManual();
         fecharModalEditar();
         fecharModalDetalhes();
+        fecharModalExcluir(false);
         tela.classList.remove("aberta");
         tela.setAttribute("aria-hidden", "true");
         document.body.classList.remove("listalar-gastos-aberto");
@@ -3261,20 +3355,47 @@
         }
     }
 
-    async function confirmarExclusaoNota(registro) {
+    function fecharModalExcluir(resultado = false) {
+        const modal = elemento(IDS.modalExcluir);
+        if (modal) {
+            modal.classList.remove("aberto");
+            modal.setAttribute("aria-hidden", "true");
+        }
+
+        const resolver = ESTADO.resolverExclusao;
+        ESTADO.resolverExclusao = null;
+        if (resolver) resolver(resultado === true);
+    }
+
+    function confirmarExclusaoNota(registro) {
+        const modal = elemento(IDS.modalExcluir);
+        const resumo = elemento(IDS.excluirResumo);
+
+        if (!modal || !resumo) {
+            return Promise.resolve(false);
+        }
+
         const estabelecimento =
             registro.estabelecimentoNome ||
-            "estabelecimento não identificado";
+            "Estabelecimento não identificado";
 
-        const texto =
-            `Excluir a nota de ${estabelecimento} no valor de ` +
-            `${formatarMoeda(registro.valorTotal)}?\n\n` +
-            "A nota e todos os itens serão apagados definitivamente.";
+        resumo.innerHTML = `
+            <span>🏪 ${escaparHTML(estabelecimento)}</span>
+            <span>📅 ${escaparHTML(formatarData(registro.dataCompra))}</span>
+            <span>💰 ${escaparHTML(formatarMoeda(registro.valorTotal))}</span>
+            <span>🧾 ${numeroSeguro(registro.quantidadeItens, 0)} item(ns)</span>
+        `;
 
-        // O modal global do index usa z-index menor que a tela de Gastos
-        // e pode abrir escondido atrás dela. O confirm nativo permanece
-        // visível acima da aplicação e devolve um booleano confiável.
-        return window.confirm(texto);
+        modal.classList.add("aberto");
+        modal.setAttribute("aria-hidden", "false");
+
+        window.setTimeout(() => {
+            elemento(IDS.excluirCancelar)?.focus();
+        }, 0);
+
+        return new Promise((resolve) => {
+            ESTADO.resolverExclusao = resolve;
+        });
     }
 
     async function excluirNotaFiscal(registroId) {
@@ -3850,6 +3971,11 @@
         elemento(IDS.dataInicial)?.addEventListener("change", (evento) => { ESTADO.dataInicial = evento.target.value; renderizarPainel(); });
         elemento(IDS.dataFinal)?.addEventListener("change", (evento) => { ESTADO.dataFinal = evento.target.value; renderizarPainel(); });
         elemento(IDS.botaoExportar)?.addEventListener("click", exportarCSV);
+        elemento(IDS.excluirCancelar)?.addEventListener("click", () => fecharModalExcluir(false));
+        elemento(IDS.excluirConfirmar)?.addEventListener("click", () => fecharModalExcluir(true));
+        elemento(IDS.modalExcluir)?.addEventListener("click", (evento) => {
+            if (evento.target === elemento(IDS.modalExcluir)) fecharModalExcluir(false);
+        });
         elemento(IDS.detalhesEditarItens)?.addEventListener("click", alternarEdicaoItens);
         elemento(IDS.detalhesSalvarItens)?.addEventListener("click", salvarItensDetalhes);
 
@@ -3904,6 +4030,12 @@
             "click",
             fecharModalDetalhes
         );
+
+        document.addEventListener("keydown", (evento) => {
+            if (evento.key === "Escape" && elemento(IDS.modalExcluir)?.classList.contains("aberto")) {
+                fecharModalExcluir(false);
+            }
+        });
 
         elemento(IDS.modalDetalhes)?.addEventListener(
             "click",
