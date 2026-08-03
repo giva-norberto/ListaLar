@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "2.4.1";
+    const VERSAO = "3.0.0";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -66,7 +66,14 @@
         detalhesTitulo: "listalar-gastos-detalhes-titulo",
         detalhesResumo: "listalar-gastos-detalhes-resumo",
         detalhesItens: "listalar-gastos-detalhes-itens",
-        detalhesFechar: "listalar-gastos-detalhes-fechar"
+        detalhesFechar: "listalar-gastos-detalhes-fechar",
+        buscaHistorico: "listalar-gastos-busca",
+        filtroMercado: "listalar-gastos-filtro-mercado",
+        dataInicial: "listalar-gastos-data-inicial",
+        dataFinal: "listalar-gastos-data-final",
+        botaoExportar: "listalar-gastos-exportar",
+        detalhesEditarItens: "listalar-gastos-detalhes-editar-itens",
+        detalhesSalvarItens: "listalar-gastos-detalhes-salvar-itens"
     });
 
     const ESTADO = {
@@ -86,7 +93,13 @@
         registroEmEdicao: null,
         registroEmDetalhes: null,
         carregandoDetalhes: false,
-        excluindoRegistro: false
+        excluindoRegistro: false,
+        busca: "",
+        mercado: "",
+        dataInicial: "",
+        dataFinal: "",
+        itensDetalhes: [],
+        editandoItens: false
     };
 
     // ========================================================
@@ -1278,6 +1291,20 @@
                 background: #16a34a;
             }
 
+            .listalar-gastos-filtros-avancados {
+                display:grid; grid-template-columns:2fr 1.2fr 1fr 1fr auto; gap:8px; margin-bottom:14px;
+            }
+            .listalar-gastos-filtros-avancados input,
+            .listalar-gastos-filtros-avancados select {
+                min-height:44px; padding:9px 11px; border:1px solid #dbe4f0; border-radius:12px; background:#fff; font:inherit; font-size:13px;
+            }
+            .listalar-gastos-exportar { min-height:44px; padding:9px 13px; border:0; border-radius:12px; background:#0f766e; color:#fff; font-weight:800; cursor:pointer; }
+            .listalar-gastos-detalhe-item.editando { grid-template-columns:1fr; }
+            .listalar-gastos-detalhe-item-grid { display:grid; grid-template-columns:2fr .8fr .8fr 1fr 1fr; gap:7px; }
+            .listalar-gastos-detalhe-item-grid input { width:100%; min-height:40px; padding:7px; border:1px solid #cbd5e1; border-radius:9px; box-sizing:border-box; }
+            .listalar-gastos-comparacao { margin-top:7px; padding:7px 9px; border-radius:9px; background:#ecfeff; color:#155e75; font-size:10px; font-weight:800; }
+            @media (max-width:720px) { .listalar-gastos-filtros-avancados { grid-template-columns:1fr 1fr; } .listalar-gastos-filtros-avancados > :first-child { grid-column:1/-1; } .listalar-gastos-detalhe-item-grid { grid-template-columns:1fr 1fr; } .listalar-gastos-detalhe-item-grid .campo-nome { grid-column:1/-1; } }
+
             @media (max-width: 720px) {
                 .listalar-gastos-cabecalho {
                     min-height: 62px;
@@ -1520,6 +1547,14 @@
                     </article>
                 </section>
 
+                <section class="listalar-gastos-filtros-avancados" aria-label="Busca e filtros do histórico">
+                    <input id="${IDS.buscaHistorico}" type="search" placeholder="🔎 Buscar mercado ou valor">
+                    <select id="${IDS.filtroMercado}" aria-label="Filtrar por estabelecimento"><option value="">Todos os mercados</option></select>
+                    <input id="${IDS.dataInicial}" type="date" aria-label="Data inicial">
+                    <input id="${IDS.dataFinal}" type="date" aria-label="Data final">
+                    <button id="${IDS.botaoExportar}" class="listalar-gastos-exportar" type="button">Exportar CSV</button>
+                </section>
+
                 <section class="listalar-gastos-card">
                     <div class="listalar-gastos-card-topo">
                         <div>
@@ -1645,14 +1680,10 @@
                     <h2 id="${IDS.detalhesTitulo}">Itens da compra</h2>
                     <div id="${IDS.detalhesResumo}" class="listalar-gastos-detalhes-resumo"></div>
                     <div id="${IDS.detalhesItens}" class="listalar-gastos-detalhes-itens"></div>
-                    <div class="listalar-gastos-modal-acoes" style="grid-template-columns:1fr;">
-                        <button
-                            id="${IDS.detalhesFechar}"
-                            class="listalar-gastos-modal-cancelar"
-                            type="button"
-                        >
-                            Fechar
-                        </button>
+                    <div class="listalar-gastos-modal-acoes" style="grid-template-columns:repeat(3,1fr);">
+                        <button id="${IDS.detalhesFechar}" class="listalar-gastos-modal-cancelar" type="button">Fechar</button>
+                        <button id="${IDS.detalhesEditarItens}" class="listalar-gastos-modal-cancelar" type="button">Editar itens</button>
+                        <button id="${IDS.detalhesSalvarItens}" class="listalar-gastos-modal-confirmar" type="button" hidden>Salvar itens</button>
                     </div>
                 </div>
             </div>
@@ -2206,6 +2237,14 @@
         );
 
         try {
+            if (registro.tipoRegistro === "nota_fiscal") {
+                const existente = await firebase.getDoc(referenciaGasto);
+                if (existente.exists()) {
+                    mostrarAviso("Esta nota fiscal já foi importada.", "erro");
+                    throw new Error("NOTA_DUPLICADA");
+                }
+            }
+
             await apagarItensExistentes(
                 referenciaGasto
             );
@@ -2333,11 +2372,15 @@
                 await batch.commit();
             }
 
+            const dataRegistro = converterParaData(registro.dataCompra || registro.dataCompraMs);
+            const agora = new Date();
+            const foraMesAtual = ESTADO.periodo === "mes_atual" &&
+                (dataRegistro.getMonth() !== agora.getMonth() || dataRegistro.getFullYear() !== agora.getFullYear());
             mostrarAviso(
-                registro.tipoRegistro === "nota_fiscal"
-                    ? "Nota fiscal salva com sucesso."
-                    : "Compra manual salva com sucesso.",
-                "sucesso"
+                foraMesAtual
+                    ? "Compra salva, mas está fora do filtro deste mês."
+                    : (registro.tipoRegistro === "nota_fiscal" ? "Nota fiscal salva com sucesso." : "Compra manual salva com sucesso."),
+                foraMesAtual ? "info" : "sucesso"
             );
 
             window.dispatchEvent(
@@ -2925,6 +2968,8 @@
         modal?.setAttribute("aria-hidden", "true");
         ESTADO.registroEmDetalhes = null;
         ESTADO.carregandoDetalhes = false;
+        ESTADO.editandoItens = false;
+        ESTADO.itensDetalhes = [];
     }
 
     function valorItem(item, nomes, padrao = "") {
@@ -2937,92 +2982,86 @@
         return padrao;
     }
 
+    function chaveComparacaoItem(item) {
+        return somenteDigitos(item.gtin) || normalizarTexto(item.codigoItem || item.codigo || "").toLowerCase() || normalizarTexto(item.descricao || item.descricaoOriginal || item.produtoNome || "").toLowerCase();
+    }
+
     function renderizarItensDetalhes(itens) {
         const container = elemento(IDS.detalhesItens);
-
-        if (!container) {
-            return;
-        }
-
+        if (!container) return;
+        ESTADO.itensDetalhes = itens;
         if (!itens.length) {
-            container.innerHTML = `
-                <div class="listalar-gastos-detalhes-vazio">
-                    Nenhum item foi encontrado nesta compra.
-                </div>
-            `;
+            container.innerHTML = `<div class="listalar-gastos-detalhes-vazio">Nenhum item foi encontrado nesta compra.</div>`;
             return;
         }
-
         container.innerHTML = itens.map((item, indice) => {
-            const descricao = normalizarTexto(
-                valorItem(
-                    item,
-                    [
-                        "descricao",
-                        "descricaoEditada",
-                        "descricaoOriginal",
-                        "produtoNome",
-                        "nome"
-                    ],
-                    `Item ${indice + 1}`
-                )
-            ) || `Item ${indice + 1}`;
-
-            const quantidade = numeroSeguro(
-                valorItem(item, ["quantidade", "qtd", "quantidadeComprada"], 0),
-                0
-            );
-
-            const unidade = normalizarTexto(
-                valorItem(item, ["unidade", "un", "siglaUnidade"], "")
-            );
-
-            const precoUnitario = numeroSeguro(
-                valorItem(
-                    item,
-                    ["precoUnitario", "valorUnitario", "precoCompra", "preco"],
-                    0
-                ),
-                0
-            );
-
-            const valorTotal = numeroSeguro(
-                valorItem(item, ["valorTotal", "total", "subtotal"], quantidade * precoUnitario),
-                quantidade * precoUnitario
-            );
-
-            const codigo = normalizarTexto(
-                valorItem(item, ["codigoItem", "codigo", "codigoProduto"], "")
-            );
-
-            const gtin = somenteDigitos(
-                valorItem(item, ["gtin", "ean", "codigoBarras"], "")
-            );
-
-            const identificacao = [
-                codigo ? `Código: ${escaparHTML(codigo)}` : "",
-                gtin ? `GTIN: ${escaparHTML(gtin)}` : ""
-            ].filter(Boolean).join(" · ");
-
-            return `
-                <article class="listalar-gastos-detalhe-item">
-                    <div class="listalar-gastos-detalhe-item-nome">
-                        ${escaparHTML(descricao)}
-                    </div>
-
-                    <div class="listalar-gastos-detalhe-item-total">
-                        ${formatarMoeda(valorTotal)}
-                    </div>
-
-                    <div class="listalar-gastos-detalhe-item-info">
-                        ${formatarQuantidade(quantidade)}
-                        ${escaparHTML(unidade)}
-                        × ${formatarMoeda(precoUnitario)}
-                        ${identificacao ? ` · ${identificacao}` : ""}
-                    </div>
-                </article>
-            `;
+            const descricao = normalizarTexto(valorItem(item,["descricao","descricaoEditada","descricaoOriginal","produtoNome","nome"],`Item ${indice+1}`)) || `Item ${indice+1}`;
+            const quantidade = numeroSeguro(valorItem(item,["quantidade","qtd","quantidadeComprada"],0),0);
+            const unidade = normalizarTexto(valorItem(item,["unidade","un","siglaUnidade"],""));
+            const precoUnitario = numeroSeguro(valorItem(item,["precoUnitario","valorUnitario","precoCompra","preco"],0),0);
+            const valorTotal = numeroSeguro(valorItem(item,["valorTotal","total","subtotal"],quantidade*precoUnitario),quantidade*precoUnitario);
+            if (ESTADO.editandoItens) {
+                return `<article class="listalar-gastos-detalhe-item editando" data-item-id="${escaparHTML(item.id)}"><div class="listalar-gastos-detalhe-item-grid"><input class="campo-nome" data-campo="descricao" value="${escaparHTML(descricao)}"><input data-campo="quantidade" type="number" min="0" step="0.001" value="${quantidade}"><input data-campo="unidade" value="${escaparHTML(unidade)}"><input data-campo="precoUnitario" type="number" min="0" step="0.01" value="${precoUnitario.toFixed(2)}"><input data-campo="valorTotal" type="number" min="0" step="0.01" value="${valorTotal.toFixed(2)}"></div></article>`;
+            }
+            const comp = item.comparacao;
+            return `<article class="listalar-gastos-detalhe-item"><div class="listalar-gastos-detalhe-item-nome">${escaparHTML(descricao)}</div><div class="listalar-gastos-detalhe-item-total">${formatarMoeda(valorTotal)}</div><div class="listalar-gastos-detalhe-item-info">${formatarQuantidade(quantidade)} ${escaparHTML(unidade)} × ${formatarMoeda(precoUnitario)}</div>${comp ? `<div class="listalar-gastos-comparacao">Histórico: menor ${formatarMoeda(comp.min)} · maior ${formatarMoeda(comp.max)} · ${comp.ocorrencias} compra(s)</div>` : ""}</article>`;
         }).join("");
+    }
+
+    async function enriquecerComparacoes(itens, registroAtualId) {
+        const mapa = new Map();
+        for (const registro of ESTADO.registros.filter(r => r.id !== registroAtualId).slice(0, 40)) {
+            try {
+                const ref = ESTADO.firebase.doc(colecaoGastos(), registro.id);
+                const snap = await ESTADO.firebase.getDocs(ESTADO.firebase.collection(ref, "itens"));
+                for (const docItem of snap.docs) {
+                    const item = docItem.data();
+                    const chave = chaveComparacaoItem(item);
+                    const preco = numeroSeguro(item.precoUnitario, 0);
+                    if (!chave || preco <= 0) continue;
+                    const atual = mapa.get(chave) || []; atual.push(preco); mapa.set(chave, atual);
+                }
+            } catch {}
+        }
+        return itens.map(item => {
+            const valores = mapa.get(chaveComparacaoItem(item)) || [];
+            return valores.length ? {...item, comparacao:{min:Math.min(...valores),max:Math.max(...valores),ocorrencias:valores.length}} : item;
+        });
+    }
+
+    function alternarEdicaoItens() {
+        if (!ESTADO.registroEmDetalhes) return;
+        ESTADO.editandoItens = !ESTADO.editandoItens;
+        elemento(IDS.detalhesSalvarItens).hidden = !ESTADO.editandoItens;
+        elemento(IDS.detalhesEditarItens).textContent = ESTADO.editandoItens ? "Cancelar edição" : "Editar itens";
+        renderizarItensDetalhes(ESTADO.itensDetalhes);
+    }
+
+    async function salvarItensDetalhes() {
+        const registro = ESTADO.registroEmDetalhes;
+        if (!registro || ESTADO.salvando) return;
+        const linhas = [...elemento(IDS.detalhesItens).querySelectorAll("[data-item-id]")];
+        const itens = linhas.map((linha, indice) => {
+            const val = campo => linha.querySelector(`[data-campo="${campo}"]`)?.value || "";
+            const quantidade = numeroSeguro(val("quantidade"),0);
+            const precoUnitario = numeroSeguro(val("precoUnitario"),0);
+            const valorTotal = numeroSeguro(val("valorTotal"), quantidade*precoUnitario);
+            const original = ESTADO.itensDetalhes.find(i => i.id === linha.dataset.itemId) || {};
+            return {...original, ordem:original.ordem || indice+1, descricao:normalizarTexto(val("descricao")), quantidade, unidade:normalizarTexto(val("unidade")).toUpperCase(), precoUnitario:arredondarMoeda(precoUnitario), valorTotal:arredondarMoeda(valorTotal)};
+        }).filter(i => i.descricao && i.quantidade > 0);
+        if (!itens.length) { mostrarAviso("Mantenha pelo menos um item válido.","erro"); return; }
+        ESTADO.salvando = true; definirCarregando(true,"Salvando itens...");
+        try {
+            const ref = ESTADO.firebase.doc(colecaoGastos(), registro.id);
+            await apagarItensExistentes(ref);
+            let batch = ESTADO.firebase.writeBatch(ESTADO.firebase.db);
+            itens.forEach((item,indice) => batch.set(ESTADO.firebase.doc(ESTADO.firebase.collection(ref,"itens"),String(indice+1).padStart(4,"0")), {...item, ordem:indice+1}));
+            await batch.commit();
+            const total = arredondarMoeda(itens.reduce((soma,item)=>soma+item.valorTotal,0));
+            await ESTADO.firebase.setDoc(ref,{quantidadeItens:itens.length,valorTotal:total,atualizadoEm:ESTADO.firebase.serverTimestamp()},{merge:true});
+            ESTADO.editandoItens=false; elemento(IDS.detalhesSalvarItens).hidden=true; elemento(IDS.detalhesEditarItens).textContent="Editar itens";
+            ESTADO.itensDetalhes=itens.map((i,n)=>({...i,id:String(n+1).padStart(4,"0")})); renderizarItensDetalhes(ESTADO.itensDetalhes); mostrarAviso("Itens atualizados com sucesso.","sucesso");
+        } catch (erro) { console.error(erro); mostrarAviso("Não foi possível salvar os itens.","erro"); } finally { ESTADO.salvando=false; definirCarregando(false); }
     }
 
     async function abrirModalDetalhes(registroId) {
@@ -3131,7 +3170,11 @@
                 ESTADO.registroEmDetalhes?.id ===
                 registro.id
             ) {
-                renderizarItensDetalhes(itens);
+                const itensComparados = await enriquecerComparacoes(itens, registro.id);
+                ESTADO.editandoItens = false;
+                elemento(IDS.detalhesSalvarItens).hidden = true;
+                elemento(IDS.detalhesEditarItens).textContent = "Editar itens";
+                renderizarItensDetalhes(itensComparados);
             }
         } catch (erro) {
             console.error(
@@ -3360,17 +3403,44 @@
     }
 
     function registrosFiltrados() {
-        const inicio = inicioDoPeriodo(
-            ESTADO.periodo
-        );
+        const agora = new Date();
+        const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime();
+        const inicio3 = new Date(agora.getFullYear(), agora.getMonth()-2, 1).getTime();
+        const inicioAno = new Date(agora.getFullYear(),0,1).getTime();
+        const busca = normalizarTexto(ESTADO.busca).toLowerCase();
+        const inicioCustom = ESTADO.dataInicial ? converterParaData(ESTADO.dataInicial).getTime() : null;
+        const fimCustom = ESTADO.dataFinal ? converterParaData(ESTADO.dataFinal).getTime()+86399999 : null;
+        return ESTADO.registros.filter(registro => {
+            const data = numeroSeguro(registro.dataCompraMs, converterParaData(registro.dataCompra).getTime());
+            if (ESTADO.periodo === "mes_atual" && data < inicioMes) return false;
+            if (ESTADO.periodo === "ultimos_3_meses" && data < inicio3) return false;
+            if (ESTADO.periodo === "ano_atual" && data < inicioAno) return false;
+            if (inicioCustom && data < inicioCustom) return false;
+            if (fimCustom && data > fimCustom) return false;
+            if (ESTADO.mercado && registro.estabelecimentoNome !== ESTADO.mercado) return false;
+            if (busca) {
+                const alvo = normalizarTexto(`${registro.estabelecimentoNome||""} ${registro.valorTotal||""} ${registro.dataCompra||""}`).toLowerCase();
+                if (!alvo.includes(busca)) return false;
+            }
+            return true;
+        });
+    }
 
-        return ESTADO.registros.filter(
-            (registro) =>
-                numeroSeguro(
-                    registro.dataCompraMs,
-                    0
-                ) >= inicio
-        );
+    function atualizarFiltroMercados() {
+        const select = elemento(IDS.filtroMercado); if (!select) return;
+        const atual = ESTADO.mercado;
+        const nomes = [...new Set(ESTADO.registros.map(r=>r.estabelecimentoNome).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+        select.innerHTML = `<option value="">Todos os mercados</option>` + nomes.map(n=>`<option value="${escaparHTML(n)}">${escaparHTML(n)}</option>`).join("");
+        select.value = atual;
+    }
+
+    function exportarCSV() {
+        const registros = registrosFiltrados();
+        if (!registros.length) { mostrarAviso("Não há gastos para exportar.","erro"); return; }
+        const linhas = [["Data","Estabelecimento","Tipo","Itens","Valor"]];
+        registros.forEach(r=>linhas.push([r.dataCompra||"",r.estabelecimentoNome||"",r.tipoRegistro||"",r.quantidadeItens||0,arredondarMoeda(r.valorTotal).toFixed(2).replace(".",",")]));
+        const csv = "\uFEFF" + linhas.map(l=>l.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");
+        const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})); const a=document.createElement("a"); a.href=url; a.download=`listalar-gastos-${dataHojeISO()}.csv`; a.click(); URL.revokeObjectURL(url);
     }
 
     function atualizarIndicadores(registros) {
@@ -3727,6 +3797,7 @@
             return;
         }
 
+        atualizarFiltroMercados();
         const registros = registrosFiltrados();
 
         atualizarIndicadores(registros);
@@ -3773,6 +3844,14 @@
                 renderizarPainel();
             }
         );
+
+        elemento(IDS.buscaHistorico)?.addEventListener("input", (evento) => { ESTADO.busca = evento.target.value; renderizarPainel(); });
+        elemento(IDS.filtroMercado)?.addEventListener("change", (evento) => { ESTADO.mercado = evento.target.value; renderizarPainel(); });
+        elemento(IDS.dataInicial)?.addEventListener("change", (evento) => { ESTADO.dataInicial = evento.target.value; renderizarPainel(); });
+        elemento(IDS.dataFinal)?.addEventListener("change", (evento) => { ESTADO.dataFinal = evento.target.value; renderizarPainel(); });
+        elemento(IDS.botaoExportar)?.addEventListener("click", exportarCSV);
+        elemento(IDS.detalhesEditarItens)?.addEventListener("click", alternarEdicaoItens);
+        elemento(IDS.detalhesSalvarItens)?.addEventListener("click", salvarItensDetalhes);
 
         elemento(IDS.historico)?.addEventListener("click", (evento) => {
             const alvo = evento.target.closest("[data-acao][data-registro-id]");
