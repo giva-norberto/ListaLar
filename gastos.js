@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 2.1.0
+// Versão: 2.3.0
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "2.2.0";
+    const VERSAO = "2.3.0";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -54,7 +54,13 @@
         manualData: "listalar-gastos-manual-data",
         manualResumo: "listalar-gastos-manual-resumo",
         manualConfirmar: "listalar-gastos-manual-confirmar",
-        manualCancelar: "listalar-gastos-manual-cancelar"
+        manualCancelar: "listalar-gastos-manual-cancelar",
+        modalEditar: "listalar-gastos-modal-editar",
+        editarEstabelecimento: "listalar-gastos-editar-estabelecimento",
+        editarData: "listalar-gastos-editar-data",
+        editarResumo: "listalar-gastos-editar-resumo",
+        editarConfirmar: "listalar-gastos-editar-confirmar",
+        editarCancelar: "listalar-gastos-editar-cancelar"
     });
 
     const ESTADO = {
@@ -70,7 +76,9 @@
         ultimaNotaReferencia: null,
         ultimaNotaRecebidaEm: 0,
         resolverCompraManual: null,
-        contextoCompraManual: null
+        contextoCompraManual: null,
+        registroEmEdicao: null,
+        excluindoRegistro: false
     };
 
     // ========================================================
@@ -775,6 +783,15 @@
                 color: #ffffff;
             }
 
+            .listalar-gastos-card-resumo.compras { border-color:#bfdbfe; background:linear-gradient(145deg,#eff6ff,#dbeafe); }
+            .listalar-gastos-card-resumo.compras strong { color:#1d4ed8; }
+            .listalar-gastos-card-resumo.notas { border-color:#ddd6fe; background:linear-gradient(145deg,#faf5ff,#ede9fe); }
+            .listalar-gastos-card-resumo.notas strong { color:#6d28d9; }
+            .listalar-gastos-card-resumo.manuais { border-color:#bbf7d0; background:linear-gradient(145deg,#f0fdf4,#dcfce7); }
+            .listalar-gastos-card-resumo.manuais strong { color:#15803d; }
+            .listalar-gastos-card-resumo.ticket { border-color:#fde68a; background:linear-gradient(145deg,#fffbeb,#fef3c7); }
+            .listalar-gastos-card-resumo.ticket strong { color:#a16207; }
+
             .listalar-gastos-card {
                 margin-bottom: 14px;
                 padding: 17px;
@@ -929,6 +946,9 @@
                 background: #16a34a;
             }
 
+            .listalar-gastos-card-topo h2 { display:inline-flex; align-items:center; gap:8px; color:#172033; }
+            .listalar-gastos-card-topo h2::before { content:""; width:7px; height:22px; border-radius:999px; background:linear-gradient(180deg,#2563eb,#06b6d4); box-shadow:0 3px 8px rgba(37,99,235,.25); }
+
             .listalar-gastos-historico-lista {
                 display: grid;
                 gap: 10px;
@@ -941,9 +961,11 @@
                 gap: 11px;
                 align-items: center;
                 padding: 12px;
-                border: 1px solid #e5eaf2;
+                border: 1px solid #cfe0f5;
+                border-left: 5px solid #7c3aed;
                 border-radius: 14px;
-                background: #f8fafc;
+                background: linear-gradient(135deg, #ffffff, #f5f3ff);
+                box-shadow: 0 5px 14px rgba(15, 23, 42, .06);
             }
 
             .listalar-gastos-registro-icone {
@@ -960,6 +982,8 @@
             .listalar-gastos-registro-icone {
                 background: #dcfce7;
             }
+
+            .listalar-gastos-registro.manual { border-left-color:#16a34a; background:linear-gradient(135deg,#ffffff,#f0fdf4); }
 
             .listalar-gastos-registro-conteudo {
                 min-width: 0;
@@ -985,6 +1009,13 @@
                 font-weight: 900;
                 white-space: nowrap;
             }
+
+            .listalar-gastos-registro-lateral { display:grid; justify-items:end; gap:8px; }
+            .listalar-gastos-registro-acoes { display:flex; gap:6px; }
+            .listalar-gastos-registro-acao { width:34px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:10px; cursor:pointer; font-size:16px; }
+            .listalar-gastos-registro-acao.editar { color:#1d4ed8; background:#dbeafe; }
+            .listalar-gastos-registro-acao.excluir { color:#b91c1c; background:#fee2e2; }
+            .listalar-gastos-registro-acao:active { transform:scale(.94); }
 
             .listalar-gastos-vazio {
                 padding: 22px 14px;
@@ -1305,29 +1336,29 @@
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Compras</span>
+                    <article class="listalar-gastos-card-resumo compras">
+                        <span>🛒 Compras</span>
                         <strong id="${IDS.totalCompras}">
                             0
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Notas fiscais</span>
+                    <article class="listalar-gastos-card-resumo notas">
+                        <span>🧾 Notas fiscais</span>
                         <strong id="${IDS.totalNotas}">
                             R$ 0,00
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Compras manuais</span>
+                    <article class="listalar-gastos-card-resumo manuais">
+                        <span>💵 Compras manuais</span>
                         <strong id="${IDS.totalManuais}">
                             R$ 0,00
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo">
-                        <span>Ticket médio</span>
+                    <article class="listalar-gastos-card-resumo ticket">
+                        <span>📊 Ticket médio</span>
                         <strong id="${IDS.ticketMedio}">
                             R$ 0,00
                         </strong>
@@ -1472,6 +1503,26 @@
                         >
                             Salvar compra
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="${IDS.modalEditar}" class="listalar-gastos-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="listalar-gastos-editar-titulo">
+                <div class="listalar-gastos-modal-conteudo">
+                    <h2 id="listalar-gastos-editar-titulo">Editar nota fiscal</h2>
+                    <p>Altere o estabelecimento ou a data. Valores e itens fiscais serão preservados.</p>
+                    <div class="listalar-gastos-campo">
+                        <label for="${IDS.editarEstabelecimento}">Estabelecimento</label>
+                        <input id="${IDS.editarEstabelecimento}" type="text" maxlength="120" autocomplete="organization">
+                    </div>
+                    <div class="listalar-gastos-campo">
+                        <label for="${IDS.editarData}">Data da compra</label>
+                        <input id="${IDS.editarData}" type="date">
+                    </div>
+                    <div id="${IDS.editarResumo}" class="listalar-gastos-manual-resumo"></div>
+                    <div class="listalar-gastos-modal-acoes">
+                        <button id="${IDS.editarCancelar}" class="secundario" type="button">Cancelar</button>
+                        <button id="${IDS.editarConfirmar}" class="principal" type="button">Salvar alterações</button>
                     </div>
                 </div>
             </div>
@@ -2729,6 +2780,108 @@
     }
 
     // ========================================================
+    // EDIÇÃO E EXCLUSÃO DE NOTAS FISCAIS
+    // ========================================================
+
+    function localizarRegistroPorId(registroId) {
+        return ESTADO.registros.find((registro) => registro.id === registroId) || null;
+    }
+
+    function fecharModalEditar() {
+        const modal = elemento(IDS.modalEditar);
+        modal?.classList.remove("aberto");
+        modal?.setAttribute("aria-hidden", "true");
+        ESTADO.registroEmEdicao = null;
+    }
+
+    function abrirModalEditar(registroId) {
+        const registro = localizarRegistroPorId(registroId);
+        if (!registro || registro.tipoRegistro !== "nota_fiscal") {
+            mostrarAviso("Nota fiscal não encontrada.", "erro");
+            return;
+        }
+        ESTADO.registroEmEdicao = registro;
+        elemento(IDS.editarEstabelecimento).value = registro.estabelecimentoNome || "";
+        elemento(IDS.editarData).value = dataParaISO(normalizarData(registro.dataCompra || registro.dataCompraMs));
+        const quantidade = Number(registro.quantidadeItens || 0);
+        elemento(IDS.editarResumo).textContent = `${quantidade} ${quantidade === 1 ? "item" : "itens"} · ${formatarMoeda(registro.valorTotal)}`;
+        const modal = elemento(IDS.modalEditar);
+        modal?.classList.add("aberto");
+        modal?.setAttribute("aria-hidden", "false");
+        setTimeout(() => elemento(IDS.editarEstabelecimento)?.focus(), 80);
+    }
+
+    async function salvarEdicaoNotaFiscal() {
+        const registro = ESTADO.registroEmEdicao;
+        if (!registro || ESTADO.salvando) return;
+        const estabelecimentoNome = String(elemento(IDS.editarEstabelecimento)?.value || "").trim();
+        const dataTexto = elemento(IDS.editarData)?.value || "";
+        if (!estabelecimentoNome) {
+            mostrarAviso("Informe o estabelecimento.", "erro");
+            elemento(IDS.editarEstabelecimento)?.focus();
+            return;
+        }
+        const dataCompra = normalizarData(dataTexto);
+        if (!dataCompra || Number.isNaN(dataCompra.getTime())) {
+            mostrarAviso("Informe uma data válida.", "erro");
+            return;
+        }
+        ESTADO.salvando = true;
+        definirCarregando(true, "Salvando alterações...");
+        try {
+            const referencia = ESTADO.firebase.doc(colecaoGastos(), registro.id);
+            await ESTADO.firebase.setDoc(referencia, {
+                estabelecimentoNome,
+                dataCompra: dataParaISO(dataCompra),
+                dataCompraMs: dataCompra.getTime(),
+                competencia: competenciaDaData(dataCompra),
+                atualizadoEm: ESTADO.firebase.serverTimestamp(),
+                editadoPor: ESTADO.usuario?.uid || ""
+            }, { merge: true });
+            fecharModalEditar();
+            mostrarAviso("Nota fiscal atualizada com sucesso.", "sucesso");
+        } catch (erro) {
+            console.error("ListaLar Gastos: erro ao editar nota fiscal:", erro);
+            mostrarAviso("Não foi possível atualizar a nota fiscal.", "erro");
+        } finally {
+            ESTADO.salvando = false;
+            definirCarregando(false);
+        }
+    }
+
+    async function confirmarExclusaoNota(registro) {
+        const texto = `Excluir a nota de ${registro.estabelecimentoNome || "estabelecimento não identificado"} no valor de ${formatarMoeda(registro.valorTotal)}?\n\nA nota e todos os itens serão apagados definitivamente.`;
+        if (typeof window.confirmarAcao === "function") {
+            return window.confirmarAcao({ titulo:"Excluir nota fiscal", texto, tipo:"danger", confirmarTexto:"Excluir nota", cancelarTexto:"Cancelar", confirmarClasse:"danger" });
+        }
+        return window.confirm(texto);
+    }
+
+    async function excluirNotaFiscal(registroId) {
+        if (ESTADO.excluindoRegistro) return;
+        const registro = localizarRegistroPorId(registroId);
+        if (!registro || registro.tipoRegistro !== "nota_fiscal") {
+            mostrarAviso("Nota fiscal não encontrada.", "erro");
+            return;
+        }
+        if (!(await confirmarExclusaoNota(registro))) return;
+        ESTADO.excluindoRegistro = true;
+        definirCarregando(true, "Excluindo nota fiscal...");
+        try {
+            const referencia = ESTADO.firebase.doc(colecaoGastos(), registro.id);
+            await apagarItensExistentes(referencia);
+            await ESTADO.firebase.deleteDoc(referencia);
+            mostrarAviso("Nota fiscal excluída com sucesso.", "sucesso");
+        } catch (erro) {
+            console.error("ListaLar Gastos: erro ao excluir nota fiscal:", erro);
+            mostrarAviso("Não foi possível excluir a nota fiscal.", "erro");
+        } finally {
+            ESTADO.excluindoRegistro = false;
+            definirCarregando(false);
+        }
+    }
+
+    // ========================================================
     // HISTÓRICO E DASHBOARD
     // ========================================================
 
@@ -3166,12 +3319,16 @@
                             </small>
                         </div>
 
-                        <div
-                            class="listalar-gastos-registro-valor"
-                        >
-                            ${formatarMoeda(
-                                registro.valorTotal
-                            )}
+                        <div class="listalar-gastos-registro-lateral">
+                            <div class="listalar-gastos-registro-valor">
+                                ${formatarMoeda(registro.valorTotal)}
+                            </div>
+                            ${manual ? "" : `
+                                <div class="listalar-gastos-registro-acoes">
+                                    <button class="listalar-gastos-registro-acao editar" type="button" data-acao="editar-nota" data-registro-id="${escaparHTML(registro.id)}" title="Editar nota fiscal" aria-label="Editar nota fiscal">✏️</button>
+                                    <button class="listalar-gastos-registro-acao excluir" type="button" data-acao="excluir-nota" data-registro-id="${escaparHTML(registro.id)}" title="Excluir nota fiscal" aria-label="Excluir nota fiscal">🗑️</button>
+                                </div>
+                            `}
                         </div>
                     </article>
                 `;
@@ -3231,6 +3388,20 @@
             }
         );
 
+        elemento(IDS.historico)?.addEventListener("click", (evento) => {
+            const botao = evento.target.closest("[data-acao][data-registro-id]");
+            if (!botao) return;
+            const registroId = botao.dataset.registroId;
+            if (botao.dataset.acao === "editar-nota") abrirModalEditar(registroId);
+            if (botao.dataset.acao === "excluir-nota") excluirNotaFiscal(registroId);
+        });
+
+        elemento(IDS.editarCancelar)?.addEventListener("click", fecharModalEditar);
+        elemento(IDS.editarConfirmar)?.addEventListener("click", salvarEdicaoNotaFiscal);
+        elemento(IDS.modalEditar)?.addEventListener("click", (evento) => {
+            if (evento.target === elemento(IDS.modalEditar)) fecharModalEditar();
+        });
+
         elemento(IDS.modalManual)?.addEventListener(
             "click",
             (evento) => {
@@ -3247,6 +3418,11 @@
             "keydown",
             (evento) => {
                 if (evento.key !== "Escape") {
+                    return;
+                }
+
+                if (elemento(IDS.modalEditar)?.classList.contains("aberto")) {
+                    fecharModalEditar();
                     return;
                 }
 
@@ -3284,6 +3460,8 @@
         salvarCompraManual: abrirModalManual,
         obterResumoCompraManualAoFinalizar,
         salvarCompraManualAoFinalizar,
+        editarNotaFiscal: abrirModalEditar,
+        excluirNotaFiscal,
         obterFamiliaId() {
             return ESTADO.familiaId;
         },
