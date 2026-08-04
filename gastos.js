@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 2.4.0
+// Versão: 3.0.2
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.0.1";
+    const VERSAO = "3.0.2";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -35,6 +35,7 @@
         tela: "listalar-tela-gastos",
         botaoFechar: "listalar-gastos-fechar",
         botaoImportarPdf: "listalar-gastos-importar-pdf",
+        botaoSalvarManual: "listalar-gastos-salvar-manual",
         seletorPeriodo: "listalar-gastos-periodo",
         aviso: "listalar-gastos-aviso",
         carregando: "listalar-gastos-carregando",
@@ -54,31 +55,7 @@
         manualData: "listalar-gastos-manual-data",
         manualResumo: "listalar-gastos-manual-resumo",
         manualConfirmar: "listalar-gastos-manual-confirmar",
-        manualCancelar: "listalar-gastos-manual-cancelar",
-        modalEditar: "listalar-gastos-modal-editar",
-        editarEstabelecimento: "listalar-gastos-editar-estabelecimento",
-        editarData: "listalar-gastos-editar-data",
-        editarResumo: "listalar-gastos-editar-resumo",
-        editarConfirmar: "listalar-gastos-editar-confirmar",
-        editarCancelar: "listalar-gastos-editar-cancelar",
-
-        modalDetalhes: "listalar-gastos-modal-detalhes",
-        detalhesTitulo: "listalar-gastos-detalhes-titulo",
-        detalhesResumo: "listalar-gastos-detalhes-resumo",
-        detalhesItens: "listalar-gastos-detalhes-itens",
-        detalhesFechar: "listalar-gastos-detalhes-fechar",
-        buscaHistorico: "listalar-gastos-busca",
-        filtroMercado: "listalar-gastos-filtro-mercado",
-        dataInicial: "listalar-gastos-data-inicial",
-        dataFinal: "listalar-gastos-data-final",
-        botaoExportar: "listalar-gastos-exportar",
-        detalhesEditarItens: "listalar-gastos-detalhes-editar-itens",
-        detalhesSalvarItens: "listalar-gastos-detalhes-salvar-itens",
-        modalExcluir: "listalar-gastos-modal-excluir",
-        excluirTitulo: "listalar-gastos-excluir-titulo",
-        excluirResumo: "listalar-gastos-excluir-resumo",
-        excluirConfirmar: "listalar-gastos-excluir-confirmar",
-        excluirCancelar: "listalar-gastos-excluir-cancelar"
+        manualCancelar: "listalar-gastos-manual-cancelar"
     });
 
     const ESTADO = {
@@ -92,20 +69,7 @@
         periodo: "mes_atual",
         salvando: false,
         ultimaNotaReferencia: null,
-        ultimaNotaRecebidaEm: 0,
-        resolverCompraManual: null,
-        contextoCompraManual: null,
-        registroEmEdicao: null,
-        registroEmDetalhes: null,
-        carregandoDetalhes: false,
-        excluindoRegistro: false,
-        busca: "",
-        mercado: "",
-        dataInicial: "",
-        dataFinal: "",
-        itensDetalhes: [],
-        editandoItens: false,
-        resolverExclusao: null
+        ultimaNotaRecebidaEm: 0
     };
 
     // ========================================================
@@ -658,12 +622,30 @@
             .listalar-gastos-tela {
                 position: fixed;
                 inset: 0;
+                width: 100vw;
+                max-width: none !important;
+                min-width: 0;
+                height: 100vh;
+                height: 100dvh;
                 z-index: 10000;
                 display: none;
                 background: #f4f7fb;
                 color: #172033;
+                overflow-x: hidden;
                 overflow-y: auto;
                 overscroll-behavior: contain;
+                box-sizing: border-box;
+            }
+
+            .listalar-gastos-tela,
+            .listalar-gastos-tela * {
+                box-sizing: border-box;
+            }
+
+            .listalar-gastos-tela > *,
+            .listalar-gastos-cabecalho,
+            .listalar-gastos-conteudo {
+                max-width: 100%;
             }
 
             .listalar-gastos-tela.aberta {
@@ -672,6 +654,7 @@
 
             .listalar-gastos-cabecalho {
                 position: sticky;
+                width: 100%;
                 top: 0;
                 z-index: 5;
                 display: flex;
@@ -733,7 +716,8 @@
             }
 
             .listalar-gastos-conteudo {
-                width: min(100%, 960px);
+                width: 100%;
+                max-width: 960px;
                 margin: 0 auto;
                 padding: 16px 16px 110px;
                 box-sizing: border-box;
@@ -809,15 +793,6 @@
             .listalar-gastos-card-resumo.principal strong {
                 color: #ffffff;
             }
-
-            .listalar-gastos-card-resumo.compras { border-color:#bfdbfe; background:linear-gradient(145deg,#eff6ff,#dbeafe); }
-            .listalar-gastos-card-resumo.compras strong { color:#1d4ed8; }
-            .listalar-gastos-card-resumo.notas { border-color:#ddd6fe; background:linear-gradient(145deg,#faf5ff,#ede9fe); }
-            .listalar-gastos-card-resumo.notas strong { color:#6d28d9; }
-            .listalar-gastos-card-resumo.manuais { border-color:#bbf7d0; background:linear-gradient(145deg,#f0fdf4,#dcfce7); }
-            .listalar-gastos-card-resumo.manuais strong { color:#15803d; }
-            .listalar-gastos-card-resumo.ticket { border-color:#fde68a; background:linear-gradient(145deg,#fffbeb,#fef3c7); }
-            .listalar-gastos-card-resumo.ticket strong { color:#a16207; }
 
             .listalar-gastos-card {
                 margin-bottom: 14px;
@@ -973,9 +948,6 @@
                 background: #16a34a;
             }
 
-            .listalar-gastos-card-topo h2 { display:inline-flex; align-items:center; gap:8px; color:#172033; }
-            .listalar-gastos-card-topo h2::before { content:""; width:7px; height:22px; border-radius:999px; background:linear-gradient(180deg,#2563eb,#06b6d4); box-shadow:0 3px 8px rgba(37,99,235,.25); }
-
             .listalar-gastos-historico-lista {
                 display: grid;
                 gap: 10px;
@@ -988,11 +960,9 @@
                 gap: 11px;
                 align-items: center;
                 padding: 12px;
-                border: 1px solid #cfe0f5;
-                border-left: 5px solid #7c3aed;
+                border: 1px solid #e5eaf2;
                 border-radius: 14px;
-                background: linear-gradient(135deg, #ffffff, #f5f3ff);
-                box-shadow: 0 5px 14px rgba(15, 23, 42, .06);
+                background: #f8fafc;
             }
 
             .listalar-gastos-registro-icone {
@@ -1009,8 +979,6 @@
             .listalar-gastos-registro-icone {
                 background: #dcfce7;
             }
-
-            .listalar-gastos-registro.manual { border-left-color:#16a34a; background:linear-gradient(135deg,#ffffff,#f0fdf4); }
 
             .listalar-gastos-registro-conteudo {
                 min-width: 0;
@@ -1035,111 +1003,6 @@
                 font-size: 14px;
                 font-weight: 900;
                 white-space: nowrap;
-            }
-
-            .listalar-gastos-registro-lateral { display:grid; justify-items:end; gap:8px; }
-            .listalar-gastos-registro-acoes { display:flex; gap:6px; }
-            .listalar-gastos-registro-acao { width:34px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:10px; cursor:pointer; font-size:16px; }
-            .listalar-gastos-registro-acao.editar { color:#1d4ed8; background:#dbeafe; }
-            .listalar-gastos-registro-acao.excluir { color:#b91c1c; background:#fee2e2; }
-            .listalar-gastos-registro-acao:active { transform:scale(.94); }
-
-            .listalar-gastos-registro {
-                cursor: pointer;
-                transition: transform .16s ease, box-shadow .16s ease;
-            }
-
-            .listalar-gastos-registro:active {
-                transform: scale(.992);
-            }
-
-            .listalar-gastos-registro-dica {
-                display: block;
-                margin-top: 5px;
-                color: #2563eb;
-                font-size: 10px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-detalhes-resumo {
-                display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 9px;
-                margin: 12px 0 16px;
-            }
-
-            .listalar-gastos-detalhes-resumo-item {
-                padding: 11px;
-                border: 1px solid #dbeafe;
-                border-radius: 13px;
-                background: #eff6ff;
-            }
-
-            .listalar-gastos-detalhes-resumo-item span {
-                display: block;
-                margin-bottom: 4px;
-                color: #64748b;
-                font-size: 10px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-detalhes-resumo-item strong {
-                display: block;
-                color: #172033;
-                font-size: 13px;
-                overflow-wrap: anywhere;
-            }
-
-            .listalar-gastos-detalhes-itens {
-                display: grid;
-                gap: 9px;
-                max-height: 52vh;
-                overflow-y: auto;
-                padding-right: 2px;
-            }
-
-            .listalar-gastos-detalhe-item {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
-                gap: 8px 12px;
-                padding: 12px;
-                border: 1px solid #e2e8f0;
-                border-radius: 13px;
-                background: #f8fafc;
-            }
-
-            .listalar-gastos-detalhe-item-nome {
-                min-width: 0;
-                color: #172033;
-                font-size: 13px;
-                font-weight: 900;
-                line-height: 1.3;
-                overflow-wrap: anywhere;
-            }
-
-            .listalar-gastos-detalhe-item-total {
-                color: #0f766e;
-                font-size: 13px;
-                font-weight: 900;
-                white-space: nowrap;
-            }
-
-            .listalar-gastos-detalhe-item-info {
-                grid-column: 1 / -1;
-                color: #64748b;
-                font-size: 11px;
-                line-height: 1.4;
-            }
-
-            .listalar-gastos-detalhes-vazio {
-                padding: 20px 12px;
-                border: 1px dashed #cbd5e1;
-                border-radius: 13px;
-                color: #64748b;
-                background: #f8fafc;
-                text-align: center;
-                font-size: 13px;
-                font-weight: 700;
             }
 
             .listalar-gastos-vazio {
@@ -1297,86 +1160,6 @@
                 background: #16a34a;
             }
 
-            .listalar-gastos-modal-excluir-conteudo {
-                width: min(100%, 420px);
-                padding: 24px 22px 21px;
-                border: 1px solid #fecaca;
-                border-radius: 24px;
-                background: linear-gradient(180deg, #ffffff, #fff7f7);
-                box-shadow: 0 28px 70px rgba(127, 29, 29, 0.28);
-                text-align: center;
-            }
-
-            .listalar-gastos-excluir-icone {
-                display: grid;
-                place-items: center;
-                width: 68px;
-                height: 68px;
-                margin: 0 auto 14px;
-                border: 1px solid #fecaca;
-                border-radius: 22px;
-                color: #b91c1c;
-                background: #fee2e2;
-                font-size: 34px;
-                box-shadow: 0 10px 22px rgba(185, 28, 28, 0.14);
-            }
-
-            .listalar-gastos-modal-excluir-conteudo h2 {
-                margin: 0 0 8px;
-                color: #7f1d1d;
-                font-size: 22px;
-            }
-
-            .listalar-gastos-excluir-texto {
-                margin: 0 0 14px !important;
-                color: #475569 !important;
-                font-size: 14px !important;
-            }
-
-            .listalar-gastos-excluir-resumo {
-                display: grid;
-                gap: 7px;
-                margin: 15px 0;
-                padding: 14px;
-                border: 1px solid #fecaca;
-                border-radius: 15px;
-                color: #7f1d1d;
-                background: #fff1f2;
-                text-align: left;
-                font-size: 13px;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-excluir-aviso {
-                margin: 0 0 17px !important;
-                color: #991b1b !important;
-                font-size: 12px !important;
-                font-weight: 800;
-            }
-
-            .listalar-gastos-modal-excluir {
-                color: #ffffff;
-                background: #dc2626;
-            }
-
-            .listalar-gastos-modal-excluir:hover {
-                background: #b91c1c;
-            }
-
-            .listalar-gastos-filtros-avancados {
-                display:grid; grid-template-columns:2fr 1.2fr 1fr 1fr auto; gap:8px; margin-bottom:14px;
-            }
-            .listalar-gastos-filtros-avancados input,
-            .listalar-gastos-filtros-avancados select {
-                min-height:44px; padding:9px 11px; border:1px solid #dbe4f0; border-radius:12px; background:#fff; font:inherit; font-size:13px;
-            }
-            .listalar-gastos-exportar { min-height:44px; padding:9px 13px; border:0; border-radius:12px; background:#0f766e; color:#fff; font-weight:800; cursor:pointer; }
-            .listalar-gastos-detalhe-item.editando { grid-template-columns:1fr; }
-            .listalar-gastos-detalhe-item-grid { display:grid; grid-template-columns:2fr .8fr .8fr 1fr 1fr; gap:7px; }
-            .listalar-gastos-detalhe-item-grid input { width:100%; min-height:40px; padding:7px; border:1px solid #cbd5e1; border-radius:9px; box-sizing:border-box; }
-            .listalar-gastos-comparacao { margin-top:7px; padding:7px 9px; border-radius:9px; background:#ecfeff; color:#155e75; font-size:10px; font-weight:800; }
-            @media (max-width:720px) { .listalar-gastos-filtros-avancados { grid-template-columns:1fr 1fr; } .listalar-gastos-filtros-avancados > :first-child { grid-column:1/-1; } .listalar-gastos-detalhe-item-grid { grid-template-columns:1fr 1fr; } .listalar-gastos-detalhe-item-grid .campo-nome { grid-column:1/-1; } }
-
             @media (max-width: 720px) {
                 .listalar-gastos-cabecalho {
                     min-height: 62px;
@@ -1393,7 +1176,24 @@
                 }
 
                 .listalar-gastos-conteudo {
+                    width: 100%;
+                    max-width: 100%;
                     padding: 13px 11px 100px;
+                    overflow-x: hidden;
+                }
+
+                .listalar-gastos-filtro,
+                .listalar-gastos-filtros-avancados,
+                .listalar-gastos-exportacao {
+                    min-width: 0;
+                    max-width: 100%;
+                }
+
+                .listalar-gastos-filtro > *,
+                .listalar-gastos-filtros-avancados > *,
+                .listalar-gastos-exportacao > * {
+                    min-width: 0;
+                    max-width: 100%;
                 }
 
                 .listalar-gastos-grade-resumo {
@@ -1541,29 +1341,29 @@
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo compras">
-                        <span>🛒 Compras</span>
+                    <article class="listalar-gastos-card-resumo">
+                        <span>Compras</span>
                         <strong id="${IDS.totalCompras}">
                             0
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo notas">
-                        <span>🧾 Notas fiscais</span>
+                    <article class="listalar-gastos-card-resumo">
+                        <span>Notas fiscais</span>
                         <strong id="${IDS.totalNotas}">
                             R$ 0,00
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo manuais">
-                        <span>💵 Compras manuais</span>
+                    <article class="listalar-gastos-card-resumo">
+                        <span>Compras manuais</span>
                         <strong id="${IDS.totalManuais}">
                             R$ 0,00
                         </strong>
                     </article>
 
-                    <article class="listalar-gastos-card-resumo ticket">
-                        <span>📊 Ticket médio</span>
+                    <article class="listalar-gastos-card-resumo">
+                        <span>Ticket médio</span>
                         <strong id="${IDS.ticketMedio}">
                             R$ 0,00
                         </strong>
@@ -1588,6 +1388,14 @@
                             type="button"
                         >
                             📄 Importar nota fiscal em PDF
+                        </button>
+
+                        <button
+                            id="${IDS.botaoSalvarManual}"
+                            class="listalar-gastos-botao secundario"
+                            type="button"
+                        >
+                            💵 Salvar compra manual atual
                         </button>
                     </div>
                 </section>
@@ -1617,14 +1425,6 @@
 
                         <div id="${IDS.graficoOrigem}"></div>
                     </article>
-                </section>
-
-                <section class="listalar-gastos-filtros-avancados" aria-label="Busca e filtros do histórico">
-                    <input id="${IDS.buscaHistorico}" type="search" placeholder="🔎 Buscar mercado ou valor">
-                    <select id="${IDS.filtroMercado}" aria-label="Filtrar por estabelecimento"><option value="">Todos os mercados</option></select>
-                    <input id="${IDS.dataInicial}" type="date" aria-label="Data inicial">
-                    <input id="${IDS.dataFinal}" type="date" aria-label="Data final">
-                    <button id="${IDS.botaoExportar}" class="listalar-gastos-exportar" type="button">Exportar CSV</button>
                 </section>
 
                 <section class="listalar-gastos-card">
@@ -1661,12 +1461,12 @@
             >
                 <div class="listalar-gastos-modal-conteudo">
                     <h2 id="listalar-gastos-manual-titulo">
-                        Confirmar compra com preços
+                        Salvar compra manual
                     </h2>
 
                     <p>
-                        Informe o estabelecimento. A data de hoje já
-                        está preenchida e pode ser alterada.
+                        Serão usados os preços e as quantidades
+                        atualmente informados na Lista de Compras.
                     </p>
 
                     <div class="listalar-gastos-campo">
@@ -1716,67 +1516,6 @@
                         >
                             Salvar compra
                         </button>
-                    </div>
-                </div>
-            </div>
-
-            <div id="${IDS.modalEditar}" class="listalar-gastos-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="listalar-gastos-editar-titulo">
-                <div class="listalar-gastos-modal-conteudo">
-                    <h2 id="listalar-gastos-editar-titulo">Editar nota fiscal</h2>
-                    <p>Altere o estabelecimento ou a data. Valores e itens fiscais serão preservados.</p>
-                    <div class="listalar-gastos-campo">
-                        <label for="${IDS.editarEstabelecimento}">Estabelecimento</label>
-                        <input id="${IDS.editarEstabelecimento}" type="text" maxlength="120" autocomplete="organization">
-                    </div>
-                    <div class="listalar-gastos-campo">
-                        <label for="${IDS.editarData}">Data da compra</label>
-                        <input id="${IDS.editarData}" type="date">
-                    </div>
-                    <div id="${IDS.editarResumo}" class="listalar-gastos-manual-resumo"></div>
-                    <div class="listalar-gastos-modal-acoes">
-                        <button id="${IDS.editarCancelar}" class="listalar-gastos-modal-cancelar" type="button">Cancelar</button>
-                        <button id="${IDS.editarConfirmar}" class="listalar-gastos-modal-confirmar" type="button">Salvar alterações</button>
-                    </div>
-                </div>
-            </div>
-
-            <div
-                id="${IDS.modalDetalhes}"
-                class="listalar-gastos-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-hidden="true"
-                aria-labelledby="${IDS.detalhesTitulo}"
-            >
-                <div class="listalar-gastos-modal-conteudo">
-                    <h2 id="${IDS.detalhesTitulo}">Itens da compra</h2>
-                    <div id="${IDS.detalhesResumo}" class="listalar-gastos-detalhes-resumo"></div>
-                    <div id="${IDS.detalhesItens}" class="listalar-gastos-detalhes-itens"></div>
-                    <div class="listalar-gastos-modal-acoes" style="grid-template-columns:repeat(3,1fr);">
-                        <button id="${IDS.detalhesFechar}" class="listalar-gastos-modal-cancelar" type="button">Fechar</button>
-                        <button id="${IDS.detalhesEditarItens}" class="listalar-gastos-modal-cancelar" type="button">Editar itens</button>
-                        <button id="${IDS.detalhesSalvarItens}" class="listalar-gastos-modal-confirmar" type="button" hidden>Salvar itens</button>
-                    </div>
-                </div>
-            </div>
-
-            <div
-                id="${IDS.modalExcluir}"
-                class="listalar-gastos-modal"
-                role="alertdialog"
-                aria-modal="true"
-                aria-hidden="true"
-                aria-labelledby="${IDS.excluirTitulo}"
-            >
-                <div class="listalar-gastos-modal-excluir-conteudo">
-                    <div class="listalar-gastos-excluir-icone" aria-hidden="true">🗑️</div>
-                    <h2 id="${IDS.excluirTitulo}">Excluir nota fiscal?</h2>
-                    <p class="listalar-gastos-excluir-texto">Confirme os dados antes de apagar.</p>
-                    <div id="${IDS.excluirResumo}" class="listalar-gastos-excluir-resumo"></div>
-                    <p class="listalar-gastos-excluir-aviso">Esta ação é permanente. A nota e todos os itens serão excluídos.</p>
-                    <div class="listalar-gastos-modal-acoes">
-                        <button id="${IDS.excluirCancelar}" class="listalar-gastos-modal-cancelar" type="button">Cancelar</button>
-                        <button id="${IDS.excluirConfirmar}" class="listalar-gastos-modal-excluir" type="button">Excluir nota</button>
                     </div>
                 </div>
             </div>
@@ -1877,9 +1616,6 @@
         }
 
         fecharModalManual();
-        fecharModalEditar();
-        fecharModalDetalhes();
-        fecharModalExcluir(false);
         tela.classList.remove("aberta");
         tela.setAttribute("aria-hidden", "true");
         document.body.classList.remove("listalar-gastos-aberto");
@@ -2331,14 +2067,6 @@
         );
 
         try {
-            if (registro.tipoRegistro === "nota_fiscal") {
-                const existente = await firebase.getDoc(referenciaGasto);
-                if (existente.exists()) {
-                    mostrarAviso("Esta nota fiscal já foi importada.", "erro");
-                    throw new Error("NOTA_DUPLICADA");
-                }
-            }
-
             await apagarItensExistentes(
                 referenciaGasto
             );
@@ -2466,15 +2194,11 @@
                 await batch.commit();
             }
 
-            const dataRegistro = converterParaData(registro.dataCompra || registro.dataCompraMs);
-            const agora = new Date();
-            const foraMesAtual = ESTADO.periodo === "mes_atual" &&
-                (dataRegistro.getMonth() !== agora.getMonth() || dataRegistro.getFullYear() !== agora.getFullYear());
             mostrarAviso(
-                foraMesAtual
-                    ? "Compra salva, mas está fora do filtro deste mês."
-                    : (registro.tipoRegistro === "nota_fiscal" ? "Nota fiscal salva com sucesso." : "Compra manual salva com sucesso."),
-                foraMesAtual ? "info" : "sucesso"
+                registro.tipoRegistro === "nota_fiscal"
+                    ? "Nota fiscal salva com sucesso."
+                    : "Compra manual salva com sucesso.",
+                "sucesso"
             );
 
             window.dispatchEvent(
@@ -2616,9 +2340,7 @@
     // COMPRA MANUAL
     // ========================================================
 
-    function obterItensManuaisAtuais(
-        produtoIdsPermitidos = null
-    ) {
+    function obterItensManuaisAtuais() {
         try {
             if (
                 !window.ListaLarPrecos ||
@@ -2628,30 +2350,10 @@
                 return [];
             }
 
-            const idsPermitidos =
-                Array.isArray(produtoIdsPermitidos)
-                    ? new Set(
-                        produtoIdsPermitidos
-                            .map((id) => String(id || ""))
-                            .filter(Boolean)
-                    )
-                    : null;
-
             return window.ListaLarPrecos
                 .obterItens()
-                .filter((item) => {
-                    const produtoId = String(
-                        item.produtoId || ""
-                    );
-
-                    if (
-                        idsPermitidos &&
-                        !idsPermitidos.has(produtoId)
-                    ) {
-                        return false;
-                    }
-
-                    return (
+                .filter(
+                    (item) =>
                         numeroSeguro(
                             item.quantidade,
                             0
@@ -2660,8 +2362,7 @@
                             item.precoUnitario,
                             0
                         ) > 0
-                    );
-                })
+                )
                 .map(
                     (item, indice) => ({
                         ordem: indice + 1,
@@ -2708,40 +2409,15 @@
         }
     }
 
-    function resolverFluxoCompraManual(resultado) {
-        const resolver =
-            ESTADO.resolverCompraManual;
-
-        ESTADO.resolverCompraManual = null;
-        ESTADO.contextoCompraManual = null;
-
-        if (typeof resolver === "function") {
-            resolver(resultado);
-        }
-    }
-
-    function abrirModalManual({
-        produtoIds = null,
-        origem = "tela_gastos"
-    } = {}) {
-        if (ESTADO.resolverCompraManual) {
-            return Promise.resolve({
-                necessario: true,
-                salvo: false,
-                cancelado: true,
-                motivo: "FLUXO_JA_ABERTO"
-            });
-        }
-
-        const itens =
-            obterItensManuaisAtuais(produtoIds);
+    function abrirModalManual() {
+        const itens = obterItensManuaisAtuais();
 
         if (!itens.length) {
-            return Promise.resolve({
-                necessario: false,
-                salvo: false,
-                cancelado: false
-            });
+            mostrarAviso(
+                "Informe preços na Lista de Compras antes de salvar.",
+                "erro"
+            );
+            return;
         }
 
         const total = arredondarMoeda(
@@ -2767,12 +2443,6 @@
         modal.classList.add("aberto");
         modal.setAttribute("aria-hidden", "false");
 
-        ESTADO.contextoCompraManual = {
-            origem,
-            total,
-            quantidadeItens: itens.length
-        };
-
         window.setTimeout(
             () =>
                 elemento(
@@ -2780,41 +2450,21 @@
                 )?.focus(),
             0
         );
-
-        return new Promise((resolve) => {
-            ESTADO.resolverCompraManual = resolve;
-        });
     }
 
-    function fecharModalManual({
-        resolver = true,
-        resultado = {
-            necessario: true,
-            salvo: false,
-            cancelado: true
-        }
-    } = {}) {
+    function fecharModalManual() {
         const modal = elemento(IDS.modalManual);
 
-        if (modal) {
-            modal.classList.remove("aberto");
-            modal.setAttribute(
-                "aria-hidden",
-                "true"
-            );
-            delete modal.dataset.itens;
-        }
-
-        if (resolver) {
-            resolverFluxoCompraManual(resultado);
-        }
-    }
-
-    async function confirmarCompraManual() {
-        if (ESTADO.salvando) {
+        if (!modal) {
             return;
         }
 
+        modal.classList.remove("aberto");
+        modal.setAttribute("aria-hidden", "true");
+        delete modal.dataset.itens;
+    }
+
+    async function confirmarCompraManual() {
         const modal = elemento(IDS.modalManual);
         const estabelecimentoNome =
             normalizarTexto(
@@ -2849,14 +2499,7 @@
         }
 
         if (!itens.length) {
-            fecharModalManual({
-                resultado: {
-                    necessario: false,
-                    salvo: false,
-                    cancelado: true,
-                    motivo: "SEM_ITENS_COM_PRECO"
-                }
-            });
+            fecharModalManual();
             mostrarAviso(
                 "Nenhum item com preço foi encontrado.",
                 "erro"
@@ -2915,22 +2558,10 @@
                 itens
             );
 
+            fecharModalManual();
             elemento(
                 IDS.manualEstabelecimento
             ).value = "";
-
-            fecharModalManual({
-                resultado: {
-                    necessario: true,
-                    salvo: true,
-                    cancelado: false,
-                    gastoId: registro.id,
-                    valorTotal,
-                    quantidadeItens: itens.length,
-                    dataCompra: registro.dataCompra,
-                    estabelecimentoNome
-                }
-            });
         } catch (erro) {
             console.error(
                 "ListaLar Gastos: erro ao salvar compra manual:",
@@ -2938,487 +2569,11 @@
             );
 
             mostrarAviso(
-                "Não foi possível salvar a compra. A lista não será finalizada.",
+                "Não foi possível salvar a compra manual.",
                 "erro"
             );
         } finally {
             botao.disabled = false;
-        }
-    }
-
-
-    function obterResumoCompraManualAoFinalizar({
-        produtoIds = []
-    } = {}) {
-        const itens = obterItensManuaisAtuais(produtoIds);
-
-        if (!itens.length) {
-            return {
-                necessario: false,
-                quantidadeItens: 0,
-                valorTotal: 0
-            };
-        }
-
-        return {
-            necessario: true,
-            quantidadeItens: itens.length,
-            valorTotal: arredondarMoeda(
-                itens.reduce(
-                    (soma, item) =>
-                        soma + numeroSeguro(item.valorTotal, 0),
-                    0
-                )
-            )
-        };
-    }
-
-    async function salvarCompraManualAoFinalizar({
-        produtoIds = [],
-        estabelecimentoNome = "",
-        dataCompra = ""
-    } = {}) {
-        if (ESTADO.salvando) {
-            throw new Error("SALVAMENTO_EM_ANDAMENTO");
-        }
-
-        const itens = obterItensManuaisAtuais(produtoIds);
-
-        if (!itens.length) {
-            return {
-                necessario: false,
-                salvo: false,
-                cancelado: false
-            };
-        }
-
-        const nome = normalizarTexto(estabelecimentoNome);
-
-        if (!nome) {
-            throw new Error("ESTABELECIMENTO_OBRIGATORIO");
-        }
-
-        const dataCompraConvertida = converterParaData(
-            dataCompra || dataHojeISO()
-        );
-
-        const valorTotal = arredondarMoeda(
-            itens.reduce(
-                (soma, item) =>
-                    soma + numeroSeguro(item.valorTotal, 0),
-                0
-            )
-        );
-
-        const assinatura = [
-            ESTADO.familiaId,
-            dataParaISO(dataCompraConvertida),
-            nome.toLowerCase(),
-            valorTotal.toFixed(2),
-            itens.map(
-                (item) => `${item.produtoId}:${item.valorTotal}`
-            ).join("|")
-        ].join("::");
-
-        const registro = {
-            id: `manual_${hashTexto(assinatura)}`,
-            tipoRegistro: "compra_manual",
-            origem: "MANUAL",
-            estabelecimentoNome: nome,
-            estabelecimentoCnpj: "",
-            dataCompra: dataParaISO(dataCompraConvertida),
-            dataCompraMs: dataCompraConvertida.getTime(),
-            competencia: competenciaDaData(dataCompraConvertida),
-            valorTotal,
-            quantidadeItens: itens.length,
-            chaveAcesso: ""
-        };
-
-        await salvarRegistroComItens(registro, itens);
-
-        return {
-            necessario: true,
-            salvo: true,
-            cancelado: false,
-            gastoId: registro.id,
-            valorTotal,
-            quantidadeItens: itens.length,
-            dataCompra: registro.dataCompra,
-            estabelecimentoNome: nome
-        };
-    }
-
-    // ========================================================
-    // EDIÇÃO E EXCLUSÃO DE NOTAS FISCAIS
-    // ========================================================
-
-    function localizarRegistroPorId(registroId) {
-        return ESTADO.registros.find((registro) => registro.id === registroId) || null;
-    }
-
-    function fecharModalDetalhes() {
-        const modal = elemento(IDS.modalDetalhes);
-        modal?.classList.remove("aberto");
-        modal?.setAttribute("aria-hidden", "true");
-        ESTADO.registroEmDetalhes = null;
-        ESTADO.carregandoDetalhes = false;
-        ESTADO.editandoItens = false;
-        ESTADO.itensDetalhes = [];
-    }
-
-    function valorItem(item, nomes, padrao = "") {
-        for (const nome of nomes) {
-            const valor = item?.[nome];
-            if (valor !== undefined && valor !== null && valor !== "") {
-                return valor;
-            }
-        }
-        return padrao;
-    }
-
-    function chaveComparacaoItem(item) {
-        return somenteDigitos(item.gtin) || normalizarTexto(item.codigoItem || item.codigo || "").toLowerCase() || normalizarTexto(item.descricao || item.descricaoOriginal || item.produtoNome || "").toLowerCase();
-    }
-
-    function renderizarItensDetalhes(itens) {
-        const container = elemento(IDS.detalhesItens);
-        if (!container) return;
-        ESTADO.itensDetalhes = itens;
-        if (!itens.length) {
-            container.innerHTML = `<div class="listalar-gastos-detalhes-vazio">Nenhum item foi encontrado nesta compra.</div>`;
-            return;
-        }
-        container.innerHTML = itens.map((item, indice) => {
-            const descricao = normalizarTexto(valorItem(item,["descricao","descricaoEditada","descricaoOriginal","produtoNome","nome"],`Item ${indice+1}`)) || `Item ${indice+1}`;
-            const quantidade = numeroSeguro(valorItem(item,["quantidade","qtd","quantidadeComprada"],0),0);
-            const unidade = normalizarTexto(valorItem(item,["unidade","un","siglaUnidade"],""));
-            const precoUnitario = numeroSeguro(valorItem(item,["precoUnitario","valorUnitario","precoCompra","preco"],0),0);
-            const valorTotal = numeroSeguro(valorItem(item,["valorTotal","total","subtotal"],quantidade*precoUnitario),quantidade*precoUnitario);
-            if (ESTADO.editandoItens) {
-                return `<article class="listalar-gastos-detalhe-item editando" data-item-id="${escaparHTML(item.id)}"><div class="listalar-gastos-detalhe-item-grid"><input class="campo-nome" data-campo="descricao" value="${escaparHTML(descricao)}"><input data-campo="quantidade" type="number" min="0" step="0.001" value="${quantidade}"><input data-campo="unidade" value="${escaparHTML(unidade)}"><input data-campo="precoUnitario" type="number" min="0" step="0.01" value="${precoUnitario.toFixed(2)}"><input data-campo="valorTotal" type="number" min="0" step="0.01" value="${valorTotal.toFixed(2)}"></div></article>`;
-            }
-            const comp = item.comparacao;
-            return `<article class="listalar-gastos-detalhe-item"><div class="listalar-gastos-detalhe-item-nome">${escaparHTML(descricao)}</div><div class="listalar-gastos-detalhe-item-total">${formatarMoeda(valorTotal)}</div><div class="listalar-gastos-detalhe-item-info">${formatarQuantidade(quantidade)} ${escaparHTML(unidade)} × ${formatarMoeda(precoUnitario)}</div>${comp ? `<div class="listalar-gastos-comparacao">Histórico: menor ${formatarMoeda(comp.min)} · maior ${formatarMoeda(comp.max)} · ${comp.ocorrencias} compra(s)</div>` : ""}</article>`;
-        }).join("");
-    }
-
-    async function enriquecerComparacoes(itens, registroAtualId) {
-        const mapa = new Map();
-        for (const registro of ESTADO.registros.filter(r => r.id !== registroAtualId).slice(0, 40)) {
-            try {
-                const ref = ESTADO.firebase.doc(colecaoGastos(), registro.id);
-                const snap = await ESTADO.firebase.getDocs(ESTADO.firebase.collection(ref, "itens"));
-                for (const docItem of snap.docs) {
-                    const item = docItem.data();
-                    const chave = chaveComparacaoItem(item);
-                    const preco = numeroSeguro(item.precoUnitario, 0);
-                    if (!chave || preco <= 0) continue;
-                    const atual = mapa.get(chave) || []; atual.push(preco); mapa.set(chave, atual);
-                }
-            } catch {}
-        }
-        return itens.map(item => {
-            const valores = mapa.get(chaveComparacaoItem(item)) || [];
-            return valores.length ? {...item, comparacao:{min:Math.min(...valores),max:Math.max(...valores),ocorrencias:valores.length}} : item;
-        });
-    }
-
-    function alternarEdicaoItens() {
-        if (!ESTADO.registroEmDetalhes) return;
-        ESTADO.editandoItens = !ESTADO.editandoItens;
-        elemento(IDS.detalhesSalvarItens).hidden = !ESTADO.editandoItens;
-        elemento(IDS.detalhesEditarItens).textContent = ESTADO.editandoItens ? "Cancelar edição" : "Editar itens";
-        renderizarItensDetalhes(ESTADO.itensDetalhes);
-    }
-
-    async function salvarItensDetalhes() {
-        const registro = ESTADO.registroEmDetalhes;
-        if (!registro || ESTADO.salvando) return;
-        const linhas = [...elemento(IDS.detalhesItens).querySelectorAll("[data-item-id]")];
-        const itens = linhas.map((linha, indice) => {
-            const val = campo => linha.querySelector(`[data-campo="${campo}"]`)?.value || "";
-            const quantidade = numeroSeguro(val("quantidade"),0);
-            const precoUnitario = numeroSeguro(val("precoUnitario"),0);
-            const valorTotal = numeroSeguro(val("valorTotal"), quantidade*precoUnitario);
-            const original = ESTADO.itensDetalhes.find(i => i.id === linha.dataset.itemId) || {};
-            return {...original, ordem:original.ordem || indice+1, descricao:normalizarTexto(val("descricao")), quantidade, unidade:normalizarTexto(val("unidade")).toUpperCase(), precoUnitario:arredondarMoeda(precoUnitario), valorTotal:arredondarMoeda(valorTotal)};
-        }).filter(i => i.descricao && i.quantidade > 0);
-        if (!itens.length) { mostrarAviso("Mantenha pelo menos um item válido.","erro"); return; }
-        ESTADO.salvando = true; definirCarregando(true,"Salvando itens...");
-        try {
-            const ref = ESTADO.firebase.doc(colecaoGastos(), registro.id);
-            await apagarItensExistentes(ref);
-            let batch = ESTADO.firebase.writeBatch(ESTADO.firebase.db);
-            itens.forEach((item,indice) => batch.set(ESTADO.firebase.doc(ESTADO.firebase.collection(ref,"itens"),String(indice+1).padStart(4,"0")), {...item, ordem:indice+1}));
-            await batch.commit();
-            const total = arredondarMoeda(itens.reduce((soma,item)=>soma+item.valorTotal,0));
-            await ESTADO.firebase.setDoc(ref,{quantidadeItens:itens.length,valorTotal:total,atualizadoEm:ESTADO.firebase.serverTimestamp()},{merge:true});
-            ESTADO.editandoItens=false; elemento(IDS.detalhesSalvarItens).hidden=true; elemento(IDS.detalhesEditarItens).textContent="Editar itens";
-            ESTADO.itensDetalhes=itens.map((i,n)=>({...i,id:String(n+1).padStart(4,"0")})); renderizarItensDetalhes(ESTADO.itensDetalhes); mostrarAviso("Itens atualizados com sucesso.","sucesso");
-        } catch (erro) { console.error(erro); mostrarAviso("Não foi possível salvar os itens.","erro"); } finally { ESTADO.salvando=false; definirCarregando(false); }
-    }
-
-    async function abrirModalDetalhes(registroId) {
-        if (ESTADO.carregandoDetalhes) {
-            return;
-        }
-
-        const registro = localizarRegistroPorId(registroId);
-
-        if (!registro) {
-            mostrarAviso("Compra não encontrada.", "erro");
-            return;
-        }
-
-        ESTADO.registroEmDetalhes = registro;
-
-        const titulo = elemento(IDS.detalhesTitulo);
-        const resumo = elemento(IDS.detalhesResumo);
-        const itensContainer = elemento(IDS.detalhesItens);
-        const modal = elemento(IDS.modalDetalhes);
-
-        const estabelecimento =
-            registro.estabelecimentoNome ||
-            (
-                registro.tipoRegistro === "compra_manual"
-                    ? "Compra manual"
-                    : "Estabelecimento não identificado"
-            );
-
-        if (titulo) {
-            titulo.textContent = estabelecimento;
-        }
-
-        if (resumo) {
-            resumo.innerHTML = `
-                <div class="listalar-gastos-detalhes-resumo-item">
-                    <span>Data</span>
-                    <strong>${escaparHTML(formatarData(registro.dataCompra || registro.dataCompraMs))}</strong>
-                </div>
-                <div class="listalar-gastos-detalhes-resumo-item">
-                    <span>Total</span>
-                    <strong>${formatarMoeda(registro.valorTotal)}</strong>
-                </div>
-                <div class="listalar-gastos-detalhes-resumo-item">
-                    <span>Origem</span>
-                    <strong>${
-                        registro.tipoRegistro === "compra_manual"
-                            ? "Compra manual"
-                            : "Nota fiscal em PDF"
-                    }</strong>
-                </div>
-                <div class="listalar-gastos-detalhes-resumo-item">
-                    <span>Itens</span>
-                    <strong>${Number(registro.quantidadeItens || 0)}</strong>
-                </div>
-            `;
-        }
-
-        if (itensContainer) {
-            itensContainer.innerHTML = `
-                <div class="listalar-gastos-detalhes-vazio">
-                    Carregando itens...
-                </div>
-            `;
-        }
-
-        modal?.classList.add("aberto");
-        modal?.setAttribute("aria-hidden", "false");
-
-        ESTADO.carregandoDetalhes = true;
-
-        try {
-            const referencia = ESTADO.firebase.doc(
-                colecaoGastos(),
-                registro.id
-            );
-
-            const snapshot = await ESTADO.firebase.getDocs(
-                ESTADO.firebase.collection(
-                    referencia,
-                    "itens"
-                )
-            );
-
-            const itens = snapshot.docs
-                .map((documento) => ({
-                    id: documento.id,
-                    ...documento.data()
-                }))
-                .sort((a, b) => {
-                    const indiceA = numeroSeguro(a.indice, Number.MAX_SAFE_INTEGER);
-                    const indiceB = numeroSeguro(b.indice, Number.MAX_SAFE_INTEGER);
-
-                    if (indiceA !== indiceB) {
-                        return indiceA - indiceB;
-                    }
-
-                    return String(a.id).localeCompare(
-                        String(b.id),
-                        "pt-BR",
-                        { numeric: true }
-                    );
-                });
-
-            if (
-                ESTADO.registroEmDetalhes?.id ===
-                registro.id
-            ) {
-                const itensComparados = await enriquecerComparacoes(itens, registro.id);
-                ESTADO.editandoItens = false;
-                elemento(IDS.detalhesSalvarItens).hidden = true;
-                elemento(IDS.detalhesEditarItens).textContent = "Editar itens";
-                renderizarItensDetalhes(itensComparados);
-            }
-        } catch (erro) {
-            console.error(
-                "ListaLar Gastos: erro ao carregar itens:",
-                erro
-            );
-
-            if (itensContainer) {
-                itensContainer.innerHTML = `
-                    <div class="listalar-gastos-detalhes-vazio">
-                        Não foi possível carregar os itens desta compra.
-                    </div>
-                `;
-            }
-
-            mostrarAviso(
-                "Não foi possível carregar os itens.",
-                "erro"
-            );
-        } finally {
-            ESTADO.carregandoDetalhes = false;
-        }
-    }
-
-    function fecharModalEditar() {
-        const modal = elemento(IDS.modalEditar);
-        modal?.classList.remove("aberto");
-        modal?.setAttribute("aria-hidden", "true");
-        ESTADO.registroEmEdicao = null;
-    }
-
-    function abrirModalEditar(registroId) {
-        const registro = localizarRegistroPorId(registroId);
-        if (!registro || registro.tipoRegistro !== "nota_fiscal") {
-            mostrarAviso("Nota fiscal não encontrada.", "erro");
-            return;
-        }
-        ESTADO.registroEmEdicao = registro;
-        elemento(IDS.editarEstabelecimento).value = registro.estabelecimentoNome || "";
-        elemento(IDS.editarData).value = dataParaISO(converterParaData(registro.dataCompra || registro.dataCompraMs));
-        const quantidade = Number(registro.quantidadeItens || 0);
-        elemento(IDS.editarResumo).textContent = `${quantidade} ${quantidade === 1 ? "item" : "itens"} · ${formatarMoeda(registro.valorTotal)}`;
-        const modal = elemento(IDS.modalEditar);
-        modal?.classList.add("aberto");
-        modal?.setAttribute("aria-hidden", "false");
-        setTimeout(() => elemento(IDS.editarEstabelecimento)?.focus(), 80);
-    }
-
-    async function salvarEdicaoNotaFiscal() {
-        const registro = ESTADO.registroEmEdicao;
-        if (!registro || ESTADO.salvando) return;
-        const estabelecimentoNome = String(elemento(IDS.editarEstabelecimento)?.value || "").trim();
-        const dataTexto = elemento(IDS.editarData)?.value || "";
-        if (!estabelecimentoNome) {
-            mostrarAviso("Informe o estabelecimento.", "erro");
-            elemento(IDS.editarEstabelecimento)?.focus();
-            return;
-        }
-        const dataCompra = converterParaData(dataTexto);
-        if (!dataCompra || Number.isNaN(dataCompra.getTime())) {
-            mostrarAviso("Informe uma data válida.", "erro");
-            return;
-        }
-        ESTADO.salvando = true;
-        definirCarregando(true, "Salvando alterações...");
-        try {
-            const referencia = ESTADO.firebase.doc(colecaoGastos(), registro.id);
-            await ESTADO.firebase.setDoc(referencia, {
-                estabelecimentoNome,
-                dataCompra: dataParaISO(dataCompra),
-                dataCompraMs: dataCompra.getTime(),
-                competencia: competenciaDaData(dataCompra),
-                atualizadoEm: ESTADO.firebase.serverTimestamp(),
-                editadoPor: ESTADO.usuario?.uid || ""
-            }, { merge: true });
-            fecharModalEditar();
-            mostrarAviso("Nota fiscal atualizada com sucesso.", "sucesso");
-        } catch (erro) {
-            console.error("ListaLar Gastos: erro ao editar nota fiscal:", erro);
-            mostrarAviso("Não foi possível atualizar a nota fiscal.", "erro");
-        } finally {
-            ESTADO.salvando = false;
-            definirCarregando(false);
-        }
-    }
-
-    function fecharModalExcluir(resultado = false) {
-        const modal = elemento(IDS.modalExcluir);
-        if (modal) {
-            modal.classList.remove("aberto");
-            modal.setAttribute("aria-hidden", "true");
-        }
-
-        const resolver = ESTADO.resolverExclusao;
-        ESTADO.resolverExclusao = null;
-        if (resolver) resolver(resultado === true);
-    }
-
-    function confirmarExclusaoNota(registro) {
-        const modal = elemento(IDS.modalExcluir);
-        const resumo = elemento(IDS.excluirResumo);
-
-        if (!modal || !resumo) {
-            return Promise.resolve(false);
-        }
-
-        const estabelecimento =
-            registro.estabelecimentoNome ||
-            "Estabelecimento não identificado";
-
-        resumo.innerHTML = `
-            <span>🏪 ${escaparHTML(estabelecimento)}</span>
-            <span>📅 ${escaparHTML(formatarData(registro.dataCompra))}</span>
-            <span>💰 ${escaparHTML(formatarMoeda(registro.valorTotal))}</span>
-            <span>🧾 ${numeroSeguro(registro.quantidadeItens, 0)} item(ns)</span>
-        `;
-
-        modal.classList.add("aberto");
-        modal.setAttribute("aria-hidden", "false");
-
-        window.setTimeout(() => {
-            elemento(IDS.excluirCancelar)?.focus();
-        }, 0);
-
-        return new Promise((resolve) => {
-            ESTADO.resolverExclusao = resolve;
-        });
-    }
-
-    async function excluirNotaFiscal(registroId) {
-        if (ESTADO.excluindoRegistro) return;
-        const registro = localizarRegistroPorId(registroId);
-        if (!registro || registro.tipoRegistro !== "nota_fiscal") {
-            mostrarAviso("Nota fiscal não encontrada.", "erro");
-            return;
-        }
-        if (!(await confirmarExclusaoNota(registro))) return;
-        ESTADO.excluindoRegistro = true;
-        definirCarregando(true, "Excluindo nota fiscal...");
-        try {
-            const referencia = ESTADO.firebase.doc(colecaoGastos(), registro.id);
-            await apagarItensExistentes(referencia);
-            await ESTADO.firebase.deleteDoc(referencia);
-            mostrarAviso("Nota fiscal excluída com sucesso.", "sucesso");
-        } catch (erro) {
-            console.error("ListaLar Gastos: erro ao excluir nota fiscal:", erro);
-            mostrarAviso("Não foi possível excluir a nota fiscal.", "erro");
-        } finally {
-            ESTADO.excluindoRegistro = false;
-            definirCarregando(false);
         }
     }
 
@@ -3524,44 +2679,17 @@
     }
 
     function registrosFiltrados() {
-        const agora = new Date();
-        const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime();
-        const inicio3 = new Date(agora.getFullYear(), agora.getMonth()-2, 1).getTime();
-        const inicioAno = new Date(agora.getFullYear(),0,1).getTime();
-        const busca = normalizarTexto(ESTADO.busca).toLowerCase();
-        const inicioCustom = ESTADO.dataInicial ? converterParaData(ESTADO.dataInicial).getTime() : null;
-        const fimCustom = ESTADO.dataFinal ? converterParaData(ESTADO.dataFinal).getTime()+86399999 : null;
-        return ESTADO.registros.filter(registro => {
-            const data = numeroSeguro(registro.dataCompraMs, converterParaData(registro.dataCompra).getTime());
-            if (ESTADO.periodo === "mes_atual" && data < inicioMes) return false;
-            if (ESTADO.periodo === "ultimos_3_meses" && data < inicio3) return false;
-            if (ESTADO.periodo === "ano_atual" && data < inicioAno) return false;
-            if (inicioCustom && data < inicioCustom) return false;
-            if (fimCustom && data > fimCustom) return false;
-            if (ESTADO.mercado && registro.estabelecimentoNome !== ESTADO.mercado) return false;
-            if (busca) {
-                const alvo = normalizarTexto(`${registro.estabelecimentoNome||""} ${registro.valorTotal||""} ${registro.dataCompra||""}`).toLowerCase();
-                if (!alvo.includes(busca)) return false;
-            }
-            return true;
-        });
-    }
+        const inicio = inicioDoPeriodo(
+            ESTADO.periodo
+        );
 
-    function atualizarFiltroMercados() {
-        const select = elemento(IDS.filtroMercado); if (!select) return;
-        const atual = ESTADO.mercado;
-        const nomes = [...new Set(ESTADO.registros.map(r=>r.estabelecimentoNome).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
-        select.innerHTML = `<option value="">Todos os mercados</option>` + nomes.map(n=>`<option value="${escaparHTML(n)}">${escaparHTML(n)}</option>`).join("");
-        select.value = atual;
-    }
-
-    function exportarCSV() {
-        const registros = registrosFiltrados();
-        if (!registros.length) { mostrarAviso("Não há gastos para exportar.","erro"); return; }
-        const linhas = [["Data","Estabelecimento","Tipo","Itens","Valor"]];
-        registros.forEach(r=>linhas.push([r.dataCompra||"",r.estabelecimentoNome||"",r.tipoRegistro||"",r.quantidadeItens||0,arredondarMoeda(r.valorTotal).toFixed(2).replace(".",",")]));
-        const csv = "\uFEFF" + linhas.map(l=>l.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");
-        const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})); const a=document.createElement("a"); a.href=url; a.download=`listalar-gastos-${dataHojeISO()}.csv`; a.click(); URL.revokeObjectURL(url);
+        return ESTADO.registros.filter(
+            (registro) =>
+                numeroSeguro(
+                    registro.dataCompraMs,
+                    0
+                ) >= inicio
+        );
     }
 
     function atualizarIndicadores(registros) {
@@ -3853,11 +2981,6 @@
                         class="listalar-gastos-registro ${
                             manual ? "manual" : ""
                         }"
-                        data-acao="abrir-detalhes"
-                        data-registro-id="${escaparHTML(registro.id)}"
-                        role="button"
-                        tabindex="0"
-                        aria-label="Abrir itens da compra de ${escaparHTML(estabelecimento)}"
                     >
                         <div
                             class="listalar-gastos-registro-icone"
@@ -3890,22 +3013,14 @@
                                     : "itens"
                                 }
                             </small>
-
-                            <span class="listalar-gastos-registro-dica">
-                                Toque para ver os itens
-                            </span>
                         </div>
 
-                        <div class="listalar-gastos-registro-lateral">
-                            <div class="listalar-gastos-registro-valor">
-                                ${formatarMoeda(registro.valorTotal)}
-                            </div>
-                            ${manual ? "" : `
-                                <div class="listalar-gastos-registro-acoes">
-                                    <button class="listalar-gastos-registro-acao editar" type="button" data-acao="editar-nota" data-registro-id="${escaparHTML(registro.id)}" title="Editar nota fiscal" aria-label="Editar nota fiscal">✏️</button>
-                                    <button class="listalar-gastos-registro-acao excluir" type="button" data-acao="excluir-nota" data-registro-id="${escaparHTML(registro.id)}" title="Excluir nota fiscal" aria-label="Excluir nota fiscal">🗑️</button>
-                                </div>
-                            `}
+                        <div
+                            class="listalar-gastos-registro-valor"
+                        >
+                            ${formatarMoeda(
+                                registro.valorTotal
+                            )}
                         </div>
                     </article>
                 `;
@@ -3918,7 +3033,6 @@
             return;
         }
 
-        atualizarFiltroMercados();
         const registros = registrosFiltrados();
 
         atualizarIndicadores(registros);
@@ -3947,9 +3061,14 @@
             abrirImportadorPdf
         );
 
+        elemento(IDS.botaoSalvarManual)?.addEventListener(
+            "click",
+            abrirModalManual
+        );
+
         elemento(IDS.manualCancelar)?.addEventListener(
             "click",
-            () => fecharModalManual()
+            fecharModalManual
         );
 
         elemento(IDS.manualConfirmar)?.addEventListener(
@@ -3965,95 +3084,6 @@
                 renderizarPainel();
             }
         );
-
-        elemento(IDS.buscaHistorico)?.addEventListener("input", (evento) => { ESTADO.busca = evento.target.value; renderizarPainel(); });
-        elemento(IDS.filtroMercado)?.addEventListener("change", (evento) => { ESTADO.mercado = evento.target.value; renderizarPainel(); });
-        elemento(IDS.dataInicial)?.addEventListener("change", (evento) => { ESTADO.dataInicial = evento.target.value; renderizarPainel(); });
-        elemento(IDS.dataFinal)?.addEventListener("change", (evento) => { ESTADO.dataFinal = evento.target.value; renderizarPainel(); });
-        elemento(IDS.botaoExportar)?.addEventListener("click", exportarCSV);
-        elemento(IDS.excluirCancelar)?.addEventListener("click", () => fecharModalExcluir(false));
-        elemento(IDS.excluirConfirmar)?.addEventListener("click", () => fecharModalExcluir(true));
-        elemento(IDS.modalExcluir)?.addEventListener("click", (evento) => {
-            if (evento.target === elemento(IDS.modalExcluir)) fecharModalExcluir(false);
-        });
-        elemento(IDS.detalhesEditarItens)?.addEventListener("click", alternarEdicaoItens);
-        elemento(IDS.detalhesSalvarItens)?.addEventListener("click", salvarItensDetalhes);
-
-        elemento(IDS.historico)?.addEventListener("click", (evento) => {
-            const alvo = evento.target.closest("[data-acao][data-registro-id]");
-
-            if (!alvo) {
-                return;
-            }
-
-            evento.stopPropagation();
-
-            const registroId = alvo.dataset.registroId;
-            const acao = alvo.dataset.acao;
-
-            if (acao === "editar-nota") {
-                abrirModalEditar(registroId);
-                return;
-            }
-
-            if (acao === "excluir-nota") {
-                excluirNotaFiscal(registroId);
-                return;
-            }
-
-            if (acao === "abrir-detalhes") {
-                abrirModalDetalhes(registroId);
-            }
-        });
-
-        elemento(IDS.historico)?.addEventListener("keydown", (evento) => {
-            if (
-                evento.key !== "Enter" &&
-                evento.key !== " "
-            ) {
-                return;
-            }
-
-            const registro = evento.target.closest(
-                '[data-acao="abrir-detalhes"][data-registro-id]'
-            );
-
-            if (!registro) {
-                return;
-            }
-
-            evento.preventDefault();
-            abrirModalDetalhes(registro.dataset.registroId);
-        });
-
-        elemento(IDS.detalhesFechar)?.addEventListener(
-            "click",
-            fecharModalDetalhes
-        );
-
-        document.addEventListener("keydown", (evento) => {
-            if (evento.key === "Escape" && elemento(IDS.modalExcluir)?.classList.contains("aberto")) {
-                fecharModalExcluir(false);
-            }
-        });
-
-        elemento(IDS.modalDetalhes)?.addEventListener(
-            "click",
-            (evento) => {
-                if (
-                    evento.target ===
-                    elemento(IDS.modalDetalhes)
-                ) {
-                    fecharModalDetalhes();
-                }
-            }
-        );
-
-        elemento(IDS.editarCancelar)?.addEventListener("click", fecharModalEditar);
-        elemento(IDS.editarConfirmar)?.addEventListener("click", salvarEdicaoNotaFiscal);
-        elemento(IDS.modalEditar)?.addEventListener("click", (evento) => {
-            if (evento.target === elemento(IDS.modalEditar)) fecharModalEditar();
-        });
 
         elemento(IDS.modalManual)?.addEventListener(
             "click",
@@ -4071,16 +3101,6 @@
             "keydown",
             (evento) => {
                 if (evento.key !== "Escape") {
-                    return;
-                }
-
-                if (elemento(IDS.modalDetalhes)?.classList.contains("aberto")) {
-                    fecharModalDetalhes();
-                    return;
-                }
-
-                if (elemento(IDS.modalEditar)?.classList.contains("aberto")) {
-                    fecharModalEditar();
                     return;
                 }
 
@@ -4116,11 +3136,6 @@
         importarNF: abrirImportadorPdf,
         abrirImportadorPdf,
         salvarCompraManual: abrirModalManual,
-        obterResumoCompraManualAoFinalizar,
-        salvarCompraManualAoFinalizar,
-        editarNotaFiscal: abrirModalEditar,
-        excluirNotaFiscal,
-        abrirDetalhes: abrirModalDetalhes,
         obterFamiliaId() {
             return ESTADO.familiaId;
         },
