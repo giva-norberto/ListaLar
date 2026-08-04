@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 2.4.0
+// Versão: 3.0.3
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.0.1";
+    const VERSAO = "3.0.3";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -552,8 +552,17 @@
         style.id = IDS.estilo;
 
         style.textContent = `
+            html:has(body.listalar-gastos-aberto),
             body.listalar-gastos-aberto {
+                width: 100% !important;
+                max-width: none !important;
                 overflow: hidden !important;
+                overscroll-behavior: none;
+            }
+
+            body.listalar-gastos-aberto {
+                position: fixed;
+                inset: 0;
             }
 
             .listalar-menu-gastos {
@@ -656,14 +665,37 @@
             }
 
             .listalar-gastos-tela {
-                position: fixed;
-                inset: 0;
+                position: fixed !important;
+                top: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                min-width: 100vw !important;
+                max-width: none !important;
+                height: 100vh !important;
+                min-height: 100vh !important;
+                box-sizing: border-box !important;
                 z-index: 10000;
                 display: none;
                 background: #f4f7fb;
                 color: #172033;
+                overflow-x: hidden !important;
                 overflow-y: auto;
                 overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            @supports (height: 100dvh) {
+                .listalar-gastos-tela {
+                    height: 100dvh !important;
+                    min-height: 100dvh !important;
+                }
+            }
+
+            .listalar-gastos-tela,
+            .listalar-gastos-tela * {
+                box-sizing: border-box;
             }
 
             .listalar-gastos-tela.aberta {
@@ -671,6 +703,9 @@
             }
 
             .listalar-gastos-cabecalho {
+                width: 100%;
+                max-width: none;
+                box-sizing: border-box;
                 position: sticky;
                 top: 0;
                 z-index: 5;
@@ -733,10 +768,25 @@
             }
 
             .listalar-gastos-conteudo {
-                width: min(100%, 960px);
+                width: 100%;
+                max-width: 960px;
+                min-width: 0;
                 margin: 0 auto;
                 padding: 16px 16px 110px;
                 box-sizing: border-box;
+                overflow-x: hidden;
+            }
+
+            .listalar-gastos-conteudo > *,
+            .listalar-gastos-card,
+            .listalar-gastos-graficos,
+            .listalar-gastos-grade-resumo,
+            .listalar-gastos-filtros-avancados,
+            .listalar-gastos-historico-lista,
+            .listalar-gastos-registro {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
             }
 
             .listalar-gastos-filtro {
@@ -1429,6 +1479,48 @@
 
                 .listalar-gastos-registro-valor {
                     grid-column: 2;
+                }
+            }
+
+            @media (max-width: 720px) {
+                .listalar-gastos-tela {
+                    width: 100vw !important;
+                    min-width: 100vw !important;
+                }
+
+                .listalar-gastos-conteudo {
+                    width: 100%;
+                    max-width: 100%;
+                    min-width: 0;
+                    margin: 0;
+                }
+
+                .listalar-gastos-filtro {
+                    width: 100%;
+                    min-width: 0;
+                    flex-wrap: wrap;
+                }
+
+                .listalar-gastos-select {
+                    max-width: 100%;
+                }
+
+                .listalar-gastos-filtros-avancados {
+                    width: 100%;
+                    max-width: 100%;
+                    min-width: 0;
+                }
+
+                .listalar-gastos-filtros-avancados input,
+                .listalar-gastos-filtros-avancados select,
+                .listalar-gastos-exportar {
+                    width: 100%;
+                    min-width: 0;
+                }
+
+                .listalar-gastos-registro-lateral {
+                    min-width: 0;
+                    max-width: 100%;
                 }
             }
 
