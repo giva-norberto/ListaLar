@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.3.1
+ * Versão: 1.3.2
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -17,7 +17,7 @@
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.3.1";
+    const VERSAO = "1.3.2";
 
     const ESTADO = {
         arquivo: null,
@@ -1116,119 +1116,135 @@ const ImportadorNotaPDF = (() => {
     function extrairItensTabelaSEFMG(linhas) {
         const itens = [];
 
+        /*
+         * No PDF da SEF/MG, os textos podem ser agrupados de formas
+         * diferentes pelo PDF.js:
+         *
+         * - descrição + código + títulos na primeira linha,
+         *   e quantidade + unidade + total na linha seguinte;
+         * - descrição + títulos na primeira linha,
+         *   e código + quantidade + unidade + total na linha seguinte;
+         * - todos os campos distribuídos em até quatro linhas.
+         *
+         * Por isso, cada cabeçalho é analisado junto com o bloco até o
+         * próximo produto, sem exigir que o código esteja na linha de valores.
+         */
         for (
             let indice = 0;
             indice < linhas.length;
             indice += 1
         ) {
-            const linhaCabecalho =
-                linhas[indice];
+            const linhaCabecalho = linhas[indice];
+            const cabecalhoComparacao =
+                normalizarParaComparacao(linhaCabecalho);
 
-            const linhaComparacao =
-                normalizarParaComparacao(
-                    linhaCabecalho
-                );
+            const possuiTitulos =
+                cabecalhoComparacao.includes("qtde total de itens") &&
+                cabecalhoComparacao.includes("un:") &&
+                cabecalhoComparacao.includes("valor total r$");
 
-            const pareceCabecalhoProduto =
-                linhaComparacao.includes(
-                    "(codigo:"
-                ) &&
-                linhaComparacao.includes(
-                    "qtde total de itens"
-                ) &&
-                linhaComparacao.includes(
-                    "un:"
-                ) &&
-                linhaComparacao.includes(
-                    "valor total r$"
-                );
-
-            if (!pareceCabecalhoProduto) {
+            if (!possuiTitulos) {
                 continue;
             }
 
-            const descricao =
-                linhaCabecalho
-                    .split(
-                        /\(C[oó]digo:/i
-                    )[0]
-                    ?.trim();
-
-            let blocoValores = "";
-            let itemEncontrado = null;
-
-            let indiceValorEncontrado =
-                indice;
+            let fimBloco = Math.min(
+                linhas.length,
+                indice + 5
+            );
 
             for (
-                let deslocamento = 1;
-                deslocamento <= 3;
-                deslocamento += 1
+                let proximo = indice + 1;
+                proximo < fimBloco;
+                proximo += 1
             ) {
-                const linhaValores =
-                    linhas[
-                        indice + deslocamento
-                    ];
-
-                if (!linhaValores) {
-                    break;
-                }
-
-                const proximaComparacao =
-                    normalizarParaComparacao(
-                        linhaValores
-                    );
+                const comparacao =
+                    normalizarParaComparacao(linhas[proximo]);
 
                 if (
-                    proximaComparacao.includes(
-                        "(codigo:"
-                    ) &&
-                    proximaComparacao.includes(
-                        "qtde total de itens"
-                    )
+                    comparacao.includes("qtde total de itens") &&
+                    comparacao.includes("valor total r$")
                 ) {
+                    fimBloco = proximo;
                     break;
                 }
-
-                blocoValores =
-                    `${blocoValores} ${linhaValores}`
-                        .trim();
-
-                const valores =
-                    blocoValores.match(
-                        /^(\d+)\)?\s+([\d.,]+)\s+([A-Za-zÀ-ÿ]{1,10})\s+([\d.,]+)$/i
-                    );
-
-                if (!valores) {
-                    continue;
-                }
-
-                itemEncontrado =
-                    criarItemInterpretado({
-                        descricao,
-                        codigo:
-                            valores[1],
-                        quantidade:
-                            valores[2],
-                        unidade:
-                            valores[3],
-                        valorTotal:
-                            valores[4]
-                    });
-
-                indiceValorEncontrado =
-                    indice + deslocamento;
-
-                break;
             }
 
-            if (itemEncontrado) {
-                itens.push(
-                    itemEncontrado
-                );
+            const blocoLinhas =
+                linhas.slice(indice, fimBloco);
 
-                indice =
-                    indiceValorEncontrado;
+            const bloco =
+                blocoLinhas.join(" ");
+
+            const codigoMatch = bloco.match(
+                /\(C[oó]digo:\s*(\d+)\)/i
+            );
+
+            if (!codigoMatch) {
+                continue;
+            }
+
+            let descricao = linhaCabecalho
+                .split(/\(C[oó]digo:/i)[0]
+                .replace(
+                    /Qtde total de [ií]tens:.*$/i,
+                    ""
+                )
+                .trim();
+
+            /*
+             * No MULTICOM, uma descrição longa pode ficar na linha anterior
+             * e a linha do cabeçalho começar somente com "(Código: ...)".
+             */
+            if (!descricao && indice > 0) {
+                const anterior = linhas[indice - 1];
+                const anteriorComparacao =
+                    normalizarParaComparacao(anterior);
+
+                if (
+                    anterior &&
+                    !anteriorComparacao.includes("qtde total de itens") &&
+                    !anteriorComparacao.includes("valor total r$") &&
+                    !anteriorComparacao.startsWith("un:")
+                ) {
+                    descricao = anterior.trim();
+                }
+            }
+
+            /*
+             * Remove rótulos e o código para deixar apenas os valores.
+             * Depois aceita tanto "2.0000 UN 9,98" quanto
+             * "(Código: 28360) 3.0000 LA 38,97".
+             */
+            const somenteValores = bloco
+                .replace(
+                    /^.*?Qtde total de [ií]tens:\s*/i,
+                    ""
+                )
+                .replace(/\(C[oó]digo:\s*\d+\)/gi, " ")
+                .replace(/Qtde total de [ií]tens:/gi, " ")
+                .replace(/UN:/gi, " ")
+                .replace(/Valor total R\$:\s*(?:R\$)?/gi, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+
+            const valores = somenteValores.match(
+                /([\d.,]+)\s+([A-Za-zÀ-ÿ]{1,10})\s+([\d.,]+)(?:\s|$)/i
+            );
+
+            if (!valores) {
+                continue;
+            }
+
+            const item = criarItemInterpretado({
+                descricao,
+                codigo: codigoMatch[1],
+                quantidade: valores[1],
+                unidade: valores[2],
+                valorTotal: valores[3]
+            });
+
+            if (item) {
+                itens.push(item);
             }
         }
 
