@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.3.0
+ * Versão: 1.3.1
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -17,7 +17,7 @@
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.3.0";
+    const VERSAO = "1.3.1";
 
     const ESTADO = {
         arquivo: null,
@@ -832,6 +832,12 @@ const ImportadorNotaPDF = (() => {
             )
             .filter(Boolean);
 
+        const valorProdutos = extrairValorTotal(texto);
+        const valorPago = extrairValorPago(texto);
+        const valorEfetivo = valorPago > 0
+            ? valorPago
+            : valorProdutos;
+
         return {
             origem: "PDF_SEF_MG",
 
@@ -853,8 +859,21 @@ const ImportadorNotaPDF = (() => {
             quantidadeTotalItens:
                 extrairQuantidadeTotal(texto),
 
+            // Valor efetivamente desembolsado, usado pelo painel Gastos.
             valorTotal:
-                extrairValorTotal(texto),
+                valorEfetivo,
+
+            // Valores preservados para auditoria e exibição do desconto.
+            valorProdutos:
+                valorProdutos,
+
+            valorPago:
+                valorEfetivo,
+
+            desconto:
+                arredondarMoeda(
+                    Math.max(0, valorProdutos - valorEfetivo)
+                ),
 
             itens:
                 extrairItensSEFMG(linhas),
@@ -989,6 +1008,24 @@ const ImportadorNotaPDF = (() => {
         const correspondencias = [
             ...texto.matchAll(
                 /Valor total R\$?\s*:?\s*(?:R\$)?\s*([\d.,]+)/gi
+            )
+        ];
+
+        if (!correspondencias.length) {
+            return 0;
+        }
+
+        return converterMoeda(
+            correspondencias[
+                correspondencias.length - 1
+            ][1]
+        );
+    }
+
+    function extrairValorPago(texto) {
+        const correspondencias = [
+            ...texto.matchAll(
+                /Valor pago R\$?\s*:?\s*(?:R\$)?\s*([\d.,]+)/gi
             )
         ];
 
@@ -1206,71 +1243,70 @@ const ImportadorNotaPDF = (() => {
             indice < linhas.length;
             indice += 1
         ) {
-            const linha =
-                linhas[indice];
-
-            const inicio = linha.match(
-                /^(.*?)\s*\(C[oó]digo:\s*(\d+)\)/i
+            const linha = linhas[indice];
+            const codigoMatch = linha.match(
+                /\(C[oó]digo:\s*(\d+)\)/i
             );
 
-            if (!inicio) {
+            if (!codigoMatch) {
                 continue;
+            }
+
+            let descricao = linha
+                .slice(0, codigoMatch.index)
+                .trim();
+
+            // Alguns PDFs colocam a descrição na linha anterior e o código
+            // sozinho na linha seguinte, como ocorre em notas do MULTICOM.
+            if (!descricao && indice > 0) {
+                const anterior = linhas[indice - 1];
+                const anteriorComparacao =
+                    normalizarParaComparacao(anterior);
+
+                if (
+                    anterior &&
+                    !anteriorComparacao.includes("qtde total de itens") &&
+                    !anteriorComparacao.startsWith("un:") &&
+                    !anteriorComparacao.includes("valor total r$")
+                ) {
+                    descricao = anterior.trim();
+                }
             }
 
             const bloco = linhas
-                .slice(
-                    indice,
-                    indice + 8
-                )
+                .slice(indice, indice + 12)
                 .join(" ");
 
-            const quantidadeMatch =
-                bloco.match(
-                    /Qtde total de [ií]tens:\s*([\d.,]+)/i
-                );
+            const quantidadeMatch = bloco.match(
+                /Qtde total de [ií]tens:\s*([\d.,]+)/i
+            );
 
-            const unidadeMatch =
-                bloco.match(
-                    /UN:\s*([A-Za-zÀ-ÿ]+)/i
-                );
+            const unidadeMatch = bloco.match(
+                /UN:\s*([A-Za-zÀ-ÿ]{1,10})/i
+            );
 
-            const valorMatch =
-                bloco.match(
-                    /Valor total R\$:\s*R?\$?\s*([\d.,]+)/i
-                );
+            const valorMatch = bloco.match(
+                /Valor total R\$:\s*(?:R\$)?\s*([\d.,]+)/i
+            );
 
-            if (
-                !quantidadeMatch ||
-                !valorMatch
-            ) {
+            if (!quantidadeMatch || !valorMatch) {
                 continue;
             }
 
-            const item =
-                criarItemInterpretado({
-                    descricao:
-                        inicio[1],
-
-                    codigo:
-                        inicio[2],
-
-                    quantidade:
-                        quantidadeMatch[1],
-
-                    unidade:
-                        unidadeMatch?.[1] ||
-                        "UN",
-
-                    valorTotal:
-                        valorMatch[1]
-                });
+            const item = criarItemInterpretado({
+                descricao,
+                codigo: codigoMatch[1],
+                quantidade: quantidadeMatch[1],
+                unidade: unidadeMatch?.[1] || "UN",
+                valorTotal: valorMatch[1]
+            });
 
             if (item) {
                 itens.push(item);
             }
         }
 
-        // Preserva ocorrências repetidas da nota fiscal.
+        // Cada ocorrência representa uma linha real da nota.
         return itens;
     }
 
@@ -1743,8 +1779,11 @@ const ImportadorNotaPDF = (() => {
         const quantidadeExtraida = Array.isArray(nota?.itens)
             ? nota.itens.length
             : 0;
-        const valorOficial = arredondarMoeda(
-            converterNumero(nota?.valorTotal)
+        const valorPago = arredondarMoeda(
+            converterNumero(nota?.valorPago ?? nota?.valorTotal)
+        );
+        const valorProdutos = arredondarMoeda(
+            converterNumero(nota?.valorProdutos ?? nota?.valorTotal)
         );
         const valorItens = arredondarMoeda(
             (nota?.itens || []).reduce(
@@ -1759,11 +1798,15 @@ const ImportadorNotaPDF = (() => {
             quantidadeDiferente:
                 quantidadeOficial > 0 &&
                 quantidadeOficial !== quantidadeExtraida,
-            valorOficial,
+            valorPago,
+            valorProdutos,
+            desconto: arredondarMoeda(
+                Math.max(0, valorProdutos - valorPago)
+            ),
             valorItens,
             valorDiferente:
-                valorOficial > 0 &&
-                Math.abs(valorOficial - valorItens) >= 0.01
+                valorProdutos > 0 &&
+                Math.abs(valorProdutos - valorItens) >= 0.01
         };
     }
 
@@ -1823,11 +1866,31 @@ const ImportadorNotaPDF = (() => {
                 </div>
 
                 <div class="nota-pdf-card">
-                    <span>Valor total oficial</span>
+                    <span>Valor dos produtos</span>
 
                     <strong>
                         ${formatarMoeda(
-                            conferencia.valorOficial
+                            conferencia.valorProdutos
+                        )}
+                    </strong>
+                </div>
+
+                <div class="nota-pdf-card">
+                    <span>Valor pago</span>
+
+                    <strong>
+                        ${formatarMoeda(
+                            conferencia.valorPago
+                        )}
+                    </strong>
+                </div>
+
+                <div class="nota-pdf-card">
+                    <span>Desconto/diferença</span>
+
+                    <strong>
+                        ${formatarMoeda(
+                            conferencia.desconto
                         )}
                     </strong>
                 </div>
@@ -1847,7 +1910,8 @@ const ImportadorNotaPDF = (() => {
                 ? `
                     <div class="nota-pdf-conferencia-aviso">
                         Atenção: os dados extraídos não conferem completamente com o resumo oficial da nota.
-                        O valor salvo será o valor total oficial de ${formatarMoeda(conferencia.valorOficial)}.
+                        A soma dos itens será comparada ao valor bruto dos produtos.
+                        O módulo Gastos salvará o valor efetivamente pago de ${formatarMoeda(conferencia.valorPago)}.
                         Confira a lista de itens antes de confirmar.
                     </div>
                 `
@@ -2107,8 +2171,16 @@ const ImportadorNotaPDF = (() => {
                 )
             );
 
-        const valorTotalOficial = arredondarMoeda(
-            converterNumero(ESTADO.nota.valorTotal)
+        const valorPagoOficial = arredondarMoeda(
+            converterNumero(
+                ESTADO.nota.valorPago ?? ESTADO.nota.valorTotal
+            )
+        );
+
+        const valorProdutosOficial = arredondarMoeda(
+            converterNumero(
+                ESTADO.nota.valorProdutos ?? ESTADO.nota.valorTotal
+            )
         );
 
         const quantidadeTotalOficial = Math.max(
@@ -2131,8 +2203,8 @@ const ImportadorNotaPDF = (() => {
             itens:
                 itensRevisados,
 
-            // Mantém o total oficial impresso na NFC-e.
-            // A quantidade extraída é registrada separadamente.
+            // Mantém quantidade, valor bruto e valor efetivamente pago.
+            // O painel Gastos usa valorTotal como o desembolso real.
             quantidadeTotalItens:
                 quantidadeTotalOficial || itensRevisados.length,
 
@@ -2140,9 +2212,27 @@ const ImportadorNotaPDF = (() => {
                 itensRevisados.length,
 
             valorTotal:
-                valorTotalOficial > 0
-                    ? valorTotalOficial
+                valorPagoOficial > 0
+                    ? valorPagoOficial
                     : valorItensRevisados,
+
+            valorPago:
+                valorPagoOficial > 0
+                    ? valorPagoOficial
+                    : valorItensRevisados,
+
+            valorProdutos:
+                valorProdutosOficial > 0
+                    ? valorProdutosOficial
+                    : valorItensRevisados,
+
+            desconto:
+                arredondarMoeda(
+                    Math.max(
+                        0,
+                        valorProdutosOficial - valorPagoOficial
+                    )
+                ),
 
             valorItensExtraidos:
                 valorItensRevisados,
@@ -2152,9 +2242,9 @@ const ImportadorNotaPDF = (() => {
                     quantidadeTotalOficial > 0 &&
                     quantidadeTotalOficial !== itensRevisados.length
                 ) || (
-                    valorTotalOficial > 0 &&
+                    valorProdutosOficial > 0 &&
                     Math.abs(
-                        valorTotalOficial - valorItensRevisados
+                        valorProdutosOficial - valorItensRevisados
                     ) >= 0.01
                 ),
 
