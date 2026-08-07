@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 3.2.0
+// Versão: 3.2.1
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.2.0";
+    const VERSAO = "3.2.1";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -1494,19 +1494,19 @@
 
             .listalar-gastos-comparacao-card-item span {
                 display: block;
-                margin-bottom: 3px;
-                color: #64748b;
-                font-size: 9px;
+                margin-bottom: 4px;
+                color: #475569;
+                font-size: 11px;
                 font-weight: 800;
             }
 
             .listalar-gastos-comparacao-card-item strong {
                 display: block;
-                overflow: hidden;
                 color: #172033;
-                font-size: 12px;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                font-size: 14px;
+                line-height: 1.3;
+                overflow-wrap: anywhere;
+                white-space: normal;
             }
 
             .listalar-gastos-comparacao-card-seta {
@@ -1563,13 +1563,13 @@
 
             .listalar-gastos-comparacao-cabecalho h2 {
                 margin: 0;
-                font-size: 19px;
+                font-size: 22px;
             }
 
             .listalar-gastos-comparacao-cabecalho p {
-                margin: 2px 0 0;
-                font-size: 11px;
-                opacity: .88;
+                margin: 3px 0 0;
+                font-size: 13px;
+                opacity: .92;
             }
 
             .listalar-gastos-comparacao-conteudo {
@@ -1587,38 +1587,41 @@
             }
 
             .listalar-gastos-comparacao-resumo-item {
-                padding: 12px;
-                border: 1px solid #dbeafe;
-                border-radius: 14px;
-                background: #ffffff;
+                padding: 14px;
+                border: 1px solid #bfdbfe;
+                border-radius: 15px;
+                background: linear-gradient(145deg, #ffffff, #eff6ff);
+                box-shadow: 0 4px 12px rgba(37, 99, 235, .06);
             }
 
             .listalar-gastos-comparacao-resumo-item span {
                 display: block;
-                margin-bottom: 4px;
-                color: #64748b;
-                font-size: 10px;
+                margin-bottom: 5px;
+                color: #475569;
+                font-size: 12px;
                 font-weight: 800;
             }
 
             .listalar-gastos-comparacao-resumo-item strong {
                 display: block;
                 color: #172033;
-                font-size: 14px;
+                font-size: 16px;
+                line-height: 1.3;
                 overflow-wrap: anywhere;
             }
 
             .listalar-gastos-comparacao-busca {
                 width: 100%;
-                min-height: 46px;
-                margin-bottom: 12px;
-                padding: 10px 12px;
-                border: 1px solid #cbd5e1;
-                border-radius: 13px;
+                min-height: 50px;
+                margin-bottom: 14px;
+                padding: 11px 13px;
+                border: 1px solid #93c5fd;
+                border-radius: 14px;
                 background: #ffffff;
                 font: inherit;
-                font-size: 16px;
+                font-size: 17px;
                 box-sizing: border-box;
+                box-shadow: 0 3px 10px rgba(37, 99, 235, .05);
             }
 
             .listalar-gastos-comparacao-lista {
@@ -1627,12 +1630,13 @@
             }
 
             .listalar-gastos-comparacao-produto {
-                padding: 13px;
-                border: 1px solid #e2e8f0;
-                border-radius: 15px;
-                background: #ffffff;
+                padding: 15px;
+                border: 1px solid #cbd5e1;
+                border-left: 5px solid #2563eb;
+                border-radius: 16px;
+                background: linear-gradient(145deg, #ffffff, #f8fbff);
                 box-shadow:
-                    0 4px 12px rgba(15, 23, 42, .04);
+                    0 5px 14px rgba(15, 23, 42, .06);
             }
 
             .listalar-gastos-comparacao-produto-topo {
@@ -1646,17 +1650,19 @@
             .listalar-gastos-comparacao-produto-topo strong {
                 min-width: 0;
                 color: #172033;
-                font-size: 13px;
+                font-size: 16px;
+                line-height: 1.3;
                 overflow-wrap: anywhere;
             }
 
             .listalar-gastos-comparacao-selo {
                 flex: 0 0 auto;
-                padding: 4px 7px;
+                padding: 6px 9px;
+                border: 1px solid #bfdbfe;
                 border-radius: 999px;
-                background: #f1f5f9;
-                color: #334155;
-                font-size: 9px;
+                background: linear-gradient(145deg, #eff6ff, #dbeafe);
+                color: #1e3a8a;
+                font-size: 11px;
                 font-weight: 900;
                 white-space: nowrap;
             }
@@ -1669,22 +1675,45 @@
             }
 
             .listalar-gastos-comparacao-produto-info {
-                padding: 8px 9px;
-                border-radius: 10px;
-                background: #f8fafc;
+                padding: 10px 11px;
+                border: 1px solid #e2e8f0;
+                border-radius: 11px;
+                background: linear-gradient(145deg, #f8fafc, #eef6ff);
             }
 
             .listalar-gastos-comparacao-produto-info span {
                 display: block;
-                margin-bottom: 2px;
+                margin-bottom: 3px;
                 color: #64748b;
-                font-size: 9px;
+                font-size: 11px;
                 font-weight: 800;
             }
 
             .listalar-gastos-comparacao-produto-info strong {
                 color: #172033;
-                font-size: 11px;
+                font-size: 14px;
+                line-height: 1.3;
+            }
+
+            .listalar-gastos-comparacao-resumo-item:nth-child(1) {
+                border-color: #93c5fd;
+                background: linear-gradient(145deg, #eff6ff, #dbeafe);
+            }
+
+            .listalar-gastos-comparacao-resumo-item:nth-child(3) {
+                border-color: #86efac;
+                background: linear-gradient(145deg, #f0fdf4, #dcfce7);
+            }
+
+            .listalar-gastos-comparacao-resumo-item:nth-child(4) {
+                border-color: #fecaca;
+                background: linear-gradient(145deg, #fff7f7, #fee2e2);
+            }
+
+            .listalar-gastos-comparacao-resumo-item:nth-child(5),
+            .listalar-gastos-comparacao-resumo-item:nth-child(6) {
+                border-color: #fde68a;
+                background: linear-gradient(145deg, #fffbeb, #fef3c7);
             }
 
             .listalar-gastos-comparacao-vazio {
