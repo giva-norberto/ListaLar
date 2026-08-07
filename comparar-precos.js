@@ -1,7 +1,7 @@
 /**
  * ListaLar — Comparador de Preços
  * Arquivo: comparar-precos.js
- * Versão: 1.0.0
+ * Versão: 1.1.0
  *
  * Não grava uma coleção nova no Firestore.
  * O gastos.js fornece o histórico já carregado por carregarHistorico().
@@ -10,7 +10,7 @@
 (function (global) {
     "use strict";
 
-    const VERSAO = "1.0.0";
+    const VERSAO = "1.1.0";
 
     const ESTADO = {
         carregarHistorico: null,
@@ -171,6 +171,283 @@
                 quantidade: item.quantidade,
                 unidade: item.unidade
             }))
+        };
+    }
+
+
+    /**
+     * Analisa todo o histórico e monta um resumo para o painel Gastos.
+     *
+     * Regra:
+     * - o registro mais recente de cada produto é tratado como preço atual;
+     * - média/menor/maior usados na classificação vêm das compras anteriores;
+     * - produtos com apenas uma ocorrência ficam fora da comparação;
+     * - "melhor mercado" é o mercado que mais vezes aparece como menor preço
+     *   entre os produtos comparáveis.
+     */
+    function analisarHistorico(historicoRecebido = []) {
+        const historico = (Array.isArray(historicoRecebido)
+            ? historicoRecebido
+            : [])
+            .map((item) => normalizarRegistro(item))
+            .filter((item) =>
+                item &&
+                item.precoUnitario > 0 &&
+                criarChaveProduto(item)
+            );
+
+        const grupos = new Map();
+
+        for (const item of historico) {
+            const chave = criarChaveProduto(item);
+
+            if (!grupos.has(chave)) {
+                grupos.set(chave, []);
+            }
+
+            grupos.get(chave).push(item);
+        }
+
+        const produtos = [];
+        const vitoriasMercado = new Map();
+
+        for (const [chaveProduto, registros] of grupos.entries()) {
+            const ordenados = [...registros].sort(ordenarPorData);
+
+            if (ordenados.length < 2) {
+                continue;
+            }
+
+            const atual = ordenados[ordenados.length - 1];
+            const anteriores = ordenados.slice(0, -1);
+
+            if (!anteriores.length) {
+                continue;
+            }
+
+            const menorAnterior = anteriores.reduce(
+                (melhor, item) =>
+                    item.precoUnitario < melhor.precoUnitario
+                        ? item
+                        : melhor,
+                anteriores[0]
+            );
+
+            const maiorAnterior = Math.max(
+                ...anteriores.map((item) => item.precoUnitario)
+            );
+
+            const precoMedioAnterior = arredondar(
+                anteriores.reduce(
+                    (total, item) =>
+                        total + item.precoUnitario,
+                    0
+                ) / anteriores.length,
+                2
+            );
+
+            const classificacao = classificarPreco(
+                atual.precoUnitario,
+                precoMedioAnterior
+            );
+
+            const economiaPotencial = arredondar(
+                Math.max(
+                    0,
+                    atual.precoUnitario -
+                    menorAnterior.precoUnitario
+                ),
+                2
+            );
+
+            const todosParaMenor = [...ordenados];
+            const menorGeral = todosParaMenor.reduce(
+                (melhor, item) =>
+                    item.precoUnitario < melhor.precoUnitario
+                        ? item
+                        : melhor,
+                todosParaMenor[0]
+            );
+
+            if (menorGeral.mercadoNome) {
+                vitoriasMercado.set(
+                    menorGeral.mercadoNome,
+                    (vitoriasMercado.get(
+                        menorGeral.mercadoNome
+                    ) || 0) + 1
+                );
+            }
+
+            produtos.push({
+                chaveProduto,
+                produtoNome: atual.produtoNome,
+                codigo: atual.codigo,
+                unidade: atual.unidade,
+
+                precoAtual:
+                    arredondar(
+                        atual.precoUnitario,
+                        2
+                    ),
+
+                ultimoMercado:
+                    atual.mercadoNome || "",
+
+                dataAtual:
+                    atual.dataCompra || "",
+
+                ultimoPreco:
+                    arredondar(
+                        anteriores[
+                            anteriores.length - 1
+                        ].precoUnitario,
+                        2
+                    ),
+
+                menorPreco:
+                    arredondar(
+                        menorAnterior.precoUnitario,
+                        2
+                    ),
+
+                maiorPreco:
+                    arredondar(
+                        maiorAnterior,
+                        2
+                    ),
+
+                precoMedio:
+                    precoMedioAnterior,
+
+                melhorMercado:
+                    menorGeral.mercadoNome || "",
+
+                quantidadeHistorico:
+                    ordenados.length,
+
+                economiaPotencial,
+
+                diferencaPercentualVsMedia:
+                    precoMedioAnterior > 0
+                        ? arredondar(
+                            (
+                                (
+                                    atual.precoUnitario -
+                                    precoMedioAnterior
+                                ) /
+                                precoMedioAnterior
+                            ) * 100,
+                            1
+                        )
+                        : 0,
+
+                classificacao
+            });
+        }
+
+        produtos.sort((a, b) => {
+            const prioridade = {
+                ALTO: 0,
+                BOM: 1,
+                NORMAL: 2,
+                SEM_REFERENCIA: 3
+            };
+
+            const diferencaPrioridade =
+                (prioridade[a.classificacao?.codigo] ?? 9) -
+                (prioridade[b.classificacao?.codigo] ?? 9);
+
+            if (diferencaPrioridade !== 0) {
+                return diferencaPrioridade;
+            }
+
+            return String(a.produtoNome).localeCompare(
+                String(b.produtoNome),
+                "pt-BR"
+            );
+        });
+
+        const contagem = {
+            bons: 0,
+            normais: 0,
+            altos: 0
+        };
+
+        for (const produto of produtos) {
+            const codigo =
+                produto.classificacao?.codigo;
+
+            if (codigo === "BOM") {
+                contagem.bons += 1;
+            } else if (codigo === "ALTO") {
+                contagem.altos += 1;
+            } else {
+                contagem.normais += 1;
+            }
+        }
+
+        let melhorMercado = "";
+        let melhorMercadoVitorias = 0;
+
+        for (const [mercado, quantidade] of vitoriasMercado.entries()) {
+            if (quantidade > melhorMercadoVitorias) {
+                melhorMercado = mercado;
+                melhorMercadoVitorias =
+                    quantidade;
+            }
+        }
+
+        const maiorEconomiaProduto = produtos.reduce(
+            (melhor, produto) =>
+                produto.economiaPotencial >
+                (melhor?.economiaPotencial || 0)
+                    ? produto
+                    : melhor,
+            null
+        );
+
+        return {
+            produtosComparados:
+                produtos.length,
+
+            bons:
+                contagem.bons,
+
+            normais:
+                contagem.normais,
+
+            altos:
+                contagem.altos,
+
+            melhorMercado,
+
+            melhorMercadoVitorias,
+
+            economiaPotencial:
+                arredondar(
+                    produtos.reduce(
+                        (total, produto) =>
+                            total +
+                            produto.economiaPotencial,
+                        0
+                    ),
+                    2
+                ),
+
+            maiorEconomia:
+                arredondar(
+                    maiorEconomiaProduto
+                        ?.economiaPotencial ||
+                    0,
+                    2
+                ),
+
+            maiorEconomiaProduto:
+                maiorEconomiaProduto
+                    ?.produtoNome ||
+                "",
+
+            produtos
         };
     }
 
@@ -506,6 +783,7 @@
         compararProduto,
         compararTodos,
         compararProdutoComHistorico,
+        analisarHistorico,
         criarChaveProduto,
         normalizarNomeProduto,
         normalizarUnidade,
