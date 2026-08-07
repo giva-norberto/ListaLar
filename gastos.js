@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 3.1.0
+// Versão: 3.2.0
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.1.0";
+    const VERSAO = "3.2.0";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -78,7 +78,15 @@
         excluirTitulo: "listalar-gastos-excluir-titulo",
         excluirResumo: "listalar-gastos-excluir-resumo",
         excluirConfirmar: "listalar-gastos-excluir-confirmar",
-        excluirCancelar: "listalar-gastos-excluir-cancelar"
+        excluirCancelar: "listalar-gastos-excluir-cancelar",
+
+        comparacaoCard: "listalar-gastos-comparacao-card",
+        comparacaoResumo: "listalar-gastos-comparacao-resumo",
+        comparacaoTela: "listalar-gastos-comparacao-tela",
+        comparacaoVoltar: "listalar-gastos-comparacao-voltar",
+        comparacaoBusca: "listalar-gastos-comparacao-busca",
+        comparacaoLista: "listalar-gastos-comparacao-lista",
+        comparacaoTelaResumo: "listalar-gastos-comparacao-tela-resumo"
     });
 
     const ESTADO = {
@@ -105,7 +113,13 @@
         dataFinal: "",
         itensDetalhes: [],
         editandoItens: false,
-        resolverExclusao: null
+        resolverExclusao: null,
+
+        comparacaoCarregando: false,
+        comparacaoResumo: null,
+        comparacaoHistorico: [],
+        comparacaoBusca: "",
+        comparacaoAtualizadaEm: 0
     };
 
     // ========================================================
@@ -1424,37 +1438,266 @@
             .listalar-gastos-detalhe-item.editando { grid-template-columns:1fr; }
             .listalar-gastos-detalhe-item-grid { display:grid; grid-template-columns:2fr .8fr .8fr 1fr 1fr; gap:7px; }
             .listalar-gastos-detalhe-item-grid input { width:100%; min-height:40px; padding:7px; border:1px solid #cbd5e1; border-radius:9px; box-sizing:border-box; }
-            .listalar-gastos-comparacao {
-                grid-column: 1 / -1;
+            .listalar-gastos-comparacao-card {
+                width: 100%;
+                margin-bottom: 14px;
+                padding: 0;
+                border: 1px solid #bfdbfe;
+                border-radius: 18px;
+                overflow: hidden;
+                background:
+                    linear-gradient(135deg, #ffffff, #eff6ff);
+                box-shadow:
+                    0 5px 16px rgba(15, 23, 42, 0.05);
+            }
+
+            .listalar-gastos-comparacao-card-botao {
+                width: 100%;
+                display: grid;
+                grid-template-columns:
+                    minmax(0, 1fr) auto;
+                gap: 12px;
+                align-items: center;
+                padding: 17px;
+                border: 0;
+                background: transparent;
+                color: inherit;
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+
+            .listalar-gastos-comparacao-card-titulo {
                 display: flex;
-                flex-wrap: wrap;
-                gap: 5px 10px;
-                margin-top: 7px;
+                align-items: center;
+                gap: 9px;
+                margin-bottom: 10px;
+                color: #172033;
+                font-size: 17px;
+                font-weight: 900;
+            }
+
+            .listalar-gastos-comparacao-card-resumo {
+                display: grid;
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+                gap: 8px;
+            }
+
+            .listalar-gastos-comparacao-card-item {
+                min-width: 0;
                 padding: 9px 10px;
-                border: 1px solid #a5f3fc;
-                border-radius: 10px;
-                background: #ecfeff;
-                color: #155e75;
-                font-size: 10px;
-                font-weight: 800;
-                line-height: 1.4;
+                border: 1px solid #dbeafe;
+                border-radius: 11px;
+                background: rgba(255,255,255,.78);
             }
-            .listalar-gastos-comparacao strong {
-                width: 100%;
-                color: #0f172a;
-                font-size: 11px;
-            }
-            .listalar-gastos-comparacao small {
-                width: 100%;
+
+            .listalar-gastos-comparacao-card-item span {
+                display: block;
+                margin-bottom: 3px;
                 color: #64748b;
                 font-size: 9px;
-                font-weight: 700;
+                font-weight: 800;
             }
-            .listalar-gastos-comparacao.sem-historico {
+
+            .listalar-gastos-comparacao-card-item strong {
+                display: block;
+                overflow: hidden;
+                color: #172033;
+                font-size: 12px;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .listalar-gastos-comparacao-card-seta {
+                color: #2563eb;
+                font-size: 24px;
+                font-weight: 900;
+            }
+
+            .listalar-gastos-comparacao-tela {
+                position: fixed;
+                inset: 0;
+                z-index: 12500;
+                display: none;
+                background: #f4f7fb;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .listalar-gastos-comparacao-tela.aberta {
+                display: block;
+            }
+
+            .listalar-gastos-comparacao-cabecalho {
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                display: flex;
+                align-items: center;
+                gap: 11px;
+                min-height: 64px;
+                padding:
+                    max(12px, env(safe-area-inset-top))
+                    14px
+                    12px;
+                color: #ffffff;
+                background:
+                    linear-gradient(135deg, #1d4ed8, #0891b2);
+                box-shadow:
+                    0 4px 16px rgba(15, 23, 42, .18);
+            }
+
+            .listalar-gastos-comparacao-voltar {
+                width: 42px;
+                height: 42px;
+                flex: 0 0 auto;
+                border: 0;
+                border-radius: 50%;
+                color: #ffffff;
+                background: rgba(255,255,255,.17);
+                font-size: 22px;
+                cursor: pointer;
+            }
+
+            .listalar-gastos-comparacao-cabecalho h2 {
+                margin: 0;
+                font-size: 19px;
+            }
+
+            .listalar-gastos-comparacao-cabecalho p {
+                margin: 2px 0 0;
+                font-size: 11px;
+                opacity: .88;
+            }
+
+            .listalar-gastos-comparacao-conteudo {
+                width: min(100%, 760px);
+                margin: 0 auto;
+                padding: 14px 12px 100px;
+            }
+
+            .listalar-gastos-comparacao-resumo-grade {
+                display: grid;
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+                gap: 9px;
+                margin-bottom: 12px;
+            }
+
+            .listalar-gastos-comparacao-resumo-item {
+                padding: 12px;
+                border: 1px solid #dbeafe;
+                border-radius: 14px;
+                background: #ffffff;
+            }
+
+            .listalar-gastos-comparacao-resumo-item span {
+                display: block;
+                margin-bottom: 4px;
                 color: #64748b;
-                border-color: #e2e8f0;
+                font-size: 10px;
+                font-weight: 800;
+            }
+
+            .listalar-gastos-comparacao-resumo-item strong {
+                display: block;
+                color: #172033;
+                font-size: 14px;
+                overflow-wrap: anywhere;
+            }
+
+            .listalar-gastos-comparacao-busca {
+                width: 100%;
+                min-height: 46px;
+                margin-bottom: 12px;
+                padding: 10px 12px;
+                border: 1px solid #cbd5e1;
+                border-radius: 13px;
+                background: #ffffff;
+                font: inherit;
+                font-size: 16px;
+                box-sizing: border-box;
+            }
+
+            .listalar-gastos-comparacao-lista {
+                display: grid;
+                gap: 10px;
+            }
+
+            .listalar-gastos-comparacao-produto {
+                padding: 13px;
+                border: 1px solid #e2e8f0;
+                border-radius: 15px;
+                background: #ffffff;
+                box-shadow:
+                    0 4px 12px rgba(15, 23, 42, .04);
+            }
+
+            .listalar-gastos-comparacao-produto-topo {
+                display: flex;
+                justify-content: space-between;
+                gap: 10px;
+                align-items: flex-start;
+                margin-bottom: 10px;
+            }
+
+            .listalar-gastos-comparacao-produto-topo strong {
+                min-width: 0;
+                color: #172033;
+                font-size: 13px;
+                overflow-wrap: anywhere;
+            }
+
+            .listalar-gastos-comparacao-selo {
+                flex: 0 0 auto;
+                padding: 4px 7px;
+                border-radius: 999px;
+                background: #f1f5f9;
+                color: #334155;
+                font-size: 9px;
+                font-weight: 900;
+                white-space: nowrap;
+            }
+
+            .listalar-gastos-comparacao-produto-grade {
+                display: grid;
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+                gap: 7px;
+            }
+
+            .listalar-gastos-comparacao-produto-info {
+                padding: 8px 9px;
+                border-radius: 10px;
                 background: #f8fafc;
             }
+
+            .listalar-gastos-comparacao-produto-info span {
+                display: block;
+                margin-bottom: 2px;
+                color: #64748b;
+                font-size: 9px;
+                font-weight: 800;
+            }
+
+            .listalar-gastos-comparacao-produto-info strong {
+                color: #172033;
+                font-size: 11px;
+            }
+
+            .listalar-gastos-comparacao-vazio {
+                padding: 22px 14px;
+                border: 1px dashed #cbd5e1;
+                border-radius: 14px;
+                color: #64748b;
+                background: #ffffff;
+                text-align: center;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
             @media (max-width:720px) { .listalar-gastos-filtros-avancados { grid-template-columns:1fr 1fr; } .listalar-gastos-filtros-avancados > :first-child { grid-column:1/-1; } .listalar-gastos-detalhe-item-grid { grid-template-columns:1fr 1fr; } .listalar-gastos-detalhe-item-grid .campo-nome { grid-column:1/-1; } }
 
             @media (max-width: 720px) {
@@ -1741,6 +1984,38 @@
                     </article>
                 </section>
 
+                <section
+                    id="${IDS.comparacaoCard}"
+                    class="listalar-gastos-comparacao-card"
+                >
+                    <button
+                        type="button"
+                        class="listalar-gastos-comparacao-card-botao"
+                        aria-label="Abrir comparação de preços"
+                    >
+                        <div>
+                            <div class="listalar-gastos-comparacao-card-titulo">
+                                📊 Comparação de preços
+                            </div>
+                            <div
+                                id="${IDS.comparacaoResumo}"
+                                class="listalar-gastos-comparacao-card-resumo"
+                            >
+                                <div class="listalar-gastos-comparacao-card-item">
+                                    <span>Status</span>
+                                    <strong>Carregando comparação...</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            class="listalar-gastos-comparacao-card-seta"
+                            aria-hidden="true"
+                        >
+                            ›
+                        </div>
+                    </button>
+                </section>
+
                 <section class="listalar-gastos-filtros-avancados" aria-label="Busca e filtros do histórico">
                     <input id="${IDS.buscaHistorico}" type="search" placeholder="🔎 Buscar mercado ou valor">
                     <select id="${IDS.filtroMercado}" aria-label="Filtrar por estabelecimento"><option value="">Todos os mercados</option></select>
@@ -1765,6 +2040,47 @@
                     ></div>
                 </section>
             </main>
+
+            <section
+                id="${IDS.comparacaoTela}"
+                class="listalar-gastos-comparacao-tela"
+                aria-hidden="true"
+            >
+                <header class="listalar-gastos-comparacao-cabecalho">
+                    <button
+                        id="${IDS.comparacaoVoltar}"
+                        class="listalar-gastos-comparacao-voltar"
+                        type="button"
+                        aria-label="Voltar para Gastos"
+                    >
+                        ←
+                    </button>
+                    <div>
+                        <h2>Comparação de preços</h2>
+                        <p>Histórico das compras da família</p>
+                    </div>
+                </header>
+
+                <main class="listalar-gastos-comparacao-conteudo">
+                    <div
+                        id="${IDS.comparacaoTelaResumo}"
+                        class="listalar-gastos-comparacao-resumo-grade"
+                    ></div>
+
+                    <input
+                        id="${IDS.comparacaoBusca}"
+                        class="listalar-gastos-comparacao-busca"
+                        type="search"
+                        placeholder="🔎 Buscar produto"
+                        autocomplete="off"
+                    >
+
+                    <div
+                        id="${IDS.comparacaoLista}"
+                        class="listalar-gastos-comparacao-lista"
+                    ></div>
+                </main>
+            </section>
 
             <div
                 id="${IDS.aviso}"
@@ -2002,6 +2318,7 @@
         fecharModalEditar();
         fecharModalDetalhes();
         fecharModalExcluir(false);
+        fecharTelaComparacao();
         tela.classList.remove("aberta");
         tela.setAttribute("aria-hidden", "true");
         document.body.classList.remove("listalar-gastos-aberto");
@@ -3219,27 +3536,7 @@
             if (ESTADO.editandoItens) {
                 return `<article class="listalar-gastos-detalhe-item editando" data-item-id="${escaparHTML(item.id)}"><div class="listalar-gastos-detalhe-item-grid"><input class="campo-nome" data-campo="descricao" value="${escaparHTML(descricao)}"><input data-campo="quantidade" type="number" min="0" step="0.001" value="${quantidade}"><input data-campo="unidade" value="${escaparHTML(unidade)}"><input data-campo="precoUnitario" type="number" min="0" step="0.01" value="${precoUnitario.toFixed(2)}"><input data-campo="valorTotal" type="number" min="0" step="0.01" value="${valorTotal.toFixed(2)}"></div></article>`;
             }
-            const comp = item.comparacao;
-            const blocoComparacao = comp
-                ? `
-                    <div class="listalar-gastos-comparacao">
-                        <strong>${escaparHTML(comp.classificacao?.simbolo || "⚪")} ${escaparHTML(comp.classificacao?.rotulo || "Preço sem referência")}</strong>
-                        <span>Último: ${formatarMoeda(comp.ultimoPreco)}</span>
-                        <span>Menor: ${formatarMoeda(comp.menorPreco)}</span>
-                        <span>Média: ${formatarMoeda(comp.precoMedio)}</span>
-                        ${comp.melhorMercado
-                            ? `<span>Melhor mercado: ${escaparHTML(comp.melhorMercado)}</span>`
-                            : ""}
-                        <small>${Number(comp.quantidadeHistorico || 0)} compra(s) usada(s) na comparação</small>
-                    </div>
-                `
-                : `
-                    <div class="listalar-gastos-comparacao sem-historico">
-                        ⚪ Ainda não há histórico suficiente para comparar este produto.
-                    </div>
-                `;
-
-            return `<article class="listalar-gastos-detalhe-item"><div class="listalar-gastos-detalhe-item-nome">${escaparHTML(descricao)}</div><div class="listalar-gastos-detalhe-item-total">${formatarMoeda(valorTotal)}</div><div class="listalar-gastos-detalhe-item-info">${formatarQuantidade(quantidade)} ${escaparHTML(unidade)} × ${formatarMoeda(precoUnitario)}</div>${blocoComparacao}</article>`;
+            return `<article class="listalar-gastos-detalhe-item"><div class="listalar-gastos-detalhe-item-nome">${escaparHTML(descricao)}</div><div class="listalar-gastos-detalhe-item-total">${formatarMoeda(valorTotal)}</div><div class="listalar-gastos-detalhe-item-info">${formatarQuantidade(quantidade)} ${escaparHTML(unidade)} × ${formatarMoeda(precoUnitario)}</div></article>`;
         }).join("");
     }
 
@@ -3488,11 +3785,10 @@
                 ESTADO.registroEmDetalhes?.id ===
                 registro.id
             ) {
-                const itensComparados = await enriquecerComparacoes(itens, registro.id);
                 ESTADO.editandoItens = false;
                 elemento(IDS.detalhesSalvarItens).hidden = true;
                 elemento(IDS.detalhesEditarItens).textContent = "Editar itens";
-                renderizarItensDetalhes(itensComparados);
+                renderizarItensDetalhes(itens);
             }
         } catch (erro) {
             console.error(
@@ -3646,6 +3942,491 @@
         }
     }
 
+
+    // ========================================================
+    // COMPARAÇÃO DE PREÇOS — RESUMO E TELA
+    // ========================================================
+
+    function invalidarComparacaoPrecos() {
+        ESTADO.comparacaoResumo = null;
+        ESTADO.comparacaoHistorico = [];
+        ESTADO.comparacaoAtualizadaEm = 0;
+
+        try {
+            window.ListaLarCompararPrecos?.limparCache?.();
+        } catch {}
+    }
+
+    async function carregarHistoricoParaComparacao() {
+        const agora = Date.now();
+
+        if (
+            ESTADO.comparacaoHistorico.length &&
+            agora - ESTADO.comparacaoAtualizadaEm <
+                5 * 60 * 1000
+        ) {
+            return ESTADO.comparacaoHistorico;
+        }
+
+        const registros = ESTADO.registros
+            .slice(0, 30);
+
+        const resultados = await Promise.all(
+            registros.map(async (registro) => {
+                try {
+                    const referencia =
+                        ESTADO.firebase.doc(
+                            colecaoGastos(),
+                            registro.id
+                        );
+
+                    const snapshot =
+                        await ESTADO.firebase.getDocs(
+                            ESTADO.firebase.collection(
+                                referencia,
+                                "itens"
+                            )
+                        );
+
+                    return snapshot.docs.map(
+                        (documento) => {
+                            const item =
+                                documento.data();
+
+                            return {
+                                ...item,
+                                id: documento.id,
+
+                                produtoNome:
+                                    item.produtoNome ||
+                                    item.descricao ||
+                                    item.descricaoOriginal ||
+                                    "",
+
+                                codigo:
+                                    item.gtin ||
+                                    item.codigoItem ||
+                                    item.codigo ||
+                                    "",
+
+                                mercadoNome:
+                                    registro.estabelecimentoNome ||
+                                    "",
+
+                                dataCompra:
+                                    registro.dataCompra ||
+                                    registro.dataCompraMs ||
+                                    "",
+
+                                gastoId:
+                                    registro.id
+                            };
+                        }
+                    );
+                } catch (erro) {
+                    console.warn(
+                        "ListaLar Gastos: compra ignorada na comparação:",
+                        registro.id,
+                        erro
+                    );
+                    return [];
+                }
+            })
+        );
+
+        const historico =
+            resultados.flat();
+
+        ESTADO.comparacaoHistorico =
+            historico;
+
+        ESTADO.comparacaoAtualizadaEm =
+            agora;
+
+        return historico;
+    }
+
+    async function obterResumoComparacao({
+        forcar = false
+    } = {}) {
+        if (
+            ESTADO.comparacaoResumo &&
+            !forcar
+        ) {
+            return ESTADO.comparacaoResumo;
+        }
+
+        const comparador =
+            window.ListaLarCompararPrecos;
+
+        if (
+            !comparador ||
+            typeof comparador.analisarHistorico !==
+                "function"
+        ) {
+            throw new Error(
+                "COMPARADOR_NAO_DISPONIVEL"
+            );
+        }
+
+        const historico =
+            await carregarHistoricoParaComparacao();
+
+        const resumo =
+            comparador.analisarHistorico(
+                historico
+            );
+
+        ESTADO.comparacaoResumo =
+            resumo;
+
+        return resumo;
+    }
+
+    function renderizarCardComparacao(resumo) {
+        const container =
+            elemento(IDS.comparacaoResumo);
+
+        if (!container) {
+            return;
+        }
+
+        if (
+            !resumo ||
+            !resumo.produtosComparados
+        ) {
+            container.innerHTML = `
+                <div class="listalar-gastos-comparacao-card-item">
+                    <span>Histórico</span>
+                    <strong>Ainda faltam compras repetidas para comparar</strong>
+                </div>
+                <div class="listalar-gastos-comparacao-card-item">
+                    <span>Produtos comparados</span>
+                    <strong>0</strong>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="listalar-gastos-comparacao-card-item">
+                <span>Melhor supermercado</span>
+                <strong>${escaparHTML(
+                    resumo.melhorMercado ||
+                    "Sem destaque"
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-card-item">
+                <span>Produtos comparados</span>
+                <strong>${Number(
+                    resumo.produtosComparados ||
+                    0
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-card-item">
+                <span>Preços</span>
+                <strong>🟢 ${Number(
+                    resumo.bons || 0
+                )} · 🔴 ${Number(
+                    resumo.altos || 0
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-card-item">
+                <span>Economia potencial</span>
+                <strong>${formatarMoeda(
+                    resumo.economiaPotencial ||
+                    0
+                )}</strong>
+            </div>
+        `;
+    }
+
+    async function atualizarCardComparacao() {
+        if (
+            ESTADO.comparacaoCarregando ||
+            !ESTADO.firebase ||
+            !ESTADO.familiaId
+        ) {
+            return;
+        }
+
+        ESTADO.comparacaoCarregando = true;
+
+        const container =
+            elemento(IDS.comparacaoResumo);
+
+        if (container) {
+            container.innerHTML = `
+                <div class="listalar-gastos-comparacao-card-item">
+                    <span>Status</span>
+                    <strong>Analisando histórico...</strong>
+                </div>
+            `;
+        }
+
+        try {
+            const resumo =
+                await obterResumoComparacao();
+
+            renderizarCardComparacao(
+                resumo
+            );
+
+            if (
+                elemento(IDS.comparacaoTela)
+                    ?.classList.contains("aberta")
+            ) {
+                renderizarTelaComparacao();
+            }
+        } catch (erro) {
+            console.error(
+                "ListaLar Gastos: erro na comparação de preços:",
+                erro
+            );
+
+            if (container) {
+                container.innerHTML = `
+                    <div class="listalar-gastos-comparacao-card-item">
+                        <span>Comparação de preços</span>
+                        <strong>Não foi possível analisar agora</strong>
+                    </div>
+                `;
+            }
+        } finally {
+            ESTADO.comparacaoCarregando = false;
+        }
+    }
+
+    function abrirTelaComparacao() {
+        const tela =
+            elemento(IDS.comparacaoTela);
+
+        if (!tela) {
+            return;
+        }
+
+        tela.classList.add("aberta");
+        tela.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+        const busca =
+            elemento(IDS.comparacaoBusca);
+
+        if (busca) {
+            busca.value =
+                ESTADO.comparacaoBusca;
+        }
+
+        renderizarTelaComparacao();
+    }
+
+    function fecharTelaComparacao() {
+        const tela =
+            elemento(IDS.comparacaoTela);
+
+        tela?.classList.remove("aberta");
+        tela?.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+    }
+
+    function renderizarTelaComparacao() {
+        const resumo =
+            ESTADO.comparacaoResumo;
+
+        const resumoContainer =
+            elemento(
+                IDS.comparacaoTelaResumo
+            );
+
+        const lista =
+            elemento(IDS.comparacaoLista);
+
+        if (
+            !resumoContainer ||
+            !lista
+        ) {
+            return;
+        }
+
+        if (!resumo) {
+            resumoContainer.innerHTML = `
+                <div class="listalar-gastos-comparacao-resumo-item">
+                    <span>Status</span>
+                    <strong>Analisando histórico...</strong>
+                </div>
+            `;
+
+            lista.innerHTML = `
+                <div class="listalar-gastos-comparacao-vazio">
+                    Aguarde enquanto os preços são comparados.
+                </div>
+            `;
+
+            atualizarCardComparacao();
+            return;
+        }
+
+        resumoContainer.innerHTML = `
+            <div class="listalar-gastos-comparacao-resumo-item">
+                <span>Melhor supermercado</span>
+                <strong>${escaparHTML(
+                    resumo.melhorMercado ||
+                    "Sem destaque"
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-resumo-item">
+                <span>Produtos com histórico</span>
+                <strong>${Number(
+                    resumo.produtosComparados ||
+                    0
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-resumo-item">
+                <span>🟢 Bom preço</span>
+                <strong>${Number(
+                    resumo.bons || 0
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-resumo-item">
+                <span>🔴 Acima da média</span>
+                <strong>${Number(
+                    resumo.altos || 0
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-resumo-item">
+                <span>Economia potencial</span>
+                <strong>${formatarMoeda(
+                    resumo.economiaPotencial ||
+                    0
+                )}</strong>
+            </div>
+
+            <div class="listalar-gastos-comparacao-resumo-item">
+                <span>Maior oportunidade</span>
+                <strong>${resumo.maiorEconomiaProduto
+                    ? `${escaparHTML(
+                        resumo.maiorEconomiaProduto
+                    )} · ${formatarMoeda(
+                        resumo.maiorEconomia
+                    )}`
+                    : "—"}</strong>
+            </div>
+        `;
+
+        const termo =
+            normalizarTexto(
+                ESTADO.comparacaoBusca
+            ).toLowerCase();
+
+        const produtos =
+            (resumo.produtos || [])
+                .filter((produto) => {
+                    if (!termo) {
+                        return true;
+                    }
+
+                    return normalizarTexto(
+                        produto.produtoNome
+                    )
+                        .toLowerCase()
+                        .includes(termo);
+                });
+
+        if (!produtos.length) {
+            lista.innerHTML = `
+                <div class="listalar-gastos-comparacao-vazio">
+                    ${
+                        termo
+                            ? "Nenhum produto corresponde à busca."
+                            : "Ainda não há produtos com compras repetidas suficientes para comparação."
+                    }
+                </div>
+            `;
+            return;
+        }
+
+        lista.innerHTML =
+            produtos.map((produto) => `
+                <article class="listalar-gastos-comparacao-produto">
+                    <div class="listalar-gastos-comparacao-produto-topo">
+                        <strong>${escaparHTML(
+                            produto.produtoNome
+                        )}</strong>
+
+                        <span class="listalar-gastos-comparacao-selo">
+                            ${escaparHTML(
+                                produto.classificacao
+                                    ?.simbolo ||
+                                "⚪"
+                            )}
+                            ${escaparHTML(
+                                produto.classificacao
+                                    ?.rotulo ||
+                                "Preço normal"
+                            )}
+                        </span>
+                    </div>
+
+                    <div class="listalar-gastos-comparacao-produto-grade">
+                        <div class="listalar-gastos-comparacao-produto-info">
+                            <span>Atual</span>
+                            <strong>${formatarMoeda(
+                                produto.precoAtual
+                            )}</strong>
+                        </div>
+
+                        <div class="listalar-gastos-comparacao-produto-info">
+                            <span>Último</span>
+                            <strong>${formatarMoeda(
+                                produto.ultimoPreco
+                            )}</strong>
+                        </div>
+
+                        <div class="listalar-gastos-comparacao-produto-info">
+                            <span>Média anterior</span>
+                            <strong>${formatarMoeda(
+                                produto.precoMedio
+                            )}</strong>
+                        </div>
+
+                        <div class="listalar-gastos-comparacao-produto-info">
+                            <span>Menor</span>
+                            <strong>${formatarMoeda(
+                                produto.menorPreco
+                            )}</strong>
+                        </div>
+
+                        <div class="listalar-gastos-comparacao-produto-info">
+                            <span>Melhor mercado</span>
+                            <strong>${escaparHTML(
+                                produto.melhorMercado ||
+                                "—"
+                            )}</strong>
+                        </div>
+
+                        <div class="listalar-gastos-comparacao-produto-info">
+                            <span>Histórico</span>
+                            <strong>${Number(
+                                produto.quantidadeHistorico ||
+                                0
+                            )} compra(s)</strong>
+                        </div>
+                    </div>
+                </article>
+            `).join("");
+    }
+
     // ========================================================
     // HISTÓRICO E DASHBOARD
     // ========================================================
@@ -3698,8 +4479,10 @@
                             })
                         );
 
+                    invalidarComparacaoPrecos();
                     definirCarregando(false);
                     renderizarPainel();
+                    atualizarCardComparacao();
                 },
                 (erro) => {
                     console.error(
@@ -4195,6 +4978,25 @@
         elemento(IDS.dataInicial)?.addEventListener("change", (evento) => { ESTADO.dataInicial = evento.target.value; renderizarPainel(); });
         elemento(IDS.dataFinal)?.addEventListener("change", (evento) => { ESTADO.dataFinal = evento.target.value; renderizarPainel(); });
         elemento(IDS.botaoExportar)?.addEventListener("click", exportarCSV);
+
+        elemento(IDS.comparacaoCard)?.addEventListener(
+            "click",
+            abrirTelaComparacao
+        );
+
+        elemento(IDS.comparacaoVoltar)?.addEventListener(
+            "click",
+            fecharTelaComparacao
+        );
+
+        elemento(IDS.comparacaoBusca)?.addEventListener(
+            "input",
+            (evento) => {
+                ESTADO.comparacaoBusca =
+                    evento.target.value;
+                renderizarTelaComparacao();
+            }
+        );
         elemento(IDS.excluirCancelar)?.addEventListener("click", () => fecharModalExcluir(false));
         elemento(IDS.excluirConfirmar)?.addEventListener("click", () => fecharModalExcluir(true));
         elemento(IDS.modalExcluir)?.addEventListener("click", (evento) => {
