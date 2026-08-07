@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 3.0.3
+// Versão: 3.1.0
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.0.3";
+    const VERSAO = "3.1.0";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -1424,7 +1424,37 @@
             .listalar-gastos-detalhe-item.editando { grid-template-columns:1fr; }
             .listalar-gastos-detalhe-item-grid { display:grid; grid-template-columns:2fr .8fr .8fr 1fr 1fr; gap:7px; }
             .listalar-gastos-detalhe-item-grid input { width:100%; min-height:40px; padding:7px; border:1px solid #cbd5e1; border-radius:9px; box-sizing:border-box; }
-            .listalar-gastos-comparacao { margin-top:7px; padding:7px 9px; border-radius:9px; background:#ecfeff; color:#155e75; font-size:10px; font-weight:800; }
+            .listalar-gastos-comparacao {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px 10px;
+                margin-top: 7px;
+                padding: 9px 10px;
+                border: 1px solid #a5f3fc;
+                border-radius: 10px;
+                background: #ecfeff;
+                color: #155e75;
+                font-size: 10px;
+                font-weight: 800;
+                line-height: 1.4;
+            }
+            .listalar-gastos-comparacao strong {
+                width: 100%;
+                color: #0f172a;
+                font-size: 11px;
+            }
+            .listalar-gastos-comparacao small {
+                width: 100%;
+                color: #64748b;
+                font-size: 9px;
+                font-weight: 700;
+            }
+            .listalar-gastos-comparacao.sem-historico {
+                color: #64748b;
+                border-color: #e2e8f0;
+                background: #f8fafc;
+            }
             @media (max-width:720px) { .listalar-gastos-filtros-avancados { grid-template-columns:1fr 1fr; } .listalar-gastos-filtros-avancados > :first-child { grid-column:1/-1; } .listalar-gastos-detalhe-item-grid { grid-template-columns:1fr 1fr; } .listalar-gastos-detalhe-item-grid .campo-nome { grid-column:1/-1; } }
 
             @media (max-width: 720px) {
@@ -3190,28 +3220,130 @@
                 return `<article class="listalar-gastos-detalhe-item editando" data-item-id="${escaparHTML(item.id)}"><div class="listalar-gastos-detalhe-item-grid"><input class="campo-nome" data-campo="descricao" value="${escaparHTML(descricao)}"><input data-campo="quantidade" type="number" min="0" step="0.001" value="${quantidade}"><input data-campo="unidade" value="${escaparHTML(unidade)}"><input data-campo="precoUnitario" type="number" min="0" step="0.01" value="${precoUnitario.toFixed(2)}"><input data-campo="valorTotal" type="number" min="0" step="0.01" value="${valorTotal.toFixed(2)}"></div></article>`;
             }
             const comp = item.comparacao;
-            return `<article class="listalar-gastos-detalhe-item"><div class="listalar-gastos-detalhe-item-nome">${escaparHTML(descricao)}</div><div class="listalar-gastos-detalhe-item-total">${formatarMoeda(valorTotal)}</div><div class="listalar-gastos-detalhe-item-info">${formatarQuantidade(quantidade)} ${escaparHTML(unidade)} × ${formatarMoeda(precoUnitario)}</div>${comp ? `<div class="listalar-gastos-comparacao">Histórico: menor ${formatarMoeda(comp.min)} · maior ${formatarMoeda(comp.max)} · ${comp.ocorrencias} compra(s)</div>` : ""}</article>`;
+            const blocoComparacao = comp
+                ? `
+                    <div class="listalar-gastos-comparacao">
+                        <strong>${escaparHTML(comp.classificacao?.simbolo || "⚪")} ${escaparHTML(comp.classificacao?.rotulo || "Preço sem referência")}</strong>
+                        <span>Último: ${formatarMoeda(comp.ultimoPreco)}</span>
+                        <span>Menor: ${formatarMoeda(comp.menorPreco)}</span>
+                        <span>Média: ${formatarMoeda(comp.precoMedio)}</span>
+                        ${comp.melhorMercado
+                            ? `<span>Melhor mercado: ${escaparHTML(comp.melhorMercado)}</span>`
+                            : ""}
+                        <small>${Number(comp.quantidadeHistorico || 0)} compra(s) usada(s) na comparação</small>
+                    </div>
+                `
+                : `
+                    <div class="listalar-gastos-comparacao sem-historico">
+                        ⚪ Ainda não há histórico suficiente para comparar este produto.
+                    </div>
+                `;
+
+            return `<article class="listalar-gastos-detalhe-item"><div class="listalar-gastos-detalhe-item-nome">${escaparHTML(descricao)}</div><div class="listalar-gastos-detalhe-item-total">${formatarMoeda(valorTotal)}</div><div class="listalar-gastos-detalhe-item-info">${formatarQuantidade(quantidade)} ${escaparHTML(unidade)} × ${formatarMoeda(precoUnitario)}</div>${blocoComparacao}</article>`;
         }).join("");
     }
 
     async function enriquecerComparacoes(itens, registroAtualId) {
-        const mapa = new Map();
-        for (const registro of ESTADO.registros.filter(r => r.id !== registroAtualId).slice(0, 40)) {
-            try {
-                const ref = ESTADO.firebase.doc(colecaoGastos(), registro.id);
-                const snap = await ESTADO.firebase.getDocs(ESTADO.firebase.collection(ref, "itens"));
-                for (const docItem of snap.docs) {
-                    const item = docItem.data();
-                    const chave = chaveComparacaoItem(item);
-                    const preco = numeroSeguro(item.precoUnitario, 0);
-                    if (!chave || preco <= 0) continue;
-                    const atual = mapa.get(chave) || []; atual.push(preco); mapa.set(chave, atual);
-                }
-            } catch {}
+        const comparador = window.ListaLarCompararPrecos;
+
+        if (
+            !comparador ||
+            typeof comparador.compararProdutoComHistorico !== "function"
+        ) {
+            console.warn(
+                "ListaLar Gastos: comparar-precos.js não está disponível."
+            );
+            return itens;
         }
-        return itens.map(item => {
-            const valores = mapa.get(chaveComparacaoItem(item)) || [];
-            return valores.length ? {...item, comparacao:{min:Math.min(...valores),max:Math.max(...valores),ocorrencias:valores.length}} : item;
+
+        const historico = [];
+        const registrosHistoricos = ESTADO.registros
+            .filter((registro) => registro.id !== registroAtualId)
+            .slice(0, 40);
+
+        for (const registro of registrosHistoricos) {
+            try {
+                const referencia = ESTADO.firebase.doc(
+                    colecaoGastos(),
+                    registro.id
+                );
+
+                const snapshot = await ESTADO.firebase.getDocs(
+                    ESTADO.firebase.collection(
+                        referencia,
+                        "itens"
+                    )
+                );
+
+                for (const documento of snapshot.docs) {
+                    const itemHistorico = documento.data();
+
+                    historico.push({
+                        ...itemHistorico,
+                        id: documento.id,
+                        produtoNome:
+                            itemHistorico.produtoNome ||
+                            itemHistorico.descricao ||
+                            itemHistorico.descricaoOriginal ||
+                            "",
+                        codigo:
+                            itemHistorico.gtin ||
+                            itemHistorico.codigoItem ||
+                            itemHistorico.codigo ||
+                            "",
+                        mercadoNome:
+                            registro.estabelecimentoNome ||
+                            "",
+                        dataCompra:
+                            registro.dataCompra ||
+                            registro.dataCompraMs ||
+                            ""
+                    });
+                }
+            } catch (erro) {
+                console.warn(
+                    "ListaLar Gastos: não foi possível usar uma compra no histórico de preços:",
+                    registro.id,
+                    erro
+                );
+            }
+        }
+
+        return itens.map((item) => {
+            const produtoAtual = {
+                ...item,
+                produtoNome:
+                    item.produtoNome ||
+                    item.descricao ||
+                    item.descricaoOriginal ||
+                    "",
+                codigo:
+                    item.gtin ||
+                    item.codigoItem ||
+                    item.codigo ||
+                    "",
+                mercadoNome:
+                    ESTADO.registroEmDetalhes?.estabelecimentoNome ||
+                    "",
+                dataCompra:
+                    ESTADO.registroEmDetalhes?.dataCompra ||
+                    ESTADO.registroEmDetalhes?.dataCompraMs ||
+                    ""
+            };
+
+            const comparacao =
+                comparador.compararProdutoComHistorico(
+                    produtoAtual,
+                    historico
+                );
+
+            return {
+                ...item,
+                comparacao:
+                    comparacao?.possuiHistorico
+                        ? comparacao
+                        : null
+            };
         });
     }
 
