@@ -1,4 +1,4 @@
-name: Corrigir cards de gastos no celular
+name: Atualizar referencia do modulo Gastos
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  corrigir:
+  atualizar:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,16 +19,47 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Aplicar correção
-        run: python3 .github/scripts/fix_gastos_mobile.py
+      - name: Atualizar index e versao do PWA
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
 
-      - name: Validar JavaScript
-        run: node --check gastos.js
+          index = Path('index.html')
+          texto = index.read_text(encoding='utf-8')
+          antigo = './gastos.js?v=3.0.3'
+          novo = './gastos.js?v=3.2.3'
+
+          if antigo in texto:
+              texto = texto.replace(antigo, novo, 1)
+          elif novo not in texto:
+              raise SystemExit('Referencia esperada de gastos.js nao encontrada.')
+
+          index.write_text(texto, encoding='utf-8')
+
+          Path('version.json').write_text('''{
+            "version": "1.0.27",
+            "updatedAt": "2026-08-10",
+            "notes": "Atualização do módulo Gastos e correção dos cards no celular"
+          }
+          ''', encoding='utf-8')
+          PY
+
+      - name: Validar referencia
+        shell: bash
+        run: |
+          grep -q 'gastos.js?v=3.2.3' index.html
+          grep -q '"version": "1.0.27"' version.json
 
       - name: Commit e push
+        shell: bash
         run: |
           git config user.name 'ListaLar Automation'
           git config user.email 'actions@users.noreply.github.com'
-          git add gastos.js version.json
-          git commit -m 'Corrige layout dos cards de gastos no celular'
+          git add index.html version.json
+          if git diff --cached --quiet; then
+            echo 'Sem alteracoes.'
+            exit 0
+          fi
+          git commit -m 'Atualiza carregamento do modulo Gastos 3.2.3'
           git push origin HEAD:main
