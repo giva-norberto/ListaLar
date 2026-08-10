@@ -1,5 +1,5 @@
 {
-  "version": "1.0.26",
+  "version": "1.0.27",
   "updatedAt": "2026-08-10",
-  "notes": "Correção responsiva dos cards do histórico de gastos"
+  "notes": "Atualização do módulo Gastos e correção dos cards no celular"
 }
