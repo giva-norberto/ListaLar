@@ -1,4 +1,4 @@
-name: Aplicar historico compacto de gastos
+name: Corrigir responsividade dos cards de gastos
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  aplicar:
+  corrigir:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,29 +18,89 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Aplicar versao 3.2.2
-        run: python3 .github/scripts/apply_gastos_compacto.py
+      - name: Corrigir CSS mobile do historico
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
 
-      - name: Validar sintaxe
+          path = Path('gastos.js')
+          texto = path.read_text(encoding='utf-8')
+
+          antigo = '''                .listalar-gastos-registro {
+                    grid-template-columns:
+                        auto minmax(0, 1fr);
+                }
+
+                .listalar-gastos-registro-valor {
+                    grid-column: 2;
+                }
+'''
+
+          novo = '''                .listalar-gastos-registro {
+                    grid-template-columns:
+                        minmax(0, 1fr);
+                }
+
+                .listalar-gastos-registro-topo {
+                    grid-template-columns:
+                        minmax(0, 1fr) auto;
+                }
+
+                .listalar-gastos-registro-rodape {
+                    width: 100%;
+                    min-width: 0;
+                }
+
+                .listalar-gastos-registro-valor {
+                    grid-column: auto;
+                }
+
+                .listalar-gastos-registro-acoes {
+                    margin-left: auto;
+                }
+'''
+
+          if antigo not in texto:
+              if 'grid-template-columns:\n                        minmax(0, 1fr);' in texto and 'listalar-gastos-registro-rodape' in texto:
+                  print('Correcao mobile ja aplicada.')
+              else:
+                  raise SystemExit('Bloco mobile esperado nao encontrado. Alteracao cancelada.')
+          else:
+              texto = texto.replace(antigo, novo, 1)
+
+          texto = texto.replace('// Versão: 3.2.2', '// Versão: 3.2.3', 1)
+          texto = texto.replace('const VERSAO = "3.2.2";', 'const VERSAO = "3.2.3";', 1)
+
+          path.write_text(texto, encoding='utf-8')
+
+          versao = Path('version.json')
+          versao.write_text('''{
+            "version": "1.0.26",
+            "updatedAt": "2026-08-10",
+            "notes": "Correção responsiva dos cards do histórico de gastos"
+          }
+''', encoding='utf-8')
+          PY
+
+      - name: Validar JavaScript
         run: node --check gastos.js
 
-      - name: Validar layout compacto
+      - name: Validar correcao
         shell: bash
         run: |
-          grep -q 'const VERSAO = "3.2.2";' gastos.js
-          grep -q 'listalar-gastos-registro-topo' gastos.js
-          grep -q 'listalar-gastos-registro-data' gastos.js
-          grep -q 'listalar-gastos-registro-quantidade' gastos.js
+          grep -q 'const VERSAO = "3.2.3";' gastos.js
+          grep -q '"version": "1.0.26"' version.json
 
-      - name: Commit e push
+      - name: Commit
         shell: bash
         run: |
-          if git diff --quiet -- gastos.js; then
-            echo 'Nenhuma alteracao pendente.'
-            exit 0
-          fi
           git config user.name 'ListaLar Automation'
           git config user.email 'actions@users.noreply.github.com'
-          git add gastos.js
-          git commit -m 'Atualiza gastos para historico compacto 3.2.2'
+          git add gastos.js version.json
+          if git diff --cached --quiet; then
+            echo 'Sem alteracoes.'
+            exit 0
+          fi
+          git commit -m 'Corrige cards de gastos no celular'
           git push origin HEAD:main
