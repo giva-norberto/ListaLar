@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 3.2.1
+// Versão: 3.2.2
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.2.1";
+    const VERSAO = "3.2.2";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -1047,11 +1047,10 @@
 
             .listalar-gastos-registro {
                 display: grid;
-                grid-template-columns:
-                    auto minmax(0, 1fr) auto;
-                gap: 11px;
+                grid-template-columns: minmax(0, 1fr);
+                gap: 7px;
                 align-items: center;
-                padding: 12px;
+                padding: 10px 12px;
                 border: 1px solid #cfe0f5;
                 border-left: 5px solid #7c3aed;
                 border-radius: 14px;
@@ -1059,22 +1058,18 @@
                 box-shadow: 0 5px 14px rgba(15, 23, 42, .06);
             }
 
-            .listalar-gastos-registro-icone {
+            .listalar-gastos-registro.manual {
+                border-left-color: #16a34a;
+                background: linear-gradient(135deg, #ffffff, #f0fdf4);
+            }
+
+            .listalar-gastos-registro-topo {
                 display: grid;
-                place-items: center;
-                width: 40px;
-                height: 40px;
-                border-radius: 12px;
-                background: #dbeafe;
-                font-size: 20px;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 9px;
+                align-items: start;
+                min-width: 0;
             }
-
-            .listalar-gastos-registro.manual
-            .listalar-gastos-registro-icone {
-                background: #dcfce7;
-            }
-
-            .listalar-gastos-registro.manual { border-left-color:#16a34a; background:linear-gradient(135deg,#ffffff,#f0fdf4); }
 
             .listalar-gastos-registro-conteudo {
                 min-width: 0;
@@ -1088,21 +1083,42 @@
                 white-space: nowrap;
             }
 
-            .listalar-gastos-registro-conteudo small {
-                display: block;
-                margin-top: 4px;
+            .listalar-gastos-registro-data {
+                padding-top: 1px;
                 color: #64748b;
                 font-size: 11px;
+                font-weight: 600;
+                white-space: nowrap;
+            }
+
+            .listalar-gastos-registro-rodape {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                min-width: 0;
             }
 
             .listalar-gastos-registro-valor {
+                flex: 0 0 auto;
                 font-size: 14px;
                 font-weight: 900;
                 white-space: nowrap;
             }
 
-            .listalar-gastos-registro-lateral { display:grid; justify-items:end; gap:8px; }
-            .listalar-gastos-registro-acoes { display:flex; gap:6px; }
+            .listalar-gastos-registro-quantidade {
+                flex: 0 1 auto;
+                color: #64748b;
+                font-size: 11px;
+                white-space: nowrap;
+            }
+
+            .listalar-gastos-registro-acoes {
+                display: flex;
+                gap: 6px;
+                margin-left: auto;
+                flex: 0 0 auto;
+            }
+
             .listalar-gastos-registro-acao { width:34px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:10px; cursor:pointer; font-size:16px; }
             .listalar-gastos-registro-acao.editar { color:#1d4ed8; background:#dbeafe; }
             .listalar-gastos-registro-acao.excluir { color:#b91c1c; background:#fee2e2; }
@@ -1115,14 +1131,6 @@
 
             .listalar-gastos-registro:active {
                 transform: scale(.992);
-            }
-
-            .listalar-gastos-registro-dica {
-                display: block;
-                margin-top: 5px;
-                color: #2563eb;
-                font-size: 10px;
-                font-weight: 800;
             }
 
             .listalar-gastos-detalhes-resumo {
@@ -4895,47 +4903,33 @@
                         tabindex="0"
                         aria-label="Abrir itens da compra de ${escaparHTML(estabelecimento)}"
                     >
-                        <div
-                            class="listalar-gastos-registro-icone"
-                            aria-hidden="true"
-                        >
-                            ${manual ? "💵" : "🧾"}
-                        </div>
+                        <div class="listalar-gastos-registro-topo">
+                            <div class="listalar-gastos-registro-conteudo">
+                                <strong title="${escaparHTML(estabelecimento)}">
+                                    ${escaparHTML(estabelecimento)}
+                                </strong>
+                            </div>
 
-                        <div
-                            class="listalar-gastos-registro-conteudo"
-                        >
-                            <strong>
-                                ${escaparHTML(estabelecimento)}
-                            </strong>
-
-                            <small>
-                                ${manual
-                                    ? "Compra manual"
-                                    : "Nota fiscal em PDF"
-                                }
-                                · ${escaparHTML(
+                            <time class="listalar-gastos-registro-data">
+                                ${escaparHTML(
                                     formatarData(
                                         registro.dataCompra ||
                                         registro.dataCompraMs
                                     )
                                 )}
-                                · ${quantidade}
-                                ${quantidade === 1
-                                    ? "item"
-                                    : "itens"
-                                }
-                            </small>
-
-                            <span class="listalar-gastos-registro-dica">
-                                Toque para ver os itens
-                            </span>
+                            </time>
                         </div>
 
-                        <div class="listalar-gastos-registro-lateral">
+                        <div class="listalar-gastos-registro-rodape">
                             <div class="listalar-gastos-registro-valor">
                                 ${formatarMoeda(registro.valorTotal)}
                             </div>
+
+                            <div class="listalar-gastos-registro-quantidade">
+                                ${quantidade}
+                                ${quantidade === 1 ? "item" : "itens"}
+                            </div>
+
                             ${manual ? "" : `
                                 <div class="listalar-gastos-registro-acoes">
                                     <button class="listalar-gastos-registro-acao editar" type="button" data-acao="editar-nota" data-registro-id="${escaparHTML(registro.id)}" title="Editar nota fiscal" aria-label="Editar nota fiscal">✏️</button>
