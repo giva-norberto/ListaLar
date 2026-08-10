@@ -1,5 +1,5 @@
 {
-  "version": "1.0.25",
+  "version": "1.0.26",
   "updatedAt": "2026-08-10",
-  "notes": "Histórico de gastos com cards compactos"
+  "notes": "Correção responsiva dos cards do histórico de gastos"
 }

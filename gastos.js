@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 3.2.2
+// Versão: 3.2.3
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.2.2";
+    const VERSAO = "3.2.3";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -1784,11 +1784,25 @@
 
                 .listalar-gastos-registro {
                     grid-template-columns:
-                        auto minmax(0, 1fr);
+                        minmax(0, 1fr);
+                }
+
+                .listalar-gastos-registro-topo {
+                    grid-template-columns:
+                        minmax(0, 1fr) auto;
+                }
+
+                .listalar-gastos-registro-rodape {
+                    width: 100%;
+                    min-width: 0;
                 }
 
                 .listalar-gastos-registro-valor {
-                    grid-column: 2;
+                    grid-column: auto;
+                }
+
+                .listalar-gastos-registro-acoes {
+                    margin-left: auto;
                 }
             }
 
