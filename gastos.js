@@ -1,7 +1,7 @@
 // ============================================================
 // LISTALAR — MÓDULO GASTOS
 // Arquivo: gastos.js
-// Versão: 3.2.3
+// Versão: 3.3.0
 //
 // Funções:
 // - Painel de gastos da família;
@@ -16,7 +16,7 @@
 (() => {
     "use strict";
 
-    const VERSAO = "3.2.3";
+    const VERSAO = "3.3.0";
     const ADMIN_COMO_PILOTO_SEM_CONFIG = true;
     const LIMITE_HISTORICO = 120;
 
@@ -1930,19 +1930,13 @@
                     <select
                         id="${IDS.seletorPeriodo}"
                         class="listalar-gastos-select"
-                        aria-label="Período do painel"
+                        aria-label="Mês do painel"
                     >
                         <option value="mes_atual">
-                            Este mês
-                        </option>
-                        <option value="ultimos_3_meses">
-                            Últimos 3 meses
-                        </option>
-                        <option value="ano_atual">
-                            Este ano
+                            Mês atual
                         </option>
                         <option value="todos">
-                            Todo o histórico
+                            Todos os meses
                         </option>
                     </select>
                 </section>
@@ -2956,15 +2950,22 @@
                 await batch.commit();
             }
 
-            const dataRegistro = converterParaData(registro.dataCompra || registro.dataCompraMs);
-            const agora = new Date();
-            const foraMesAtual = ESTADO.periodo === "mes_atual" &&
-                (dataRegistro.getMonth() !== agora.getMonth() || dataRegistro.getFullYear() !== agora.getFullYear());
+            const competenciaRegistro =
+                competenciaDoRegistro(registro);
+            const foraMesSelecionado =
+                ESTADO.periodo !== "todos" &&
+                ESTADO.periodo !== "mes_atual" &&
+                competenciaRegistro !== ESTADO.periodo;
+
             mostrarAviso(
-                foraMesAtual
-                    ? "Compra salva, mas está fora do filtro deste mês."
-                    : (registro.tipoRegistro === "nota_fiscal" ? "Nota fiscal salva com sucesso." : "Compra manual salva com sucesso."),
-                foraMesAtual ? "info" : "sucesso"
+                foraMesSelecionado
+                    ? "Compra salva, mas está fora do mês selecionado."
+                    : (
+                        registro.tipoRegistro === "nota_fiscal"
+                            ? "Nota fiscal salva com sucesso."
+                            : "Compra manual salva com sucesso."
+                    ),
+                foraMesSelecionado ? "info" : "sucesso"
             );
 
             window.dispatchEvent(
@@ -4550,59 +4551,178 @@
             );
     }
 
-    function inicioDoPeriodo(periodo) {
+    function competenciaAtual() {
         const agora = new Date();
-        agora.setHours(0, 0, 0, 0);
+        return `${agora.getFullYear()}-${String(
+            agora.getMonth() + 1
+        ).padStart(2, "0")}`;
+    }
 
-        if (periodo === "mes_atual") {
-            return new Date(
-                agora.getFullYear(),
-                agora.getMonth(),
-                1
-            ).getTime();
+    function competenciaDoRegistro(registro) {
+        const competencia =
+            String(registro?.competencia || "").trim();
+
+        if (/^\d{4}-\d{2}$/.test(competencia)) {
+            return competencia;
         }
 
-        if (periodo === "ultimos_3_meses") {
-            return new Date(
-                agora.getFullYear(),
-                agora.getMonth() - 2,
-                1
-            ).getTime();
+        const data = converterParaData(
+            registro?.dataCompraMs ||
+            registro?.dataCompra
+        );
+
+        return competenciaDaData(data);
+    }
+
+    function rotuloCompetencia(competencia) {
+        const correspondencia =
+            String(competencia || "").match(
+                /^(\d{4})-(\d{2})$/
+            );
+
+        if (!correspondencia) {
+            return competencia || "";
         }
 
-        if (periodo === "ano_atual") {
-            return new Date(
-                agora.getFullYear(),
-                0,
-                1
-            ).getTime();
+        const ano = Number(correspondencia[1]);
+        const mes = Number(correspondencia[2]) - 1;
+        const data = new Date(ano, mes, 1);
+
+        const rotulo = data.toLocaleDateString(
+            "pt-BR",
+            {
+                month: "long",
+                year: "numeric"
+            }
+        );
+
+        return rotulo.charAt(0).toUpperCase() +
+            rotulo.slice(1);
+    }
+
+    function listarCompetenciasDisponiveis() {
+        const atual = competenciaAtual();
+        const competencias = new Set([atual]);
+
+        ESTADO.registros.forEach((registro) => {
+            const competencia =
+                competenciaDoRegistro(registro);
+
+            if (/^\d{4}-\d{2}$/.test(competencia)) {
+                competencias.add(competencia);
+            }
+        });
+
+        return [...competencias].sort(
+            (a, b) => b.localeCompare(a)
+        );
+    }
+
+    function atualizarSeletorMeses() {
+        const select =
+            elemento(IDS.seletorPeriodo);
+
+        if (!select) {
+            return;
         }
 
-        return 0;
+        if (
+            ESTADO.periodo === "mes_atual" ||
+            ESTADO.periodo === "ultimos_3_meses" ||
+            ESTADO.periodo === "ano_atual"
+        ) {
+            ESTADO.periodo = competenciaAtual();
+        }
+
+        const competencias =
+            listarCompetenciasDisponiveis();
+
+        if (
+            ESTADO.periodo !== "todos" &&
+            !competencias.includes(ESTADO.periodo)
+        ) {
+            ESTADO.periodo = competenciaAtual();
+        }
+
+        select.innerHTML =
+            competencias
+                .map(
+                    (competencia) =>
+                        `<option value="${competencia}">${escaparHTML(
+                            rotuloCompetencia(competencia)
+                        )}</option>`
+                )
+                .join("") +
+            `<option value="todos">Todos os meses</option>`;
+
+        select.value = ESTADO.periodo;
     }
 
     function registrosFiltrados() {
-        const agora = new Date();
-        const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime();
-        const inicio3 = new Date(agora.getFullYear(), agora.getMonth()-2, 1).getTime();
-        const inicioAno = new Date(agora.getFullYear(),0,1).getTime();
-        const busca = normalizarTexto(ESTADO.busca).toLowerCase();
-        const inicioCustom = ESTADO.dataInicial ? converterParaData(ESTADO.dataInicial).getTime() : null;
-        const fimCustom = ESTADO.dataFinal ? converterParaData(ESTADO.dataFinal).getTime()+86399999 : null;
-        return ESTADO.registros.filter(registro => {
-            const data = numeroSeguro(registro.dataCompraMs, converterParaData(registro.dataCompra).getTime());
-            if (ESTADO.periodo === "mes_atual" && data < inicioMes) return false;
-            if (ESTADO.periodo === "ultimos_3_meses" && data < inicio3) return false;
-            if (ESTADO.periodo === "ano_atual" && data < inicioAno) return false;
-            if (inicioCustom && data < inicioCustom) return false;
-            if (fimCustom && data > fimCustom) return false;
-            if (ESTADO.mercado && registro.estabelecimentoNome !== ESTADO.mercado) return false;
-            if (busca) {
-                const alvo = normalizarTexto(`${registro.estabelecimentoNome||""} ${registro.valorTotal||""} ${registro.dataCompra||""}`).toLowerCase();
-                if (!alvo.includes(busca)) return false;
+        const busca =
+            normalizarTexto(ESTADO.busca)
+                .toLowerCase();
+
+        const inicioCustom =
+            ESTADO.dataInicial
+                ? converterParaData(
+                    ESTADO.dataInicial
+                ).getTime()
+                : null;
+
+        const fimCustom =
+            ESTADO.dataFinal
+                ? converterParaData(
+                    ESTADO.dataFinal
+                ).getTime() + 86399999
+                : null;
+
+        return ESTADO.registros.filter(
+            (registro) => {
+                const data = numeroSeguro(
+                    registro.dataCompraMs,
+                    converterParaData(
+                        registro.dataCompra
+                    ).getTime()
+                );
+
+                if (
+                    ESTADO.periodo !== "todos" &&
+                    competenciaDoRegistro(registro) !==
+                        ESTADO.periodo
+                ) {
+                    return false;
+                }
+
+                if (inicioCustom && data < inicioCustom) {
+                    return false;
+                }
+
+                if (fimCustom && data > fimCustom) {
+                    return false;
+                }
+
+                if (
+                    ESTADO.mercado &&
+                    registro.estabelecimentoNome !==
+                        ESTADO.mercado
+                ) {
+                    return false;
+                }
+
+                if (busca) {
+                    const alvo = normalizarTexto(
+                        `${registro.estabelecimentoNome || ""} ${registro.valorTotal || ""} ${registro.dataCompra || ""}`
+                    ).toLowerCase();
+
+                    if (!alvo.includes(busca)) {
+                        return false;
+                    }
+                }
+
+                return true;
             }
-            return true;
-        });
+        );
     }
 
     function atualizarFiltroMercados() {
@@ -4962,6 +5082,7 @@
             return;
         }
 
+        atualizarSeletorMeses();
         atualizarFiltroMercados();
         const registros = registrosFiltrados();
 
