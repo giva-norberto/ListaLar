@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.3.2
+ * Versão: 1.3.3
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -17,7 +17,7 @@
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.3.2";
+    const VERSAO = "1.3.3";
 
     const ESTADO = {
         arquivo: null,
@@ -838,6 +838,20 @@ const ImportadorNotaPDF = (() => {
             ? valorPago
             : valorProdutos;
 
+        /*
+         * A SEF/MG pode apresentar o mesmo produto em ocorrências
+         * separadas, mesmo quando o cupom físico mostra quantidade 2, 3...
+         * Primeiro extraímos as ocorrências e, depois, agrupamos somente
+         * produtos realmente idênticos.
+         */
+        const itensExtraidos =
+            agruparItensIguais(
+                extrairItensSEFMG(linhas)
+            );
+
+        const quantidadeTotalFonte =
+            extrairQuantidadeTotal(texto);
+
         return {
             origem: "PDF_SEF_MG",
 
@@ -856,8 +870,24 @@ const ImportadorNotaPDF = (() => {
             formaPagamento:
                 extrairFormaPagamento(texto),
 
+            /*
+             * Para o ListaLar, "itens" representa linhas de produto.
+             * Ex.: 2 balas + 1 Mentos + 2 iogurtes = 3 produtos.
+             * O número bruto informado pela SEF é preservado separadamente.
+             */
             quantidadeTotalItens:
-                extrairQuantidadeTotal(texto),
+                itensExtraidos.length,
+
+            quantidadeTotalItensFonte:
+                quantidadeTotalFonte,
+
+            quantidadeTotalUnidades:
+                itensExtraidos.reduce(
+                    (total, item) =>
+                        total +
+                        converterNumero(item.quantidade),
+                    0
+                ),
 
             // Valor efetivamente desembolsado, usado pelo painel Gastos.
             valorTotal:
@@ -876,7 +906,7 @@ const ImportadorNotaPDF = (() => {
                 ),
 
             itens:
-                extrairItensSEFMG(linhas),
+                itensExtraidos,
 
             nomeArquivo:
                 ESTADO.arquivo?.name || "",
@@ -1056,11 +1086,21 @@ const ImportadorNotaPDF = (() => {
         const itensTabela =
             extrairItensTabelaSEFMG(linhas);
 
-        if (itensTabela.length) {
-            // Cada linha da NFC-e representa um item comprado.
-            // Não remover duplicados: produtos iguais podem aparecer
-            // várias vezes na mesma nota e contam no total oficial.
-            return itensTabela;
+        const itensPorBlocos =
+            extrairItensPorBlocosCodigoSEFMG(linhas);
+
+        /*
+         * Mantém o parser antigo e acrescenta uma estratégia tolerante
+         * às quebras de coluna do PDF.js. Usa a que recuperar mais
+         * ocorrências válidas da nota.
+         */
+        const melhorExtracao =
+            itensPorBlocos.length > itensTabela.length
+                ? itensPorBlocos
+                : itensTabela;
+
+        if (melhorExtracao.length) {
+            return melhorExtracao;
         }
 
         const itens = [];
@@ -1112,6 +1152,163 @@ const ImportadorNotaPDF = (() => {
             linhas
         );
     }
+
+    /*
+     * Parser complementar para PDFs da SEF/MG em que PDF.js quebra
+     * código, quantidade, unidade e valor em linhas diferentes.
+     *
+     * Exemplo real:
+     *   CHIC MENTOS ... (Código:
+     *   76367)
+     *   Qtde total de ítens:
+     *   1.0000
+     *   UN:
+     *   UN
+     *   Valor total R$: R$
+     *   12,98
+     *
+     * Cada bloco começa quando aparece "(Código:" e termina no próximo
+     * produto. Isso evita depender da disposição visual das colunas.
+     */
+    function extrairItensPorBlocosCodigoSEFMG(linhas) {
+        const itens = [];
+        const inicios = [];
+
+        for (
+            let indice = 0;
+            indice < linhas.length;
+            indice += 1
+        ) {
+            if (
+                /\(C[oó]digo\s*:/i
+                    .test(linhas[indice])
+            ) {
+                inicios.push(indice);
+            }
+        }
+
+        for (
+            let posicao = 0;
+            posicao < inicios.length;
+            posicao += 1
+        ) {
+            const inicio = inicios[posicao];
+
+            const proximoInicio =
+                posicao + 1 < inicios.length
+                    ? inicios[posicao + 1]
+                    : linhas.length;
+
+            let fim = Math.min(
+                proximoInicio,
+                inicio + 16
+            );
+
+            /*
+             * Não deixa o último produto "engolir" o resumo da nota.
+             */
+            for (
+                let indice = inicio + 1;
+                indice < fim;
+                indice += 1
+            ) {
+                const comparacao =
+                    normalizarParaComparacao(
+                        linhas[indice]
+                    );
+
+                if (
+                    comparacao === "consumidor" ||
+                    comparacao.startsWith(
+                        "chave de acesso"
+                    ) ||
+                    comparacao.startsWith(
+                        "informacoes gerais da nota"
+                    )
+                ) {
+                    fim = indice;
+                    break;
+                }
+            }
+
+            const bloco =
+                linhas
+                    .slice(inicio, fim)
+                    .join(" ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+            /*
+             * Aceita código quebrado entre linhas:
+             * "(Código: 76367)" depois da junção do bloco.
+             */
+            const codigoMatch =
+                bloco.match(
+                    /\(C[oó]digo\s*:\s*(\d+)\s*\)/i
+                );
+
+            if (!codigoMatch) {
+                continue;
+            }
+
+            const descricao =
+                bloco
+                    .slice(
+                        0,
+                        codigoMatch.index
+                    )
+                    .trim();
+
+            const depoisCodigo =
+                bloco.slice(
+                    codigoMatch.index +
+                    codigoMatch[0].length
+                );
+
+            const quantidadeMatch =
+                depoisCodigo.match(
+                    /Qtde total de [ií]tens\s*:\s*([\d.,]+)/i
+                );
+
+            const unidadeMatch =
+                depoisCodigo.match(
+                    /UN\s*:\s*([A-Za-zÀ-ÿ]{1,10})(?=\s|Valor|$)/i
+                );
+
+            const valorMatch =
+                depoisCodigo.match(
+                    /Valor total R\$\s*:\s*(?:R\$\s*)?([\d.,]+)/i
+                );
+
+            if (
+                !quantidadeMatch ||
+                !valorMatch
+            ) {
+                continue;
+            }
+
+            const item =
+                criarItemInterpretado({
+                    descricao,
+                    codigo:
+                        codigoMatch[1],
+                    quantidade:
+                        quantidadeMatch[1],
+                    unidade:
+                        unidadeMatch?.[1] ||
+                        "UN",
+                    valorTotal:
+                        valorMatch[1]
+                });
+
+            if (item) {
+                itens.push(item);
+            }
+        }
+
+        return itens;
+    }
+
 
     function extrairItensTabelaSEFMG(linhas) {
         const itens = [];
@@ -1413,6 +1610,106 @@ const ImportadorNotaPDF = (() => {
                 letra.toUpperCase()
         );
     }
+
+    /*
+     * Agrupa ocorrências que representam o mesmo produto no cupom.
+     *
+     * Critério propositalmente conservador:
+     * - mesmo código;
+     * - mesma descrição normalizada;
+     * - mesma unidade;
+     * - mesmo preço unitário.
+     *
+     * Dessa forma, notas que já funcionavam continuam preservadas.
+     * Se o mesmo produto aparecer com preço diferente, NÃO será agrupado.
+     */
+    function agruparItensIguais(itens) {
+        const mapa = new Map();
+
+        for (const item of itens) {
+            const codigo =
+                somenteDigitos(
+                    item.codigo
+                );
+
+            const descricao =
+                normalizarParaComparacao(
+                    item.descricaoOriginal ||
+                    item.produtoNome
+                );
+
+            const unidade =
+                String(
+                    item.unidade || "UN"
+                )
+                    .trim()
+                    .toUpperCase();
+
+            const precoUnitario =
+                arredondarMoeda(
+                    converterNumero(
+                        item.precoUnitario
+                    )
+                );
+
+            const chave = [
+                codigo || "SEM-CODIGO",
+                descricao,
+                unidade,
+                precoUnitario.toFixed(2)
+            ].join("|");
+
+            if (!mapa.has(chave)) {
+                mapa.set(
+                    chave,
+                    {
+                        ...item
+                    }
+                );
+
+                continue;
+            }
+
+            const existente =
+                mapa.get(chave);
+
+            existente.quantidade =
+                Math.round(
+                    (
+                        converterNumero(
+                            existente.quantidade
+                        ) +
+                        converterNumero(
+                            item.quantidade
+                        ) +
+                        Number.EPSILON
+                    ) * 1000
+                ) / 1000;
+
+            existente.precoTotal =
+                arredondarMoeda(
+                    converterNumero(
+                        existente.precoTotal
+                    ) +
+                    converterNumero(
+                        item.precoTotal
+                    )
+                );
+
+            existente.precoUnitario =
+                existente.quantidade > 0
+                    ? arredondarMoeda(
+                        existente.precoTotal /
+                        existente.quantidade
+                    )
+                    : precoUnitario;
+        }
+
+        return [
+            ...mapa.values()
+        ];
+    }
+
 
     function removerItensDuplicados(itens) {
         const mapa = new Map();
