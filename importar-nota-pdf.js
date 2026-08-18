@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.3.3
+ * Versão: 1.3.5
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -12,12 +12,18 @@
  * - emitir o evento de nota confirmada para o módulo Gastos.
  *
  * Este arquivo não grava diretamente no Firestore.
+ *
+ * Changelog 1.3.5:
+ * - Mantém a extração por COLUNA da 1.3.4.
+ * - Proteção contra regressão: seleção do parser pelo valor oficial.
+ * - Em empate financeiro, os parsers tradicionais têm preferência.
+ * - Sem valor oficial confiável, a extração por coluna fica como fallback.
  */
 
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.3.3";
+    const VERSAO = "1.3.5";
 
     const ESTADO = {
         arquivo: null,
@@ -643,8 +649,8 @@ const ImportadorNotaPDF = (() => {
         atualizarStatus(`Lendo ${arquivo.name}...`);
 
         try {
-            const texto = await extrairTextoPDF(arquivo);
-            const nota = interpretarNotaSEFMG(texto);
+            const { texto, itensBrutos } = await extrairTextoPDF(arquivo);
+            const nota = interpretarNotaSEFMG(texto, itensBrutos);
 
             ESTADO.textoCompleto = texto;
             ESTADO.nota = nota;
@@ -683,6 +689,7 @@ const ImportadorNotaPDF = (() => {
         }).promise;
 
         const paginas = [];
+        const itensBrutos = [];
 
         for (
             let numeroPagina = 1;
@@ -696,6 +703,29 @@ const ImportadorNotaPDF = (() => {
             const conteudo =
                 await pagina.getTextContent();
 
+            /*
+             * Preserva a posição bruta (x, y) de cada fragmento de texto.
+             * A extração por colunas (extrairItensPorColunasSEFMG) usa
+             * esses dados para reconstruir cada produto corretamente,
+             * mesmo quando o PDF.js quebra rótulo e valor em "linhas"
+             * visuais diferentes dentro da mesma linha da nota.
+             */
+            for (const item of conteudo.items) {
+                const texto = String(item.str || "").trim();
+
+                if (!texto) {
+                    continue;
+                }
+
+                itensBrutos.push({
+                    texto,
+                    x: item.transform?.[4] ?? 0,
+                    // Deslocamento por página para não misturar
+                    // produtos de páginas diferentes.
+                    y: (item.transform?.[5] ?? 0) - (numeroPagina * 100000)
+                });
+            }
+
             const linhas = agruparItensEmLinhas(
                 conteudo.items
             );
@@ -703,9 +733,12 @@ const ImportadorNotaPDF = (() => {
             paginas.push(linhas.join("\n"));
         }
 
-        return normalizarTexto(
-            paginas.join("\n")
-        );
+        return {
+            texto: normalizarTexto(
+                paginas.join("\n")
+            ),
+            itensBrutos
+        };
     }
 
     function agruparItensEmLinhas(itens) {
@@ -824,7 +857,7 @@ const ImportadorNotaPDF = (() => {
     // INTERPRETAÇÃO DO PDF SEF/MG
     // ============================================================
 
-    function interpretarNotaSEFMG(texto) {
+    function interpretarNotaSEFMG(texto, itensBrutos) {
         const linhas = texto
             .split("\n")
             .map(
@@ -846,7 +879,7 @@ const ImportadorNotaPDF = (() => {
          */
         const itensExtraidos =
             agruparItensIguais(
-                extrairItensSEFMG(linhas)
+                extrairItensSEFMG(linhas, itensBrutos, valorProdutos)
             );
 
         const quantidadeTotalFonte =
@@ -1070,18 +1103,174 @@ const ImportadorNotaPDF = (() => {
         );
     }
 
-    function extrairItensSEFMG(linhas) {
-        /*
-         * O portal da SEF/MG pode gerar o PDF
-         * em dois formatos:
-         *
-         * 1. todos os dados do produto aparecem
-         *    em sequência;
-         *
-         * 2. os títulos das colunas ficam em
-         *    uma linha e os valores ficam na
-         *    linha seguinte.
-         */
+    /*
+     * Extrai produtos usando a POSIÇÃO (x, y) de cada fragmento de
+     * texto, e não a "linha" visual formada pelo agrupamento por
+     * tolerância de Y.
+     *
+     * Por que isso é necessário: em algumas notas (ex.: MULTICOM),
+     * o rótulo "Qtde total de ítens:" fica em uma sub-linha e o
+     * valor "1.0000" fica em outra sub-linha, poucos pontos abaixo.
+     * O agrupamento por tolerância de Y (usado para exibir o texto)
+     * ora junta rótulo+valor na mesma linha, ora não — dependendo
+     * de coincidências de altura entre produtos vizinhos. Isso fazia
+     * o parser antigo (baseado em texto já "achatado" em linhas)
+     * perder itens ou, pior, misturar o código de um produto com a
+     * quantidade/descrição de outro.
+     *
+     * A extração por coluna é imune a isso: agrupa os fragmentos por
+     * FAIXA HORIZONTAL (coluna Descrição/Qtde/Unidade/Valor), que é
+     * estável em toda a nota, e usa cada ocorrência do rótulo "Qtde"
+     * como âncora do início de um novo produto.
+     */
+    function extrairItensPorColunasSEFMG(itensBrutos) {
+        if (!Array.isArray(itensBrutos) || !itensBrutos.length) {
+            return [];
+        }
+
+        const rotuloQtde = itensBrutos.find(
+            (item) => item.texto === "Qtde"
+        );
+
+        const rotuloUN = itensBrutos.find(
+            (item) => /^UN:?$/i.test(item.texto)
+        );
+
+        const rotuloValor = itensBrutos.find(
+            (item) => item.texto === "Valor"
+        );
+
+        // Sem os três rótulos de coluna, a nota não está no formato
+        // esperado da SEF/MG; deixa os outros parsers tentarem.
+        if (!rotuloQtde || !rotuloUN || !rotuloValor) {
+            return [];
+        }
+
+        const xQtde = rotuloQtde.x;
+        const xUN = rotuloUN.x;
+        const xValor = rotuloValor.x;
+
+        const margem = 5;
+
+        // Cada ocorrência do rótulo "Qtde" na coluna de quantidade
+        // marca o início de um produto novo.
+        const ancoras = itensBrutos
+            .filter(
+                (item) =>
+                    item.texto === "Qtde" &&
+                    Math.abs(item.x - xQtde) < margem
+            )
+            .sort((a, b) => b.y - a.y);
+
+        if (!ancoras.length) {
+            return [];
+        }
+
+        const ordenados = [...itensBrutos].sort(
+            (a, b) => b.y - a.y || a.x - b.x
+        );
+
+        const produtos = [];
+
+        for (let indice = 0; indice < ancoras.length; indice += 1) {
+            const yInicio = ancoras[indice].y + 8;
+
+            const yFim =
+                indice + 1 < ancoras.length
+                    ? ancoras[indice + 1].y + 8
+                    : -Infinity;
+
+            const tokensDoBloco = ordenados.filter(
+                (item) => item.y <= yInicio && item.y > yFim
+            );
+
+            const colDescricao = tokensDoBloco
+                .filter((item) => item.x < xQtde - margem)
+                .sort((a, b) => b.y - a.y || a.x - b.x);
+
+            const colQtde = tokensDoBloco.filter(
+                (item) =>
+                    item.x >= xQtde - margem &&
+                    item.x < xUN - margem
+            );
+
+            const colUN = tokensDoBloco.filter(
+                (item) =>
+                    item.x >= xUN - margem &&
+                    item.x < xValor - margem
+            );
+
+            const colValor = tokensDoBloco.filter(
+                (item) => item.x >= xValor - margem
+            );
+
+            const textoDescricao = colDescricao
+                .map((item) => item.texto)
+                .join(" ");
+
+            const codigoMatch = textoDescricao.match(
+                /\(C[oó]digo:\s*(\d+)\)/i
+            );
+
+            const descricao = textoDescricao
+                .split(/\(C[oó]digo:/i)[0]
+                .trim();
+
+            const qtdeMatch = colQtde
+                .map((item) => item.texto)
+                .join(" ")
+                .match(/([\d.,]+)/);
+
+            const unTexto = colUN
+                .map((item) => item.texto)
+                .filter(
+                    (texto) =>
+                        !/^UN:?$/i.test(texto.trim())
+                )
+                .join(" ")
+                .trim();
+
+            const valorMatch = colValor
+                .map((item) => item.texto)
+                .join(" ")
+                .match(/([\d.,]+)/);
+
+            if (!codigoMatch || !qtdeMatch || !valorMatch) {
+                continue;
+            }
+
+            const item = criarItemInterpretado({
+                descricao,
+                codigo: codigoMatch[1],
+                quantidade: qtdeMatch[1],
+                unidade: unTexto || "UN",
+                valorTotal: valorMatch[1]
+            });
+
+            if (item) {
+                produtos.push(item);
+            }
+        }
+
+        return produtos;
+    }
+
+    /*
+     * Seleciona a estratégia sem prejudicar notas que já funcionavam.
+     *
+     * Regras:
+     * - parser tradicional que já confere com o total oficial tem preferência;
+     * - parser por colunas só vence quando o resultado financeiro é melhor;
+     * - em empate financeiro, mantém o parser tradicional;
+     * - sem total oficial confiável, colunas fica apenas como fallback.
+     */
+    function extrairItensSEFMG(
+        linhas,
+        itensBrutos,
+        valorProdutosOficial = 0
+    ) {
+        const itensPorColunas =
+            extrairItensPorColunasSEFMG(itensBrutos);
 
         const itensTabela =
             extrairItensTabelaSEFMG(linhas);
@@ -1089,23 +1278,161 @@ const ImportadorNotaPDF = (() => {
         const itensPorBlocos =
             extrairItensPorBlocosCodigoSEFMG(linhas);
 
-        /*
-         * Mantém o parser antigo e acrescenta uma estratégia tolerante
-         * às quebras de coluna do PDF.js. Usa a que recuperar mais
-         * ocorrências válidas da nota.
-         */
-        const melhorExtracao =
-            itensPorBlocos.length > itensTabela.length
-                ? itensPorBlocos
-                : itensTabela;
+        const valorOficial =
+            arredondarMoeda(
+                converterNumero(valorProdutosOficial)
+            );
 
-        if (melhorExtracao.length) {
-            return melhorExtracao;
+        const escolherTradicional = () => {
+            if (
+                itensPorBlocos.length >
+                itensTabela.length
+            ) {
+                return itensPorBlocos;
+            }
+
+            return itensTabela;
+        };
+
+        const tradicional =
+            escolherTradicional();
+
+        /*
+         * Sem valor oficial, não há critério monetário seguro para
+         * declarar que a estratégia nova é melhor.
+         */
+        if (valorOficial <= 0) {
+            if (tradicional.length) {
+                return tradicional;
+            }
+
+            if (itensPorColunas.length) {
+                return itensPorColunas;
+            }
+
+            return extrairItensSEFMGFallback(linhas);
         }
 
+        const avaliar = (
+            itens,
+            prioridade
+        ) => {
+            const soma =
+                arredondarMoeda(
+                    itens.reduce(
+                        (total, item) =>
+                            total +
+                            converterNumero(
+                                item?.precoTotal
+                            ),
+                        0
+                    )
+                );
+
+            const diferenca =
+                Math.abs(
+                    valorOficial - soma
+                );
+
+            const invalidos =
+                itens.reduce(
+                    (total, item) => {
+                        const invalido =
+                            !item ||
+                            !String(
+                                item.produtoNome ||
+                                item.descricaoOriginal ||
+                                ""
+                            ).trim() ||
+                            converterNumero(
+                                item.quantidade
+                            ) <= 0 ||
+                            converterNumero(
+                                item.precoTotal
+                            ) < 0;
+
+                        return total +
+                            (invalido ? 1 : 0);
+                    },
+                    0
+                );
+
+            return {
+                itens,
+                soma,
+                diferenca,
+                invalidos,
+                prioridade,
+                confere:
+                    itens.length > 0 &&
+                    invalidos === 0 &&
+                    diferenca < 0.01
+            };
+        };
+
+        /*
+         * Tabela e blocos são estratégias já existentes.
+         * Colunas fica por último no desempate.
+         */
+        const candidatos = [
+            avaliar(itensTabela, 0),
+            avaliar(itensPorBlocos, 1),
+            avaliar(itensPorColunas, 2)
+        ].filter(
+            (candidato) =>
+                candidato.itens.length > 0
+        );
+
+        if (candidatos.length) {
+            candidatos.sort(
+                (a, b) => {
+                    if (a.confere !== b.confere) {
+                        return a.confere ? -1 : 1;
+                    }
+
+                    const diferencaFinanceira =
+                        a.diferenca - b.diferenca;
+
+                    if (
+                        Math.abs(
+                            diferencaFinanceira
+                        ) >= 0.01
+                    ) {
+                        return diferencaFinanceira;
+                    }
+
+                    if (
+                        a.invalidos !== b.invalidos
+                    ) {
+                        return a.invalidos - b.invalidos;
+                    }
+
+                    /*
+                     * Empate: protege o comportamento anterior.
+                     */
+                    if (
+                        a.prioridade !== b.prioridade
+                    ) {
+                        return a.prioridade - b.prioridade;
+                    }
+
+                    return b.itens.length - a.itens.length;
+                }
+            );
+
+            return candidatos[0].itens;
+        }
+
+        return extrairItensSEFMGFallback(linhas);
+    }
+
+    /*
+     * Fallback textual original, mantido para compatibilidade.
+     */
+    function extrairItensSEFMGFallback(linhas) {
         const itens = [];
         const textoUnificado =
-            linhas.join("\n");
+            linhas.join("\\n");
 
         const padraoItem =
             /(.+?)\s*\(C[oó]digo:\s*(\d+)\)\s*Qtde total de [ií]tens:\s*([\d.,]+)\s*UN:\s*([A-Za-zÀ-ÿ]+)\s*Valor total R\$:\s*R?\$?\s*([\d.,]+)/gi;
@@ -1115,27 +1442,16 @@ const ImportadorNotaPDF = (() => {
         while (
             (
                 correspondencia =
-                    padraoItem.exec(
-                        textoUnificado
-                    )
+                    padraoItem.exec(textoUnificado)
             ) !== null
         ) {
             const item =
                 criarItemInterpretado({
-                    descricao:
-                        correspondencia[1],
-
-                    codigo:
-                        correspondencia[2],
-
-                    quantidade:
-                        correspondencia[3],
-
-                    unidade:
-                        correspondencia[4],
-
-                    valorTotal:
-                        correspondencia[5]
+                    descricao: correspondencia[1],
+                    codigo: correspondencia[2],
+                    quantidade: correspondencia[3],
+                    unidade: correspondencia[4],
+                    valorTotal: correspondencia[5]
                 });
 
             if (item) {
@@ -1144,13 +1460,10 @@ const ImportadorNotaPDF = (() => {
         }
 
         if (itens.length) {
-            // Preserva ocorrências repetidas da nota fiscal.
             return itens;
         }
 
-        return extrairItensPorLinhas(
-            linhas
-        );
+        return extrairItensPorLinhas(linhas);
     }
 
     /*
