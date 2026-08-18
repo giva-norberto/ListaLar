@@ -6,10 +6,6 @@ on:
   push:
     branches:
       - main
-
-permissions:
-  contents: write
-
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
@@ -21,39 +17,3 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_COMPRAS_DA_CASA }}
           channelId: live
           projectId: compras-da-casa
-
-  aplicar_correcao_importador:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Aplicar correção 1.3.6 quando disponível
-        shell: bash
-        run: |
-          if [ ! -f scripts/apply_importer_136.py ]; then
-            echo 'Patch 1.3.6 ainda não está na main.'
-            exit 0
-          fi
-          python3 scripts/apply_importer_136.py
-          node --check importar-nota-pdf.js
-          grep -q 'const VERSAO = "1.3.6"' importar-nota-pdf.js
-          grep -q 'importar-nota-pdf.js?v=1.3.6' index.html
-          grep -q '"version": "1.0.30"' version.json
-
-      - name: Publicar correção aplicada
-        shell: bash
-        run: |
-          if [ ! -f scripts/apply_importer_136.py ]; then
-            exit 0
-          fi
-          git config user.name 'ListaLar Automation'
-          git config user.email 'actions@users.noreply.github.com'
-          git add importar-nota-pdf.js index.html version.json
-          if git diff --cached --quiet; then
-            echo 'Sem alterações para publicar.'
-            exit 0
-          fi
-          git commit -m 'Aplica importador PDF 1.3.6 validado'
-          git push origin HEAD:main
