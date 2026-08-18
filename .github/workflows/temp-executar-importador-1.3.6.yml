@@ -7,6 +7,7 @@ on:
     types:
       - opened
       - reopened
+      - synchronize
 
 permissions:
   contents: write
@@ -45,6 +46,33 @@ jobs:
               linhas.append(linha)
 
           codigo = '\n'.join(linhas) + '\n'
+
+          # A versão do repositório tem o mesmo código, mas a formatação
+          # do bloco de itens brutos pode variar. Troca apenas essa etapa
+          # por uma busca estrutural, sem depender de espaços/quebras exatas.
+          inicio_bruto = codigo.find("antigo_bruto = '''")
+          fim_bruto = codigo.find("chamada_antiga = '''", inicio_bruto)
+
+          if inicio_bruto < 0 or fim_bruto < 0:
+              raise SystemExit('Etapa de itens brutos não localizada no patch.')
+
+          bruto_robusto = r'''texto, qtd_pagina = re.subn(
+    r'(y:\s*\(item\.transform\?\.\[5\]\s*\?\?\s*0\)\s*-\s*\(numeroPagina\s*\*\s*100000\))',
+    r'\1,\n                    pagina: numeroPagina',
+    texto,
+    count=1
+)
+if qtd_pagina != 1:
+    raise SystemExit('Bloco de itens brutos não encontrado.')
+
+'''
+
+          codigo = (
+              codigo[:inicio_bruto] +
+              bruto_robusto +
+              codigo[fim_bruto:]
+          )
+
           exec(compile(codigo, 'patch-importador-1.3.6.py', 'exec'))
           RUNNER
 
