@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.3.4
+ * Versão: 1.3.6
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -26,7 +26,7 @@
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.3.4";
+    const VERSAO = "1.3.6";
 
     const ESTADO = {
         arquivo: null,
@@ -725,7 +725,8 @@ const ImportadorNotaPDF = (() => {
                     x: item.transform?.[4] ?? 0,
                     // Deslocamento por página para não misturar
                     // produtos de páginas diferentes.
-                    y: (item.transform?.[5] ?? 0) - (numeroPagina * 100000)
+                    y: (item.transform?.[5] ?? 0) - (numeroPagina * 100000),
+                    pagina: numeroPagina
                 });
             }
 
@@ -882,7 +883,11 @@ const ImportadorNotaPDF = (() => {
          */
         const itensExtraidos =
             agruparItensIguais(
-                extrairItensSEFMG(linhas, itensBrutos)
+                extrairItensSEFMG(
+                    linhas,
+                    itensBrutos,
+                    valorProdutos
+                )
             );
 
         const quantidadeTotalFonte =
@@ -1131,232 +1136,280 @@ const ImportadorNotaPDF = (() => {
             return [];
         }
 
-        const rotuloQtde = itensBrutos.find(
-            (item) => item.texto === "Qtde"
-        );
+        const normalizado = (valor) =>
+            normalizarParaComparacao(valor);
 
-        const rotuloUN = itensBrutos.find(
-            (item) => /^UN:?$/i.test(item.texto)
-        );
-
-        const rotuloValor = itensBrutos.find(
-            (item) => item.texto === "Valor"
-        );
-
-        // Sem os três rótulos de coluna, a nota não está no formato
-        // esperado da SEF/MG; deixa os outros parsers tentarem.
-        if (!rotuloQtde || !rotuloUN || !rotuloValor) {
-            return [];
+        const gruposPorPagina = new Map();
+        for (const item of itensBrutos) {
+            const pagina = Number(item?.pagina || 1);
+            if (!gruposPorPagina.has(pagina)) {
+                gruposPorPagina.set(pagina, []);
+            }
+            gruposPorPagina.get(pagina).push(item);
         }
-
-        const xQtde = rotuloQtde.x;
-        const xUN = rotuloUN.x;
-        const xValor = rotuloValor.x;
-
-        const margem = 5;
-
-        // Cada ocorrência do rótulo "Qtde" na coluna de quantidade
-        // marca o início de um produto novo.
-        const ancoras = itensBrutos
-            .filter(
-                (item) =>
-                    item.texto === "Qtde" &&
-                    Math.abs(item.x - xQtde) < margem
-            )
-            .sort((a, b) => b.y - a.y);
-
-        if (!ancoras.length) {
-            return [];
-        }
-
-        const ordenados = [...itensBrutos].sort(
-            (a, b) => b.y - a.y || a.x - b.x
-        );
 
         const produtos = [];
 
-        for (let indice = 0; indice < ancoras.length; indice += 1) {
-            const yInicio = ancoras[indice].y + 8;
+        const obterXPredominante = (valores, tolerancia = 10) => {
+            const grupos = [];
+            for (const valor of valores) {
+                const numero = Number(valor);
+                if (!Number.isFinite(numero)) continue;
 
-            const yFim =
-                indice + 1 < ancoras.length
-                    ? ancoras[indice + 1].y + 8
-                    : -Infinity;
+                let grupo = grupos.find(
+                    (atual) => Math.abs(atual.media - numero) <= tolerancia
+                );
+                if (!grupo) {
+                    grupo = { valores: [], media: numero };
+                    grupos.push(grupo);
+                }
 
-            const tokensDoBloco = ordenados.filter(
-                (item) => item.y <= yInicio && item.y > yFim
-            );
-
-            const colDescricao = tokensDoBloco
-                .filter((item) => item.x < xQtde - margem)
-                .sort((a, b) => b.y - a.y || a.x - b.x);
-
-            const colQtde = tokensDoBloco.filter(
-                (item) =>
-                    item.x >= xQtde - margem &&
-                    item.x < xUN - margem
-            );
-
-            const colUN = tokensDoBloco.filter(
-                (item) =>
-                    item.x >= xUN - margem &&
-                    item.x < xValor - margem
-            );
-
-            const colValor = tokensDoBloco.filter(
-                (item) => item.x >= xValor - margem
-            );
-
-            const textoDescricao = colDescricao
-                .map((item) => item.texto)
-                .join(" ");
-
-            const codigoMatch = textoDescricao.match(
-                /\(C[oó]digo:\s*(\d+)\)/i
-            );
-
-            const descricao = textoDescricao
-                .split(/\(C[oó]digo:/i)[0]
-                .trim();
-
-            const qtdeMatch = colQtde
-                .map((item) => item.texto)
-                .join(" ")
-                .match(/([\d.,]+)/);
-
-            const unTexto = colUN
-                .map((item) => item.texto)
-                .filter(
-                    (texto) =>
-                        !/^UN:?$/i.test(texto.trim())
-                )
-                .join(" ")
-                .trim();
-
-            const valorMatch = colValor
-                .map((item) => item.texto)
-                .join(" ")
-                .match(/([\d.,]+)/);
-
-            if (!codigoMatch || !qtdeMatch || !valorMatch) {
-                continue;
+                grupo.valores.push(numero);
+                grupo.media = grupo.valores.reduce(
+                    (total, atual) => total + atual,
+                    0
+                ) / grupo.valores.length;
             }
 
-            const item = criarItemInterpretado({
-                descricao,
-                codigo: codigoMatch[1],
-                quantidade: qtdeMatch[1],
-                unidade: unTexto || "UN",
-                valorTotal: valorMatch[1]
-            });
+            grupos.sort((a, b) => b.valores.length - a.valores.length);
+            return grupos[0]?.media ?? null;
+        };
 
-            if (item) {
-                produtos.push(item);
+        for (const itensPagina of gruposPorPagina.values()) {
+            const rotulosQtde = itensPagina.filter(
+                (item) => normalizado(item?.texto).startsWith(
+                    "qtde total de itens"
+                )
+            );
+            if (!rotulosQtde.length) continue;
+
+            const xQtde = obterXPredominante(
+                rotulosQtde.map((item) => item.x)
+            );
+            if (xQtde === null) continue;
+
+            const rotulosUnidade = itensPagina.filter(
+                (item) => normalizado(item?.texto).startsWith("un:")
+            );
+            const xUnidade = obterXPredominante(
+                rotulosUnidade.map((item) => item.x)
+            );
+
+            const margemX = 10;
+            const ancoras = rotulosQtde
+                .filter(
+                    (item) => Math.abs(Number(item.x) - xQtde) <= margemX
+                )
+                .sort((a, b) => Number(b.y) - Number(a.y));
+
+            for (let indice = 0; indice < ancoras.length; indice += 1) {
+                const ancora = ancoras[indice];
+                const proxima = indice + 1 < ancoras.length
+                    ? ancoras[indice + 1]
+                    : null;
+
+                const limiteSuperior = Number(ancora.y) + 4;
+                const limiteInferior = proxima
+                    ? Number(proxima.y) + 2
+                    : Number(ancora.y) - 30;
+
+                const bloco = itensPagina.filter((item) => {
+                    const y = Number(item?.y);
+                    return y <= limiteSuperior && y > limiteInferior;
+                });
+
+                const descricaoTexto = bloco
+                    .filter((item) => Number(item.x) < xQtde - 8)
+                    .sort(
+                        (a, b) =>
+                            (Number(b.y) - Number(a.y)) ||
+                            (Number(a.x) - Number(b.x))
+                    )
+                    .map((item) => String(item.texto || '').trim())
+                    .filter(Boolean)
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                const codigoMatch = descricaoTexto.match(
+                    /\(C[oó]digo\s*:\s*(\d+)\s*\)/i
+                );
+                if (!codigoMatch) continue;
+
+                const descricao = descricaoTexto
+                    .slice(0, codigoMatch.index)
+                    .trim();
+
+                const limiteUnidade = xUnidade !== null
+                    ? xUnidade - 8
+                    : xQtde + 80;
+
+                const textoQuantidade = bloco
+                    .filter(
+                        (item) =>
+                            Number(item.x) >= xQtde - margemX &&
+                            Number(item.x) < limiteUnidade
+                    )
+                    .sort(
+                        (a, b) =>
+                            (Number(b.y) - Number(a.y)) ||
+                            (Number(a.x) - Number(b.x))
+                    )
+                    .map((item) => String(item.texto || '').trim())
+                    .filter(Boolean)
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                const quantidadeMatch = textoQuantidade.match(
+                    /Qtde total de [ií]tens\s*:\s*([\d.,]+)/i
+                );
+                if (!quantidadeMatch) continue;
+
+                const textoDireita = bloco
+                    .filter(
+                        (item) => Number(item.x) >= (
+                            xUnidade !== null ? xUnidade - 8 : xQtde + 30
+                        )
+                    )
+                    .sort(
+                        (a, b) =>
+                            (Number(a.x) - Number(b.x)) ||
+                            (Number(b.y) - Number(a.y))
+                    )
+                    .map((item) => String(item.texto || '').trim())
+                    .filter(Boolean)
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                const unidadeMatch = textoDireita.match(
+                    /\bUN\s*:\s*([A-Za-zÀ-ÿ]{1,10})(?=\s|Valor|$)/i
+                );
+                const valorMatch = textoDireita.match(
+                    /Valor total R\$\s*:\s*(?:R\$\s*)?([\d.,]+)/i
+                );
+                if (!valorMatch) continue;
+
+                const item = criarItemInterpretado({
+                    descricao,
+                    codigo: codigoMatch[1],
+                    quantidade: quantidadeMatch[1],
+                    unidade: unidadeMatch?.[1] || 'UN',
+                    valorTotal: valorMatch[1]
+                });
+                if (item) produtos.push(item);
             }
         }
 
         return produtos;
     }
 
-    function extrairItensSEFMG(linhas, itensBrutos) {
-        /*
-         * Estratégia principal: extração por coluna a partir da
-         * posição bruta dos fragmentos de texto do PDF. É a mais
-         * confiável porque não depende de rótulo e valor caírem na
-         * mesma "linha" visual.
-         */
-        const itensPorColunas =
-            extrairItensPorColunasSEFMG(itensBrutos);
+    function extrairItensSEFMG(
+        linhas,
+        itensBrutos,
+        valorProdutosOficial = 0
+    ) {
+        const itensPorColunas = extrairItensPorColunasSEFMG(itensBrutos);
+        const itensTabela = extrairItensTabelaSEFMG(linhas);
+        const itensPorBlocos = extrairItensPorBlocosCodigoSEFMG(linhas);
 
-        /*
-         * O portal da SEF/MG pode gerar o PDF
-         * em dois formatos:
-         *
-         * 1. todos os dados do produto aparecem
-         *    em sequência;
-         *
-         * 2. os títulos das colunas ficam em
-         *    uma linha e os valores ficam na
-         *    linha seguinte.
-         */
+        const tradicional = itensPorBlocos.length > itensTabela.length
+            ? itensPorBlocos
+            : itensTabela;
 
-        const itensTabela =
-            extrairItensTabelaSEFMG(linhas);
-
-        const itensPorBlocos =
-            extrairItensPorBlocosCodigoSEFMG(linhas);
-
-        /*
-         * Usa a estratégia que recuperar mais ocorrências válidas da
-         * nota, priorizando a extração por coluna quando ela encontra
-         * ao menos tantos itens quanto as demais.
-         */
-        const candidatos = [
-            itensPorColunas,
-            itensPorBlocos,
-            itensTabela
-        ];
-
-        const melhorExtracao = candidatos.reduce(
-            (melhor, atual) =>
-                atual.length > melhor.length
-                    ? atual
-                    : melhor,
-            []
+        const valorOficial = arredondarMoeda(
+            converterNumero(valorProdutosOficial)
         );
 
-        if (melhorExtracao.length) {
-            return melhorExtracao;
+        if (valorOficial <= 0) {
+            if (tradicional.length) return tradicional;
+            if (itensPorColunas.length) return itensPorColunas;
+            return extrairItensSEFMGFallback(linhas);
         }
 
-        const itens = [];
-        const textoUnificado =
-            linhas.join("\n");
+        const avaliar = (itens, prioridade) => {
+            const soma = arredondarMoeda(
+                itens.reduce(
+                    (total, item) => total + converterNumero(item?.precoTotal),
+                    0
+                )
+            );
+            const diferenca = Math.abs(valorOficial - soma);
+            const invalidos = itens.reduce((total, item) => {
+                const invalido =
+                    !item ||
+                    !String(
+                        item.produtoNome || item.descricaoOriginal || ''
+                    ).trim() ||
+                    converterNumero(item.quantidade) <= 0 ||
+                    converterNumero(item.precoTotal) < 0;
+                return total + (invalido ? 1 : 0);
+            }, 0);
 
+            return {
+                itens,
+                diferenca,
+                invalidos,
+                prioridade,
+                confere:
+                    itens.length > 0 &&
+                    invalidos === 0 &&
+                    diferenca < 0.01
+            };
+        };
+
+        const candidatos = [
+            avaliar(itensTabela, 0),
+            avaliar(itensPorBlocos, 1),
+            avaliar(itensPorColunas, 2)
+        ].filter((candidato) => candidato.itens.length > 0);
+
+        if (candidatos.length) {
+            candidatos.sort((a, b) => {
+                if (a.confere !== b.confere) return a.confere ? -1 : 1;
+
+                const diferencaFinanceira = a.diferenca - b.diferenca;
+                if (Math.abs(diferencaFinanceira) >= 0.01) {
+                    return diferencaFinanceira;
+                }
+
+                if (a.invalidos !== b.invalidos) {
+                    return a.invalidos - b.invalidos;
+                }
+
+                if (a.prioridade !== b.prioridade) {
+                    return a.prioridade - b.prioridade;
+                }
+
+                return b.itens.length - a.itens.length;
+            });
+            return candidatos[0].itens;
+        }
+
+        return extrairItensSEFMGFallback(linhas);
+    }
+
+    function extrairItensSEFMGFallback(linhas) {
+        const itens = [];
+        const textoUnificado = linhas.join("\n");
         const padraoItem =
             /(.+?)\s*\(C[oó]digo:\s*(\d+)\)\s*Qtde total de [ií]tens:\s*([\d.,]+)\s*UN:\s*([A-Za-zÀ-ÿ]+)\s*Valor total R\$:\s*R?\$?\s*([\d.,]+)/gi;
-
         let correspondencia;
 
-        while (
-            (
-                correspondencia =
-                    padraoItem.exec(
-                        textoUnificado
-                    )
-            ) !== null
-        ) {
-            const item =
-                criarItemInterpretado({
-                    descricao:
-                        correspondencia[1],
-
-                    codigo:
-                        correspondencia[2],
-
-                    quantidade:
-                        correspondencia[3],
-
-                    unidade:
-                        correspondencia[4],
-
-                    valorTotal:
-                        correspondencia[5]
-                });
-
-            if (item) {
-                itens.push(item);
-            }
+        while ((correspondencia = padraoItem.exec(textoUnificado)) !== null) {
+            const item = criarItemInterpretado({
+                descricao: correspondencia[1],
+                codigo: correspondencia[2],
+                quantidade: correspondencia[3],
+                unidade: correspondencia[4],
+                valorTotal: correspondencia[5]
+            });
+            if (item) itens.push(item);
         }
 
-        if (itens.length) {
-            // Preserva ocorrências repetidas da nota fiscal.
-            return itens;
-        }
-
-        return extrairItensPorLinhas(
-            linhas
-        );
+        if (itens.length) return itens;
+        return extrairItensPorLinhas(linhas);
     }
 
     /*
