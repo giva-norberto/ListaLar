@@ -229,3 +229,5 @@ jobs:
           fi
           git commit -m 'Corrige importador para 3 produtos e quantidades agrupadas'
           git push origin HEAD:main
+
+# execução solicitada em 2026-08-18
