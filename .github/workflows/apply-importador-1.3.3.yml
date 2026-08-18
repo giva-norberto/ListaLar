@@ -1,4 +1,4 @@
-name: Corrigir importador PDF 1.3.3
+name: Corrigir importador PDF 1.3.4
 
 on:
   push:
@@ -29,8 +29,42 @@ jobs:
           path = Path('importar-nota-pdf.js')
           texto = path.read_text(encoding='utf-8')
 
-          texto = texto.replace('Versão: 1.3.2', 'Versão: 1.3.3', 1)
-          texto = texto.replace('const VERSAO = "1.3.2";', 'const VERSAO = "1.3.3";', 1)
+          texto = texto.replace('Versão: 1.3.2', 'Versão: 1.3.4', 1)
+          texto = texto.replace('const VERSAO = "1.3.2";', 'const VERSAO = "1.3.4";', 1)
+
+          # Calcula os itens uma única vez e usa o total de produtos agrupados
+          # como quantidade mostrada no ListaLar. Preserva também a contagem
+          # bruta informada pelo portal para auditoria.
+          antigo_interpretar = '''        const valorProdutos = extrairValorTotal(texto);
+        const valorPago = extrairValorPago(texto);
+        const valorEfetivo = valorPago > 0
+            ? valorPago
+            : valorProdutos;
+
+        return {'''
+          novo_interpretar = '''        const valorProdutos = extrairValorTotal(texto);
+        const valorPago = extrairValorPago(texto);
+        const valorEfetivo = valorPago > 0
+            ? valorPago
+            : valorProdutos;
+        const quantidadePortal = extrairQuantidadeTotal(texto);
+        const itens = extrairItensSEFMG(linhas);
+
+        return {'''
+          if antigo_interpretar not in texto:
+              raise SystemExit('Trecho interpretarNotaSEFMG não encontrado.')
+          texto = texto.replace(antigo_interpretar, novo_interpretar, 1)
+
+          texto = texto.replace(
+              '''            quantidadeTotalItens:\n                extrairQuantidadeTotal(texto),''',
+              '''            quantidadeTotalItens:\n                itens.length || quantidadePortal,\n\n            quantidadeTotalItensPortal:\n                quantidadePortal,''',
+              1
+          )
+          texto = texto.replace(
+              '''            itens:\n                extrairItensSEFMG(linhas),''',
+              '''            itens:\n                itens,''',
+              1
+          )
 
           antigo = '''        const itensTabela =
             extrairItensTabelaSEFMG(linhas);
@@ -46,17 +80,15 @@ jobs:
 
           novo = '''        const candidatos = [
             extrairItensTabelaSEFMG(linhas),
-            extrairItensPorBlocosCodigoSEFMG(linhas)
+            extrairItensRegexFlexivelSEFMG(linhas),
+            extrairItensPorLinhas(linhas)
         ];
 
-        // O PDF da SEF/MG varia a quebra de colunas conforme o produto.
-        // Usa a estratégia que recuperar a maior quantidade de linhas reais,
-        // preservando ocorrências repetidas da mesma mercadoria.
         const melhorCandidato = candidatos
             .sort((a, b) => b.length - a.length)[0] || [];
 
         if (melhorCandidato.length) {
-            return melhorCandidato;
+            return agruparItensIguaisSEFMG(melhorCandidato);
         }
 
         const itens = [];'''
@@ -65,69 +97,48 @@ jobs:
               raise SystemExit('Trecho principal do parser não encontrado.')
           texto = texto.replace(antigo, novo, 1)
 
+          # Também agrupa o fallback regex antigo, caso ele seja utilizado.
+          texto = texto.replace(
+              '''        if (itens.length) {
+            // Preserva ocorrências repetidas da nota fiscal.
+            return itens;
+        }''',
+              '''        if (itens.length) {
+            return agruparItensIguaisSEFMG(itens);
+        }''',
+              1
+          )
+
           marcador = '    function extrairItensTabelaSEFMG(linhas) {'
           if marcador not in texto:
               raise SystemExit('Ponto de inserção não encontrado.')
 
-          fallback = r'''    function extrairItensPorBlocosCodigoSEFMG(linhas) {
+          helpers = r'''    function extrairItensRegexFlexivelSEFMG(linhas) {
         const itens = [];
-        const inicios = [];
+        const textoUnificado = linhas
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
 
-        for (let indice = 0; indice < linhas.length; indice += 1) {
-            if (/\(C[oó]digo\s*:/i.test(linhas[indice])) {
-                inicios.push(indice);
-            }
-        }
+        const padrao = /(.+?)\s*\(C[oó]digo\s*:\s*(\d+)\s*\)\s*Qtde total de [ií]tens\s*:\s*([\d.,]+)\s*UN\s*:\s*([A-Za-zÀ-ÿ]{1,10})\s*Valor total R\$\s*:\s*(?:R\$\s*)?([\d.,]+)/gi;
+        let correspondencia;
 
-        for (let posicao = 0; posicao < inicios.length; posicao += 1) {
-            const inicio = inicios[posicao];
-            const fim = posicao + 1 < inicios.length
-                ? inicios[posicao + 1]
-                : Math.min(linhas.length, inicio + 14);
-
-            const blocoLinhas = linhas.slice(inicio, fim);
-            const bloco = blocoLinhas.join(" ")
-                .replace(/\s+/g, " ")
+        while ((correspondencia = padrao.exec(textoUnificado)) !== null) {
+            let descricao = correspondencia[1]
+                .replace(/^.*?(?:Filtrar|Filtar)\s+[ií]tens\s*/i, "")
                 .trim();
 
-            const codigoMatch = bloco.match(
-                /\(C[oó]digo\s*:\s*(\d+)\s*\)/i
-            );
-
-            if (!codigoMatch) {
-                continue;
-            }
-
-            const descricao = bloco
-                .slice(0, codigoMatch.index)
-                .trim();
-
-            const depoisCodigo = bloco.slice(
-                codigoMatch.index + codigoMatch[0].length
-            );
-
-            const quantidadeMatch = depoisCodigo.match(
-                /Qtde total de [ií]tens\s*:\s*([\d.,]+)/i
-            );
-
-            const unidadeMatch = depoisCodigo.match(
-                /UN\s*:\s*([A-Za-zÀ-ÿ]{1,10})(?=\s|Valor|$)/i
-            );
-
-            const valorMatch = depoisCodigo.match(
-                /Valor total R\$\s*:\s*(?:R\$\s*)?([\d.,]+)/i
-            );
-
-            if (!quantidadeMatch || !valorMatch) {
-                continue;
+            const ultimoSeparador = descricao.lastIndexOf(" Valor total R$");
+            if (ultimoSeparador >= 0) {
+                descricao = descricao.slice(ultimoSeparador + 14).trim();
             }
 
             const item = criarItemInterpretado({
                 descricao,
-                codigo: codigoMatch[1],
-                quantidade: quantidadeMatch[1],
-                unidade: unidadeMatch?.[1] || "UN",
-                valorTotal: valorMatch[1]
+                codigo: correspondencia[2],
+                quantidade: correspondencia[3],
+                unidade: correspondencia[4],
+                valorTotal: correspondencia[5]
             });
 
             if (item) {
@@ -138,15 +149,50 @@ jobs:
         return itens;
     }
 
+    function agruparItensIguaisSEFMG(itens) {
+        const mapa = new Map();
+
+        for (const item of itens) {
+            const chave = item.codigo
+                ? `codigo:${item.codigo}|${item.unidade}`
+                : `nome:${normalizarParaComparacao(item.produtoNome)}|${item.unidade}`;
+
+            if (!mapa.has(chave)) {
+                mapa.set(chave, {
+                    ...item
+                });
+                continue;
+            }
+
+            const atual = mapa.get(chave);
+            atual.quantidade = arredondarQuantidade(
+                atual.quantidade + item.quantidade
+            );
+            atual.precoTotal = arredondarMoeda(
+                atual.precoTotal + item.precoTotal
+            );
+            atual.precoUnitario = atual.quantidade > 0
+                ? arredondarMoeda(atual.precoTotal / atual.quantidade)
+                : atual.precoTotal;
+        }
+
+        return [...mapa.values()];
+    }
+
+    function arredondarQuantidade(valor) {
+        return Math.round((Number(valor) + Number.EPSILON) * 1000) / 1000;
+    }
+
 '''
-          texto = texto.replace(marcador, fallback + marcador, 1)
+          texto = texto.replace(marcador, helpers + marcador, 1)
+
           path.write_text(texto, encoding='utf-8')
 
           index = Path('index.html')
           html = index.read_text(encoding='utf-8')
           html, qtd = re.subn(
               r'importar-nota-pdf\.js\?v=\d+\.\d+\.\d+',
-              'importar-nota-pdf.js?v=1.3.3',
+              'importar-nota-pdf.js?v=1.3.4',
               html,
               count=1
           )
@@ -157,9 +203,9 @@ jobs:
           version = Path('version.json')
           if version.exists():
               conteudo = version.read_text(encoding='utf-8')
-              conteudo = re.sub(r'"version"\s*:\s*"[^"]+"', '"version": "1.0.29"', conteudo, count=1)
+              conteudo = re.sub(r'"version"\s*:\s*"[^"]+"', '"version": "1.0.30"', conteudo, count=1)
               conteudo = re.sub(r'"updatedAt"\s*:\s*"[^"]+"', '"updatedAt": "2026-08-18"', conteudo, count=1)
-              conteudo = re.sub(r'"notes"\s*:\s*"[^"]+"', '"notes": "Correção do importador PDF para itens com colunas quebradas na NFC-e"', conteudo, count=1)
+              conteudo = re.sub(r'"notes"\s*:\s*"[^"]+"', '"notes": "Importador agrupa produtos repetidos da NFC-e e soma quantidades e valores"', conteudo, count=1)
               version.write_text(conteudo, encoding='utf-8')
           PY
 
@@ -167,9 +213,9 @@ jobs:
         shell: bash
         run: |
           node --check importar-nota-pdf.js
-          grep -q 'const VERSAO = "1.3.3"' importar-nota-pdf.js
-          grep -q 'extrairItensPorBlocosCodigoSEFMG' importar-nota-pdf.js
-          grep -q 'importar-nota-pdf.js?v=1.3.3' index.html
+          grep -q 'const VERSAO = "1.3.4"' importar-nota-pdf.js
+          grep -q 'agruparItensIguaisSEFMG' importar-nota-pdf.js
+          grep -q 'importar-nota-pdf.js?v=1.3.4' index.html
 
       - name: Commit e push
         shell: bash
@@ -181,5 +227,5 @@ jobs:
             echo 'Sem alterações.'
             exit 0
           fi
-          git commit -m 'Corrige parser PDF para NFC-e com colunas quebradas'
+          git commit -m 'Corrige importador para 3 produtos e quantidades agrupadas'
           git push origin HEAD:main
