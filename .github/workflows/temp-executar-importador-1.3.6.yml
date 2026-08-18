@@ -1,0 +1,66 @@
+name: TEMP executar importador 1.3.6
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/temp-executar-importador-1.3.6.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  executar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout da branch de correção
+        uses: actions/checkout@v4
+        with:
+          ref: fix/importador-multicom-1.3.6
+          fetch-depth: 0
+
+      - name: Executar patch preparado na branch
+        shell: bash
+        run: |
+          python3 <<'RUNNER'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/aplicar-importador-1.3.6.yml')
+          conteudo = workflow.read_text(encoding='utf-8')
+
+          inicio = conteudo.find("          python3 <<'PY'\n")
+          fim = conteudo.find("\n          PY\n", inicio)
+
+          if inicio < 0 or fim < 0:
+              raise SystemExit('Bloco Python do patch não encontrado.')
+
+          bloco = conteudo[inicio + len("          python3 <<'PY'\n"):fim]
+          linhas = []
+          for linha in bloco.splitlines():
+              if linha.startswith('          '):
+                  linha = linha[10:]
+              linhas.append(linha)
+
+          codigo = '\n'.join(linhas) + '\n'
+          exec(compile(codigo, 'patch-importador-1.3.6.py', 'exec'))
+          RUNNER
+
+      - name: Validar resultado
+        shell: bash
+        run: |
+          node --check importar-nota-pdf.js
+          grep -q 'const VERSAO = "1.3.6"' importar-nota-pdf.js
+          grep -q 'startsWith("qtde total de itens")' importar-nota-pdf.js
+          grep -q 'valorProdutosOficial = 0' importar-nota-pdf.js
+          grep -q 'importar-nota-pdf.js?v=1.3.6' index.html
+          grep -q '"version": "1.0.30"' version.json
+
+      - name: Commit e push na branch
+        shell: bash
+        run: |
+          git config user.name 'ListaLar Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add importar-nota-pdf.js index.html version.json
+          git commit -m 'Corrige parser MULTICOM sem regressão nas notas existentes'
+          git push origin HEAD:fix/importador-multicom-1.3.6
