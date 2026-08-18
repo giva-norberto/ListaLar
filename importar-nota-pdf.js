@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.3.5
+ * Versão: 1.3.4
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -13,17 +13,20 @@
  *
  * Este arquivo não grava diretamente no Firestore.
  *
- * Changelog 1.3.5:
- * - Mantém a extração por COLUNA da 1.3.4.
- * - Proteção contra regressão: seleção do parser pelo valor oficial.
- * - Em empate financeiro, os parsers tradicionais têm preferência.
- * - Sem valor oficial confiável, a extração por coluna fica como fallback.
+ * Changelog 1.3.4:
+ * - Nova estratégia de extração de itens por COLUNA (posição x,y bruta
+ *   dos fragmentos de texto do PDF.js), usada como prioridade sobre os
+ *   parsers baseados em "linhas" já achatadas. Corrige notas (ex.:
+ *   MULTICOM) em que o rótulo "Qtde total de ítens:" e seu valor caem
+ *   em sub-linhas diferentes, fazendo o parser antigo perder itens ou
+ *   atribuir o código de um produto a outro. Ver
+ *   extrairItensPorColunasSEFMG().
  */
 
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.3.5";
+    const VERSAO = "1.3.4";
 
     const ESTADO = {
         arquivo: null,
@@ -879,7 +882,7 @@ const ImportadorNotaPDF = (() => {
          */
         const itensExtraidos =
             agruparItensIguais(
-                extrairItensSEFMG(linhas, itensBrutos, valorProdutos)
+                extrairItensSEFMG(linhas, itensBrutos)
             );
 
         const quantidadeTotalFonte =
@@ -1255,22 +1258,27 @@ const ImportadorNotaPDF = (() => {
         return produtos;
     }
 
-    /*
-     * Seleciona a estratégia sem prejudicar notas que já funcionavam.
-     *
-     * Regras:
-     * - parser tradicional que já confere com o total oficial tem preferência;
-     * - parser por colunas só vence quando o resultado financeiro é melhor;
-     * - em empate financeiro, mantém o parser tradicional;
-     * - sem total oficial confiável, colunas fica apenas como fallback.
-     */
-    function extrairItensSEFMG(
-        linhas,
-        itensBrutos,
-        valorProdutosOficial = 0
-    ) {
+    function extrairItensSEFMG(linhas, itensBrutos) {
+        /*
+         * Estratégia principal: extração por coluna a partir da
+         * posição bruta dos fragmentos de texto do PDF. É a mais
+         * confiável porque não depende de rótulo e valor caírem na
+         * mesma "linha" visual.
+         */
         const itensPorColunas =
             extrairItensPorColunasSEFMG(itensBrutos);
+
+        /*
+         * O portal da SEF/MG pode gerar o PDF
+         * em dois formatos:
+         *
+         * 1. todos os dados do produto aparecem
+         *    em sequência;
+         *
+         * 2. os títulos das colunas ficam em
+         *    uma linha e os valores ficam na
+         *    linha seguinte.
+         */
 
         const itensTabela =
             extrairItensTabelaSEFMG(linhas);
@@ -1278,161 +1286,32 @@ const ImportadorNotaPDF = (() => {
         const itensPorBlocos =
             extrairItensPorBlocosCodigoSEFMG(linhas);
 
-        const valorOficial =
-            arredondarMoeda(
-                converterNumero(valorProdutosOficial)
-            );
-
-        const escolherTradicional = () => {
-            if (
-                itensPorBlocos.length >
-                itensTabela.length
-            ) {
-                return itensPorBlocos;
-            }
-
-            return itensTabela;
-        };
-
-        const tradicional =
-            escolherTradicional();
-
         /*
-         * Sem valor oficial, não há critério monetário seguro para
-         * declarar que a estratégia nova é melhor.
-         */
-        if (valorOficial <= 0) {
-            if (tradicional.length) {
-                return tradicional;
-            }
-
-            if (itensPorColunas.length) {
-                return itensPorColunas;
-            }
-
-            return extrairItensSEFMGFallback(linhas);
-        }
-
-        const avaliar = (
-            itens,
-            prioridade
-        ) => {
-            const soma =
-                arredondarMoeda(
-                    itens.reduce(
-                        (total, item) =>
-                            total +
-                            converterNumero(
-                                item?.precoTotal
-                            ),
-                        0
-                    )
-                );
-
-            const diferenca =
-                Math.abs(
-                    valorOficial - soma
-                );
-
-            const invalidos =
-                itens.reduce(
-                    (total, item) => {
-                        const invalido =
-                            !item ||
-                            !String(
-                                item.produtoNome ||
-                                item.descricaoOriginal ||
-                                ""
-                            ).trim() ||
-                            converterNumero(
-                                item.quantidade
-                            ) <= 0 ||
-                            converterNumero(
-                                item.precoTotal
-                            ) < 0;
-
-                        return total +
-                            (invalido ? 1 : 0);
-                    },
-                    0
-                );
-
-            return {
-                itens,
-                soma,
-                diferenca,
-                invalidos,
-                prioridade,
-                confere:
-                    itens.length > 0 &&
-                    invalidos === 0 &&
-                    diferenca < 0.01
-            };
-        };
-
-        /*
-         * Tabela e blocos são estratégias já existentes.
-         * Colunas fica por último no desempate.
+         * Usa a estratégia que recuperar mais ocorrências válidas da
+         * nota, priorizando a extração por coluna quando ela encontra
+         * ao menos tantos itens quanto as demais.
          */
         const candidatos = [
-            avaliar(itensTabela, 0),
-            avaliar(itensPorBlocos, 1),
-            avaliar(itensPorColunas, 2)
-        ].filter(
-            (candidato) =>
-                candidato.itens.length > 0
+            itensPorColunas,
+            itensPorBlocos,
+            itensTabela
+        ];
+
+        const melhorExtracao = candidatos.reduce(
+            (melhor, atual) =>
+                atual.length > melhor.length
+                    ? atual
+                    : melhor,
+            []
         );
 
-        if (candidatos.length) {
-            candidatos.sort(
-                (a, b) => {
-                    if (a.confere !== b.confere) {
-                        return a.confere ? -1 : 1;
-                    }
-
-                    const diferencaFinanceira =
-                        a.diferenca - b.diferenca;
-
-                    if (
-                        Math.abs(
-                            diferencaFinanceira
-                        ) >= 0.01
-                    ) {
-                        return diferencaFinanceira;
-                    }
-
-                    if (
-                        a.invalidos !== b.invalidos
-                    ) {
-                        return a.invalidos - b.invalidos;
-                    }
-
-                    /*
-                     * Empate: protege o comportamento anterior.
-                     */
-                    if (
-                        a.prioridade !== b.prioridade
-                    ) {
-                        return a.prioridade - b.prioridade;
-                    }
-
-                    return b.itens.length - a.itens.length;
-                }
-            );
-
-            return candidatos[0].itens;
+        if (melhorExtracao.length) {
+            return melhorExtracao;
         }
 
-        return extrairItensSEFMGFallback(linhas);
-    }
-
-    /*
-     * Fallback textual original, mantido para compatibilidade.
-     */
-    function extrairItensSEFMGFallback(linhas) {
         const itens = [];
         const textoUnificado =
-            linhas.join("\\n");
+            linhas.join("\n");
 
         const padraoItem =
             /(.+?)\s*\(C[oó]digo:\s*(\d+)\)\s*Qtde total de [ií]tens:\s*([\d.,]+)\s*UN:\s*([A-Za-zÀ-ÿ]+)\s*Valor total R\$:\s*R?\$?\s*([\d.,]+)/gi;
@@ -1442,16 +1321,27 @@ const ImportadorNotaPDF = (() => {
         while (
             (
                 correspondencia =
-                    padraoItem.exec(textoUnificado)
+                    padraoItem.exec(
+                        textoUnificado
+                    )
             ) !== null
         ) {
             const item =
                 criarItemInterpretado({
-                    descricao: correspondencia[1],
-                    codigo: correspondencia[2],
-                    quantidade: correspondencia[3],
-                    unidade: correspondencia[4],
-                    valorTotal: correspondencia[5]
+                    descricao:
+                        correspondencia[1],
+
+                    codigo:
+                        correspondencia[2],
+
+                    quantidade:
+                        correspondencia[3],
+
+                    unidade:
+                        correspondencia[4],
+
+                    valorTotal:
+                        correspondencia[5]
                 });
 
             if (item) {
@@ -1460,10 +1350,13 @@ const ImportadorNotaPDF = (() => {
         }
 
         if (itens.length) {
+            // Preserva ocorrências repetidas da nota fiscal.
             return itens;
         }
 
-        return extrairItensPorLinhas(linhas);
+        return extrairItensPorLinhas(
+            linhas
+        );
     }
 
     /*
