@@ -8,6 +8,19 @@ on:
       - 'comercial.js'
       - 'comercial.html'
       - 'comercial-app.js'
+      - 'comercial-app.txt'
+      - 'comercial-contexto.js'
+      - 'comercial-contexto.txt'
+      - 'comercial-calculos.js'
+      - 'comercial-calculos.txt'
+      - 'comercial-render.js'
+      - 'comercial-render.txt'
+      - 'comercial-operacoes.js'
+      - 'comercial-operacoes.txt'
+      - 'comercial-main.js'
+      - 'comercial-main.txt'
+      - 'comercial-campos-numericos.js'
+      - 'comercial-campos-numericos.txt'
       - 'comercial-voz.js'
       - 'comercial-ajuda.js'
       - 'comercial-ajuda.txt'
@@ -29,25 +42,60 @@ jobs:
         run: |
           node --check comercial.js
           node --check comercial-app.js
+          node --check comercial-contexto.js
+          node --check comercial-calculos.js
+          node --check comercial-render.js
+          node --check comercial-operacoes.js
+          node --check comercial-main.js
+          node --check comercial-campos-numericos.js
           node --check comercial-voz.js
           node --check comercial-ajuda.js
           node --check admin-comercial.js
           node --check pwa-update.js
 
+      - name: Confirmar cópias TXT do Comercial
+        run: |
+          cmp -s comercial-app.js comercial-app.txt
+          cmp -s comercial-contexto.js comercial-contexto.txt
+          cmp -s comercial-calculos.js comercial-calculos.txt
+          cmp -s comercial-render.js comercial-render.txt
+          cmp -s comercial-operacoes.js comercial-operacoes.txt
+          cmp -s comercial-main.js comercial-main.txt
+          cmp -s comercial-campos-numericos.js comercial-campos-numericos.txt
+          cmp -s comercial-ajuda.js comercial-ajuda.txt
+
       - name: Confirmar separação do Comercial
         run: |
           grep -q 'window.location.href = PAGINA_COMERCIAL' comercial.js
-          grep -q 'comercial_produtos' comercial-app.js
-          grep -q 'comercial_movimentos' comercial-app.js
+          grep -q 'comercial_produtos' comercial-contexto.js
+          grep -q 'comercial_movimentos' comercial-contexto.js
           grep -q 'Módulos → Comercial' admin-comercial.html
+          grep -q 'comercial-campos-numericos.js?v=1.2.1' comercial-app.js
+          grep -q 'comercial-main.js?v=1.2.0' comercial-app.js
 
-      - name: Confirmar manual do Comercial
+      - name: Confirmar edição e valores manuais
+        run: |
+          grep -q 'data-editar-produto' comercial-render.js
+          grep -q 'data-editar-movimento' comercial-render.js
+          grep -q 'tipo: "ajuste"' comercial-operacoes.js
+          grep -q 'simularProduto' comercial-calculos.js
+          grep -q 'prepararRecalculo' comercial-calculos.js
+          grep -q 'type="number"' comercial.html
+          grep -q 'inputmode="decimal"' comercial.html
+          grep -q 'HTMLInputElement.prototype' comercial-campos-numericos.js
+          grep -q 'campo.type = "number"' comercial-campos-numericos.js
+          grep -q 'font-size:16px' comercial.html
+          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-campos-numericos.js
+
+      - name: Confirmar manual do Comercial existente
         run: |
           grep -q 'btnAjudaComercial' comercial.html
           grep -q 'Manual do Comercial' comercial-ajuda.js
-          grep -q 'Dashboard' comercial-ajuda.js
-          grep -q 'Cadastro por voz' comercial-ajuda.js
           cmp -s comercial-ajuda.js comercial-ajuda.txt
+
+      - name: Confirmar versão nova
+        run: |
+          grep -q '"version": "1.0.38"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |

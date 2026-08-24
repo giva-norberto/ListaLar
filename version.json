@@ -1,5 +1,5 @@
 {
-  "version": "1.0.36",
+  "version": "1.0.38",
   "updatedAt": "2026-08-24",
-  "notes": "Central de Ajuda 3.0.0: atualiza o manual do ListaLar com preços, Gastos, Tarefas, medicamentos e Comercial"
+  "notes": "Comercial 1.2.1: campos numéricos reais, teclado decimal e textos maiores na tela Comercial"
 }
