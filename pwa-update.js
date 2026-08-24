@@ -270,11 +270,6 @@
       const versaoLocal =
         localStorage.getItem(CHAVE_VERSAO);
 
-      /*
-       * Primeira implantação:
-       * - usuário novo: instala silenciosamente;
-       * - usuário que já possuía o app: oferece atualização.
-       */
       if (!versaoLocal) {
         const jaEraControlado =
           Boolean(navigator.serviceWorker.controller);
@@ -436,11 +431,9 @@
   );
 
   // O carregador de atualização já é servido com revalidação obrigatória.
-  // O Comercial continua isolado dos módulos domésticos. Primeiro carregamos
-  // o núcleo e, em seguida, a navegação 1.0.1 que separa Negócio e Liberações.
-  import('./comercial.js?v=1.0.0')
-    .then(() => import('./comercial-ui.js?v=1.0.1'))
-    .catch((erro) => {
-      console.warn('Módulo Comercial indisponível:', erro);
-    });
+  // Usamos esse ponto somente para iniciar o módulo Comercial opcional,
+  // sem tocar no menu, estoque ou código do módulo Gastos existente.
+  import('./comercial.js?v=1.0.0').catch((erro) => {
+    console.warn('Módulo Comercial indisponível:', erro);
+  });
 })();
