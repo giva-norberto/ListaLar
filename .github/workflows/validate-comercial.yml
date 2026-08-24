@@ -1,0 +1,35 @@
+name: Validate Comercial
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'comercial.js'
+      - 'gastos.js'
+      - 'gastos-core.js'
+      - 'firestore.rules'
+      - 'version.json'
+      - '.github/workflows/validate-comercial.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar JavaScript
+        run: |
+          node --check comercial.js
+          node --check gastos.js
+          node --check gastos-core.js
+
+      - name: Confirmar que Gastos foi preservado
+        run: |
+          test "$(git show origin/main:gastos.js | sha256sum | cut -d' ' -f1)" = "$(sha256sum gastos-core.js | cut -d' ' -f1)"
+
+      - name: Validar regras do Firestore no emulador
+        run: npx --yes firebase-tools emulators:exec --only firestore "echo Firestore rules OK" --project demo-listalar
