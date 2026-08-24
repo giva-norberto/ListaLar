@@ -29,7 +29,7 @@ jobs:
 
       - name: Confirmar que Gastos foi preservado
         run: |
-          test "$(git show origin/main:gastos.js | sha256sum | cut -d' ' -f1)" = "$(sha256sum gastos-core.js | cut -d' ' -f1)"
+          test "$(git hash-object gastos-core.js)" = "8f426b5830f6e3c46b761e42d88b4a5b9201eb07"
 
       - name: Validar regras do Firestore no emulador
         run: npx --yes firebase-tools emulators:exec --only firestore "echo Firestore rules OK" --project demo-listalar
