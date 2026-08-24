@@ -11,80 +11,42 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-
     function donoDadosAntigos() {
       return autenticado()
         && request.auth.token.email_verified == true
         && request.auth.token.email == 'giva.norberto@gmail.com';
     }
 
-
     function usuarioExiste() {
       return autenticado()
-        && exists(
-          /databases/$(database)/documents/usuarios/$(request.auth.uid)
-        );
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
     }
-
 
     function ehAdminSistema() {
       return usuarioExiste()
-        && get(
-          /databases/$(database)/documents/usuarios/$(request.auth.uid)
-        ).data.adminSistema == true;
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.adminSistema == true;
     }
 
-
-    // Verifica a família informada no documento do usuário.
     function pertenceFamilia(familiaId) {
       return usuarioExiste()
-        && get(
-          /databases/$(database)/documents/usuarios/$(request.auth.uid)
-        ).data.familiaId == familiaId;
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.familiaId == familiaId;
     }
 
-
-    // Verifica também a existência do usuário na subcoleção
-    // membros da família.
-    //
-    // Essa verificação funciona como segurança adicional quando
-    // o documento usuarios/{uid} ainda está sendo sincronizado.
     function ehMembroAtivoFamilia(familiaId) {
       return autenticado()
-        && exists(
-          /databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)
-        )
+        && exists(/databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid))
         && (
-          !get(
-            /databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)
-          ).data.keys().hasAny([
-            'ativo'
-          ])
-          ||
-          get(
-            /databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)
-          ).data.ativo == true
+          !get(/databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)).data.keys().hasAny(['ativo'])
+          || get(/databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)).data.ativo == true
         );
     }
 
-
-    // Permite identificar o proprietário diretamente pelo
-    // documento da família.
-    //
-    // Isso evita bloqueio em famílias recém-criadas enquanto
-    // o documento usuarios/{uid} ainda está sendo atualizado.
     function ehDonoFamilia(familiaId) {
       return autenticado()
-        && exists(
-          /databases/$(database)/documents/familias/$(familiaId)
-        )
-        && get(
-          /databases/$(database)/documents/familias/$(familiaId)
-        ).data.donoId == request.auth.uid;
+        && exists(/databases/$(database)/documents/familias/$(familiaId))
+        && get(/databases/$(database)/documents/familias/$(familiaId)).data.donoId == request.auth.uid;
     }
 
-
-    // Permissão completa de leitura da família.
     function podeLerFamilia(familiaId) {
       return pertenceFamilia(familiaId)
         || ehMembroAtivoFamilia(familiaId)
@@ -92,436 +54,210 @@ service cloud.firestore {
         || ehAdminSistema();
     }
 
-
-    // Permissão para alterações realizadas pelos integrantes.
     function podeAlterarFamilia(familiaId) {
       return pertenceFamilia(familiaId)
         || ehMembroAtivoFamilia(familiaId)
         || ehDonoFamilia(familiaId);
     }
 
-
-    // O módulo Comercial é opt-in por família.
-    // Plano, família piloto, Tarefas ou Gastos não liberam este módulo.
-    // Somente o administrador do sistema altera a lista em
-    // configuracoes/modulos.
+    // Comercial é opt-in para famílias comuns.
+    // O administrador do sistema possui acesso pessoal ao módulo,
+    // sem liberar automaticamente os demais membros da própria família.
     function comercialHabilitado(familiaId) {
-      return exists(
-          /databases/$(database)/documents/configuracoes/modulos
-        )
-        && get(
-          /databases/$(database)/documents/configuracoes/modulos
-        ).data.keys().hasAny([
-          'comercialFamiliasHabilitadas'
-        ])
-        && get(
-          /databases/$(database)/documents/configuracoes/modulos
-        ).data.comercialFamiliasHabilitadas is list
-        && familiaId in get(
-          /databases/$(database)/documents/configuracoes/modulos
-        ).data.comercialFamiliasHabilitadas;
+      return exists(/databases/$(database)/documents/configuracoes/modulos)
+        && get(/databases/$(database)/documents/configuracoes/modulos).data.keys().hasAny(['comercialFamiliasHabilitadas'])
+        && get(/databases/$(database)/documents/configuracoes/modulos).data.comercialFamiliasHabilitadas is list
+        && familiaId in get(/databases/$(database)/documents/configuracoes/modulos).data.comercialFamiliasHabilitadas;
     }
-
 
     function conviteValido(token, familiaId) {
       return token is string
-        && exists(
-          /databases/$(database)/documents/convites/$(token)
-        )
-        && get(
-          /databases/$(database)/documents/convites/$(token)
-        ).data.ativo == true
-        && get(
-          /databases/$(database)/documents/convites/$(token)
-        ).data.familiaId == familiaId;
+        && exists(/databases/$(database)/documents/convites/$(token))
+        && get(/databases/$(database)/documents/convites/$(token)).data.ativo == true
+        && get(/databases/$(database)/documents/convites/$(token)).data.familiaId == familiaId;
     }
-
 
     // ==========================================
     // USUÁRIOS
     // ==========================================
 
     match /usuarios/{uid} {
-
-      // Usuário consulta os próprios dados.
-      // Administrador pode consultar todos os usuários.
       allow read: if autenticado()
-        && (
-          request.auth.uid == uid
-          || ehAdminSistema()
-        );
+        && (request.auth.uid == uid || ehAdminSistema());
 
-
-      // Usuário pode criar somente o próprio documento.
-      // Não pode criar já se tornando administrador.
       allow create: if autenticado()
         && request.auth.uid == uid
-        && !request.resource.data.keys().hasAny([
-          'adminSistema'
-        ])
+        && !request.resource.data.keys().hasAny(['adminSistema'])
         && (
-          (
-            request.resource.data.familiaId == uid
-            && request.resource.data.papel == 'admin'
-          )
-          ||
-          conviteValido(
-            request.resource.data.conviteToken,
-            request.resource.data.familiaId
-          )
+          (request.resource.data.familiaId == uid && request.resource.data.papel == 'admin')
+          || conviteValido(request.resource.data.conviteToken, request.resource.data.familiaId)
         );
 
-
-      // Usuário altera somente o próprio documento.
-      // Não pode alterar o campo adminSistema.
       allow update: if autenticado()
         && request.auth.uid == uid
-        && !request.resource.data
-          .diff(resource.data)
-          .affectedKeys()
-          .hasAny([
-            'adminSistema'
-          ])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['adminSistema'])
         && (
-          resource.data.familiaId
-            == request.resource.data.familiaId
-          ||
-          conviteValido(
-            request.resource.data.conviteToken,
-            request.resource.data.familiaId
-          )
+          resource.data.familiaId == request.resource.data.familiaId
+          || conviteValido(request.resource.data.conviteToken, request.resource.data.familiaId)
         );
-
 
       allow delete: if false;
 
-
-      // ========================================
-      // TAREFAS PESSOAIS DO USUÁRIO
-      // ========================================
-
       match /tarefasPessoais/{tarefaId} {
-
-        // As tarefas pessoais são privadas.
-        // Somente o próprio usuário pode consultar.
-        allow read: if autenticado()
-          && request.auth.uid == uid;
-
-
-        // Somente o próprio usuário pode criar,
-        // editar, concluir ou excluir suas tarefas.
-        allow create, update, delete: if autenticado()
-          && request.auth.uid == uid;
+        allow read: if autenticado() && request.auth.uid == uid;
+        allow create, update, delete: if autenticado() && request.auth.uid == uid;
       }
     }
-
 
     // ==========================================
     // FAMÍLIAS
     // ==========================================
 
     match /familias/{familiaId} {
-
-      // A família somente pode ser criada pelo próprio dono.
       allow create: if autenticado()
-        && request.resource.data.donoId
-          == request.auth.uid;
+        && request.resource.data.donoId == request.auth.uid;
 
-
-      // Integrantes e proprietário consultam sua família.
-      // Administrador do sistema consulta todas as famílias.
       allow read: if podeLerFamilia(familiaId);
 
-
-      // Integrantes e proprietário podem atualizar a família.
-      //
-      // O campo donoId não pode ser alterado durante a atualização.
-      // Isso também permite salvar a configuração do Controle
-      // de Preços no documento da família.
       allow update: if podeAlterarFamilia(familiaId)
-        && request.resource.data.donoId
-          == resource.data.donoId;
+        && request.resource.data.donoId == resource.data.donoId;
 
-
-      // Somente o proprietário pode excluir diretamente a família.
       allow delete: if autenticado()
-        && resource.data.donoId
-          == request.auth.uid;
-
-
-      // ========================================
-      // MEMBROS DA FAMÍLIA
-      // ========================================
+        && resource.data.donoId == request.auth.uid;
 
       match /membros/{uid} {
-
         allow read: if podeLerFamilia(familiaId);
-
 
         allow create: if autenticado()
           && request.auth.uid == uid
           && (
-            (
-              familiaId == request.auth.uid
-              && request.resource.data.papel == 'admin'
-            )
-            ||
-            ehDonoFamilia(familiaId)
-            ||
-            conviteValido(
-              request.resource.data.conviteToken,
-              familiaId
-            )
+            (familiaId == request.auth.uid && request.resource.data.papel == 'admin')
+            || ehDonoFamilia(familiaId)
+            || conviteValido(request.resource.data.conviteToken, familiaId)
           );
-
 
         allow update: if autenticado()
           && request.auth.uid == uid
           && podeAlterarFamilia(familiaId);
 
-
         allow delete: if false;
       }
 
-
-      // ========================================
-      // PRODUTOS DA FAMÍLIA
-      // ========================================
-
       match /produtos/{produtoId} {
-
         allow read: if podeLerFamilia(familiaId);
-
         allow write: if podeAlterarFamilia(familiaId);
       }
-
-
-      // ========================================
-      // HISTÓRICO DE COMPRAS
-      // ========================================
 
       match /historico_compras/{historicoId} {
-
         allow read: if podeLerFamilia(familiaId);
-
         allow write: if podeAlterarFamilia(familiaId);
       }
 
-
-      // ========================================
-      // GASTOS DA FAMÍLIA
-      // ========================================
-
       match /gastos/{gastoId} {
-
-        // Integrantes, proprietário e administrador do sistema
-        // podem consultar os gastos da família.
         allow read: if podeLerFamilia(familiaId);
-
-        // Somente integrantes e proprietário da família
-        // podem criar, editar ou excluir gastos.
-        allow create, update, delete:
-          if podeAlterarFamilia(familiaId);
-
-        // ======================================
-        // ITENS DO GASTO
-        // ======================================
+        allow create, update, delete: if podeAlterarFamilia(familiaId);
 
         match /itens/{itemId} {
-
-          // Os itens seguem a mesma permissão do gasto principal.
           allow read: if podeLerFamilia(familiaId);
-
-          allow create, update, delete:
-            if podeAlterarFamilia(familiaId);
+          allow create, update, delete: if podeAlterarFamilia(familiaId);
         }
       }
-
 
       // ========================================
       // COMERCIAL — PRODUTOS DE REVENDA
       // ========================================
 
       match /comercial_produtos/{produtoId} {
-
-        // Sem liberação explícita da família, os dados comerciais
-        // permanecem inacessíveis mesmo que a família use plano Full.
-        allow read: if comercialHabilitado(familiaId)
+        // Admin do sistema tem acesso pessoal. Usuários comuns dependem
+        // da liberação explícita da família.
+        allow read: if (ehAdminSistema() || comercialHabilitado(familiaId))
           && podeLerFamilia(familiaId);
 
+        // O admin só altera dados de uma família à qual realmente pertence;
+        // a exceção administrativa não concede escrita em famílias de terceiros.
         allow create, update, delete:
-          if comercialHabilitado(familiaId)
+          if (ehAdminSistema() || comercialHabilitado(familiaId))
           && podeAlterarFamilia(familiaId);
       }
-
 
       // ========================================
       // COMERCIAL — MOVIMENTAÇÕES
       // ========================================
 
       match /comercial_movimentos/{movimentoId} {
-
-        allow read: if comercialHabilitado(familiaId)
+        allow read: if (ehAdminSistema() || comercialHabilitado(familiaId))
           && podeLerFamilia(familiaId);
 
         allow create, update, delete:
-          if comercialHabilitado(familiaId)
+          if (ehAdminSistema() || comercialHabilitado(familiaId))
           && podeAlterarFamilia(familiaId);
       }
 
-
-      // ========================================
-      // TAREFAS DA FAMÍLIA
-      // ========================================
-
       match /tarefas/{tarefaId} {
-
-        // Integrantes da família e administrador do sistema
-        // podem consultar as tarefas.
         allow read: if podeLerFamilia(familiaId);
-
-
-        // Somente integrantes e proprietário da família
-        // podem criar, editar, concluir ou excluir tarefas.
-        allow create, update, delete:
-          if podeAlterarFamilia(familiaId);
+        allow create, update, delete: if podeAlterarFamilia(familiaId);
       }
-
-
-      // ========================================
-      // LEMBRETES DE MEDICAMENTOS
-      // ========================================
 
       match /lembretesMedicamentos/{lembreteId} {
-
-        // Integrantes, proprietário e administrador do sistema
-        // podem consultar os lembretes da família.
         allow read: if podeLerFamilia(familiaId);
-
-
-        // Somente integrantes e proprietário da família
-        // podem criar, editar ou excluir lembretes.
-        allow create, update, delete:
-          if podeAlterarFamilia(familiaId);
+        allow create, update, delete: if podeAlterarFamilia(familiaId);
       }
 
-
-      // ========================================
-      // HISTÓRICO DE MEDICAMENTOS
-      // ========================================
-
       match /historicoMedicamentos/{historicoId} {
-
-        // Integrantes, proprietário e administrador do sistema
-        // podem consultar o histórico.
         allow read: if podeLerFamilia(familiaId);
-
-
-        // O registro é criado automaticamente quando
-        // alguém confirma o botão "Já comprei".
-        allow create:
-          if podeAlterarFamilia(familiaId);
-
-
-        // O histórico permanece preservado.
+        allow create: if podeAlterarFamilia(familiaId);
         allow update, delete: if false;
       }
     }
-
 
     // ==========================================
     // CONFIGURAÇÃO DOS MÓDULOS
     // ==========================================
 
     match /configuracoes/modulos {
-
-      // O aplicativo consulta este documento para decidir quais
-      // módulos estão liberados e, no Comercial, quais famílias foram
-      // explicitamente habilitadas.
       allow get: if autenticado();
-
-      // Não permitimos listar toda a coleção por esta regra.
       allow list: if false;
-
-      // Somente o administrador do sistema pode alterar
-      // a liberação dos módulos.
-      allow create, update, delete:
-        if ehAdminSistema();
+      allow create, update, delete: if ehAdminSistema();
     }
-
-
-    // ==========================================
-    // DEMAIS CONFIGURAÇÕES ADMINISTRATIVAS
-    // ==========================================
 
     match /configuracoes/{configuracaoId} {
-
-      // Comunicados e outras configurações administrativas
-      // continuam restritos ao administrador do sistema.
       allow read, write: if ehAdminSistema();
     }
-
 
     // ==========================================
     // CONVITES
     // ==========================================
 
     match /convites/{token} {
-
       allow get: if autenticado();
-
       allow list: if false;
-
 
       allow create: if autenticado()
         && (
-          pertenceFamilia(
-            request.resource.data.familiaId
-          )
-          ||
-          ehMembroAtivoFamilia(
-            request.resource.data.familiaId
-          )
-          ||
-          ehDonoFamilia(
-            request.resource.data.familiaId
-          )
+          pertenceFamilia(request.resource.data.familiaId)
+          || ehMembroAtivoFamilia(request.resource.data.familiaId)
+          || ehDonoFamilia(request.resource.data.familiaId)
         );
-
 
       allow update, delete: if autenticado()
         && (
-          pertenceFamilia(
-            resource.data.familiaId
-          )
-          ||
-          ehMembroAtivoFamilia(
-            resource.data.familiaId
-          )
-          ||
-          ehDonoFamilia(
-            resource.data.familiaId
-          )
+          pertenceFamilia(resource.data.familiaId)
+          || ehMembroAtivoFamilia(resource.data.familiaId)
+          || ehDonoFamilia(resource.data.familiaId)
         );
     }
-
 
     // ==========================================
     // DADOS ANTIGOS
     // ==========================================
 
     match /produtos/{produtoId} {
-
       allow read: if donoDadosAntigos();
-
       allow write: if false;
     }
 
-
     match /historico_compras/{historicoId} {
-
       allow read: if donoDadosAntigos();
-
       allow write: if false;
     }
   }

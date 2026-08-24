@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <title>Administração do Comercial - ListaLar</title>
+  <link rel="icon" type="image/png" href="./favicon-32.png">
+  <link rel="stylesheet" href="./admin.css">
+  <style>
+    .mod-shell{width:min(100%,980px);margin:0 auto;padding:16px 14px 110px}.mod-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.mod-head h1{margin:0;font-size:22px}.mod-head p{margin:4px 0 0;color:#64748b;font-size:12px}.mod-back{border:0;border-radius:12px;padding:10px 14px;background:#e2e8f0;color:#334155;font-weight:900;cursor:pointer}.mod-list{display:grid;gap:9px}.mod-family{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid #ddd6fe;border-radius:13px;background:#fff}.mod-family strong{display:block}.mod-family small{display:block;margin-top:3px;color:#64748b}.mod-family input{width:22px;height:22px}.mod-actions{display:flex;justify-content:flex-end;margin-top:12px}.mod-status{margin-bottom:12px;padding:10px 12px;border-radius:12px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:800}.mod-status.erro{background:#fee2e2;color:#991b1b}.mod-status.ok{background:#dcfce7;color:#166534}.mod-status[hidden]{display:none}
+  </style>
+</head>
+<body>
+  <header class="admin-header">
+    <div class="admin-header-left">
+      <button type="button" class="header-back" onclick="window.location.href='./admin.html'" aria-label="Voltar">←</button>
+      <div class="header-logo"><img src="./icon-192.png" alt="ListaLar"></div>
+      <div><h1>Administração</h1><p>Módulos → Comercial</p></div>
+    </div>
+  </header>
+
+  <main class="mod-shell">
+    <div class="mod-head">
+      <div><h1>📈 Módulo Comercial</h1><p>Liberação independente do plano Full. Somente as famílias marcadas recebem o módulo.</p></div>
+      <button class="mod-back" type="button" onclick="window.location.href='./comercial.html'">Abrir Comercial</button>
+    </div>
+
+    <div id="adminComercialStatus" class="mod-status">Validando acesso administrativo...</div>
+
+    <section id="adminComercialConteudo" class="admin-card" hidden>
+      <div class="card-title">
+        <div><h3>🔐 Liberação por família</h3><p>O seu acesso de administrador é pessoal. Marcar uma família libera o Comercial para os membros dela.</p></div>
+      </div>
+      <div id="adminComercialLista" class="mod-list"></div>
+      <div class="mod-actions"><button id="adminComercialSalvar" class="btn btn-primary" type="button">Salvar liberações</button></div>
+    </section>
+  </main>
+
+  <script type="module" src="./admin-comercial.js?v=1.1.0"></script>
+</body>
+</html>
