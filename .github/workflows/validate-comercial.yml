@@ -6,7 +6,10 @@ on:
       - main
     paths:
       - 'comercial.js'
-      - 'pwa-update.js'
+      - 'comercial.html'
+      - 'comercial-app.js'
+      - 'admin-comercial.html'
+      - 'admin-comercial.js'
       - 'firestore.rules'
       - 'version.json'
       - '.github/workflows/validate-comercial.yml'
@@ -23,7 +26,16 @@ jobs:
       - name: Validar JavaScript
         run: |
           node --check comercial.js
+          node --check comercial-app.js
+          node --check admin-comercial.js
           node --check pwa-update.js
+
+      - name: Confirmar separação do Comercial
+        run: |
+          grep -q 'window.location.href = PAGINA_COMERCIAL' comercial.js
+          grep -q 'comercial_produtos' comercial-app.js
+          grep -q 'comercial_movimentos' comercial-app.js
+          grep -q 'Módulos → Comercial' admin-comercial.html
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
