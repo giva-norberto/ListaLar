@@ -1,5 +1,5 @@
 {
-  "version": "1.0.39",
+  "version": "1.0.40",
   "updatedAt": "2026-08-24",
-  "notes": "Comercial 1.2.2: edição compacta no próprio card, botão Editar maior e campos decimais mantidos"
+  "notes": "Atualização forçada: garante que instalações existentes recebam o Comercial 1.2.2 com edição compacta"
 }
