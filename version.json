@@ -1,5 +1,5 @@
 {
-  "version": "1.0.30",
-  "updatedAt": "2026-08-18",
-  "notes": "Importador PDF 1.3.6: corrige notas SEF/MG com colunas quebradas sem alterar parsers que já conferem"
+  "version": "1.0.31",
+  "updatedAt": "2026-08-24",
+  "notes": "Novo módulo Comercial 1.0.0, separado do uso doméstico e liberado somente por família pelo administrador"
 }
