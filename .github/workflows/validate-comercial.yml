@@ -21,6 +21,8 @@ on:
       - 'comercial-main.txt'
       - 'comercial-campos-numericos.js'
       - 'comercial-campos-numericos.txt'
+      - 'comercial-edicao-inline.js'
+      - 'comercial-edicao-inline.txt'
       - 'comercial-voz.js'
       - 'comercial-ajuda.js'
       - 'comercial-ajuda.txt'
@@ -48,6 +50,7 @@ jobs:
           node --check comercial-operacoes.js
           node --check comercial-main.js
           node --check comercial-campos-numericos.js
+          node --check comercial-edicao-inline.js
           node --check comercial-voz.js
           node --check comercial-ajuda.js
           node --check admin-comercial.js
@@ -62,6 +65,7 @@ jobs:
           cmp -s comercial-operacoes.js comercial-operacoes.txt
           cmp -s comercial-main.js comercial-main.txt
           cmp -s comercial-campos-numericos.js comercial-campos-numericos.txt
+          cmp -s comercial-edicao-inline.js comercial-edicao-inline.txt
           cmp -s comercial-ajuda.js comercial-ajuda.txt
 
       - name: Confirmar separação do Comercial
@@ -71,6 +75,7 @@ jobs:
           grep -q 'comercial_movimentos' comercial-contexto.js
           grep -q 'Módulos → Comercial' admin-comercial.html
           grep -q 'comercial-campos-numericos.js?v=1.2.1' comercial-app.js
+          grep -q 'comercial-edicao-inline.js?v=1.2.2' comercial-app.js
           grep -q 'comercial-main.js?v=1.2.0' comercial-app.js
 
       - name: Confirmar edição e valores manuais
@@ -85,7 +90,11 @@ jobs:
           grep -q 'HTMLInputElement.prototype' comercial-campos-numericos.js
           grep -q 'campo.type = "number"' comercial-campos-numericos.js
           grep -q 'font-size:16px' comercial.html
-          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-campos-numericos.js
+          grep -q 'data-inline-salvar' comercial-edicao-inline.js
+          grep -q 'data-inline-cancelar' comercial-edicao-inline.js
+          grep -q 'min-height:44px!important' comercial-edicao-inline.js
+          grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
+          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-campos-numericos.js comercial-edicao-inline.js
 
       - name: Confirmar manual do Comercial existente
         run: |
@@ -95,7 +104,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.38"' version.json
+          grep -q '"version": "1.0.39"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
