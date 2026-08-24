@@ -1,5 +1,5 @@
 {
-  "version": "1.0.38",
+  "version": "1.0.39",
   "updatedAt": "2026-08-24",
-  "notes": "Comercial 1.2.1: campos numéricos reais, teclado decimal e textos maiores na tela Comercial"
+  "notes": "Comercial 1.2.2: edição compacta no próprio card, botão Editar maior e campos decimais mantidos"
 }
