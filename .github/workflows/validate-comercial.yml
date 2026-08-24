@@ -8,6 +8,9 @@ on:
       - 'comercial.js'
       - 'comercial.html'
       - 'comercial-app.js'
+      - 'comercial-voz.js'
+      - 'comercial-ajuda.js'
+      - 'comercial-ajuda.txt'
       - 'admin-comercial.html'
       - 'admin-comercial.js'
       - 'version.json'
@@ -26,6 +29,8 @@ jobs:
         run: |
           node --check comercial.js
           node --check comercial-app.js
+          node --check comercial-voz.js
+          node --check comercial-ajuda.js
           node --check admin-comercial.js
           node --check pwa-update.js
 
@@ -35,6 +40,14 @@ jobs:
           grep -q 'comercial_produtos' comercial-app.js
           grep -q 'comercial_movimentos' comercial-app.js
           grep -q 'Módulos → Comercial' admin-comercial.html
+
+      - name: Confirmar manual do Comercial
+        run: |
+          grep -q 'btnAjudaComercial' comercial.html
+          grep -q 'Manual do Comercial' comercial-ajuda.js
+          grep -q 'Dashboard' comercial-ajuda.js
+          grep -q 'Cadastro por voz' comercial-ajuda.js
+          cmp -s comercial-ajuda.js comercial-ajuda.txt
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
