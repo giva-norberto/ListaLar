@@ -434,4 +434,11 @@
     verificarAtualizacao,
     INTERVALO_VERIFICACAO
   );
+
+  // O carregador de atualização já é servido com revalidação obrigatória.
+  // Usamos esse ponto somente para iniciar o módulo Comercial opcional,
+  // sem tocar no menu, estoque ou código do módulo Gastos existente.
+  import('./comercial.js?v=1.0.0').catch((erro) => {
+    console.warn('Módulo Comercial indisponível:', erro);
+  });
 })();
