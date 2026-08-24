@@ -104,7 +104,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.39"' version.json
+          grep -q '"version": "1.0.40"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
