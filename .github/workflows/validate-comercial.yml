@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'comercial.js'
+      - 'comercial-ui.js'
+      - 'comercial-ui.txt'
       - 'pwa-update.js'
       - 'firestore.rules'
       - 'version.json'
@@ -23,7 +25,11 @@ jobs:
       - name: Validar JavaScript
         run: |
           node --check comercial.js
+          node --check comercial-ui.js
           node --check pwa-update.js
+
+      - name: Confirmar cópia TXT do JavaScript
+        run: cmp -s comercial-ui.js comercial-ui.txt
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
