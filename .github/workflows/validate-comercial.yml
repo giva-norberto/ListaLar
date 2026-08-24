@@ -89,12 +89,22 @@ jobs:
           grep -q 'inputmode="decimal"' comercial.html
           grep -q 'HTMLInputElement.prototype' comercial-campos-numericos.js
           grep -q 'campo.type = "number"' comercial-campos-numericos.js
-          grep -q 'font-size:16px' comercial.html
           grep -q 'data-inline-salvar' comercial-edicao-inline.js
           grep -q 'data-inline-cancelar' comercial-edicao-inline.js
           grep -q 'min-height:44px!important' comercial-edicao-inline.js
           grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
           ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-campos-numericos.js comercial-edicao-inline.js
+
+      - name: Confirmar visual limpo do Comercial
+        run: |
+          grep -q 'comercial-app.js?v=1.2.3' comercial.html
+          grep -q 'font-size:27px' comercial.html
+          grep -q 'font-size:24px' comercial.html
+          grep -q 'linear-gradient(135deg,#eff6ff,#fff)' comercial.html
+          grep -q '.manual-hint,.comercial-edicao-info{display:none!important}' comercial.html
+          ! grep -q '<p class="manual-hint">' comercial.html
+          ! grep -q 'Cadastro comercial ativo' comercial.html
+          ! grep -q 'Todos os valores podem ser digitados manualmente' comercial.html
 
       - name: Confirmar manual do Comercial existente
         run: |
@@ -104,7 +114,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.40"' version.json
+          grep -q '"version": "1.0.41"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
