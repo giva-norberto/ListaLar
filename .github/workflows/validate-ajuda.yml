@@ -1,0 +1,47 @@
+name: Validate Ajuda ListaLar
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'central-ajuda.js'
+      - 'central-ajuda.txt'
+      - 'central-ajuda-conteudo.js'
+      - 'central-ajuda-conteudo.txt'
+      - 'version.json'
+      - '.github/workflows/validate-ajuda.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar JavaScript
+        run: |
+          node --check central-ajuda.js
+          node --check central-ajuda-conteudo.js
+
+      - name: Confirmar cópias TXT
+        run: |
+          cmp -s central-ajuda.js central-ajuda.txt
+          cmp -s central-ajuda-conteudo.js central-ajuda-conteudo.txt
+
+      - name: Confirmar recursos documentados
+        run: |
+          grep -q "Central de Ajuda 3.0.0" central-ajuda.js
+          grep -q "Controle de Preços" central-ajuda-conteudo.js
+          grep -q "Gastos" central-ajuda-conteudo.js
+          grep -q "Tarefas" central-ajuda-conteudo.js
+          grep -q "Lembretes de medicamentos" central-ajuda-conteudo.js
+          grep -q "Comercial" central-ajuda-conteudo.js
+          grep -q '"version": "1.0.36"' version.json
+
+      - name: Confirmar isolamento e estabilidade
+        run: |
+          ! grep -q "MutationObserver" central-ajuda.js
+          test "$(git hash-object gastos.js)" = "8f426b5830f6e3c46b761e42d88b4a5b9201eb07"
