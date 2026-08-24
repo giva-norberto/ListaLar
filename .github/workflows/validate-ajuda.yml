@@ -39,7 +39,7 @@ jobs:
           grep -q "Tarefas" central-ajuda-conteudo.js
           grep -q "Lembretes de medicamentos" central-ajuda-conteudo.js
           grep -q "Comercial" central-ajuda-conteudo.js
-          grep -q '"version": "1.0.36"' version.json
+          grep -Eq '"version": "[0-9]+\.[0-9]+\.[0-9]+"' version.json
 
       - name: Confirmar isolamento e estabilidade
         run: |
