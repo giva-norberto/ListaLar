@@ -6,8 +6,7 @@ on:
       - main
     paths:
       - 'comercial.js'
-      - 'gastos.js'
-      - 'gastos-core.js'
+      - 'pwa-update.js'
       - 'firestore.rules'
       - 'version.json'
       - '.github/workflows/validate-comercial.yml'
@@ -24,12 +23,11 @@ jobs:
       - name: Validar JavaScript
         run: |
           node --check comercial.js
-          node --check gastos.js
-          node --check gastos-core.js
+          node --check pwa-update.js
 
-      - name: Confirmar que Gastos foi preservado
+      - name: Confirmar que Gastos permaneceu intocado
         run: |
-          test "$(git hash-object gastos-core.js)" = "8f426b5830f6e3c46b761e42d88b4a5b9201eb07"
+          test "$(git hash-object gastos.js)" = "8f426b5830f6e3c46b761e42d88b4a5b9201eb07"
 
       - name: Validar regras do Firestore no emulador
         run: npx --yes firebase-tools emulators:exec --only firestore "echo Firestore rules OK" --project demo-listalar
