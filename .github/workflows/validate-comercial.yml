@@ -76,9 +76,13 @@ jobs:
           grep -q 'tipo: "ajuste"' comercial-operacoes.js
           grep -q 'simularProduto' comercial-calculos.js
           grep -q 'prepararRecalculo' comercial-calculos.js
-          grep -q 'Editar depois de salvar' comercial-ajuda.js
-          grep -q 'Digitar valores manualmente' comercial-ajuda.js
           ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js
+
+      - name: Confirmar manual do Comercial existente
+        run: |
+          grep -q 'btnAjudaComercial' comercial.html
+          grep -q 'Manual do Comercial' comercial-ajuda.js
+          cmp -s comercial-ajuda.js comercial-ajuda.txt
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
