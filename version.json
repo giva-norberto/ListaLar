@@ -1,5 +1,5 @@
 {
-  "version": "1.0.32",
+  "version": "1.0.33",
   "updatedAt": "2026-08-24",
-  "notes": "Comercial 1.0.1: separa Negócio e Liberações e permite ao administrador liberar a família atual sem misturar com o Full"
+  "notes": "Hotfix: remove a camada Comercial 1.0.1 que interferiu na interface e restaura o carregamento anterior"
 }
