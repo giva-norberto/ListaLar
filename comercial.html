@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>Comercial - ListaLar</title>
+  <link rel="icon" type="image/png" href="./favicon-32.png">
+  <style>
+    :root{--bg:#f3f7f9;--card:#fff;--text:#172033;--muted:#64748b;--border:#dbe4ea;--brand:#0f766e;--brand2:#0d9488;--green:#15803d;--red:#b91c1c;--blue:#2563eb;--shadow:0 8px 22px rgba(15,23,42,.08)}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}button,input,select{font:inherit}
+    .head{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:max(12px,env(safe-area-inset-top)) 14px 12px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;box-shadow:var(--shadow)}
+    .head-left{display:flex;align-items:center;gap:10px}.back,.icon-btn{border:0;border-radius:12px;background:rgba(255,255,255,.17);color:#fff;min-width:42px;height:42px;cursor:pointer;font-weight:900}.head h1{margin:0;font-size:20px}.head p{margin:2px 0 0;font-size:11px;opacity:.9}.head-actions{display:flex;gap:7px}.head-actions .icon-btn[hidden]{display:none}
+    .shell{width:min(100%,1080px);margin:auto;padding:12px 12px 110px}.status{margin-bottom:10px;padding:11px 12px;border-radius:12px;background:#ccfbf1;color:#115e59;font-weight:800;font-size:12px}.status.erro{background:#fee2e2;color:#991b1b}.status[hidden]{display:none}
+    .nav{display:flex;gap:7px;overflow-x:auto;padding:5px;margin-bottom:12px;border:1px solid var(--border);border-radius:15px;background:#fff;box-shadow:var(--shadow);scrollbar-width:none}.nav::-webkit-scrollbar{display:none}.nav button{flex:0 0 auto;border:0;border-radius:11px;background:#f8fafc;color:#475569;padding:10px 12px;font-size:12px;font-weight:900;cursor:pointer}.nav button.active{background:var(--brand);color:#fff}
+    .screen{display:none}.screen.active{display:block}.card{margin-bottom:12px;padding:15px;border:1px solid var(--border);border-radius:18px;background:var(--card);box-shadow:var(--shadow)}.card h2{margin:0 0 4px;font-size:17px}.card p{margin:0 0 12px;color:var(--muted);font-size:12px;line-height:1.45}
+    .period{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.period select,.input,.select{width:100%;min-height:44px;padding:9px 10px;border:1px solid #cbd5e1;border-radius:11px;background:#fff}.period select{width:auto;font-weight:800}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}.kpi{padding:12px;border:1px solid var(--border);border-radius:14px;background:#fff}.kpi span{display:block;color:var(--muted);font-size:10px;font-weight:800;margin-bottom:5px}.kpi strong{font-size:16px}.kpi.result{background:#ecfdf5;border-color:#86efac}.kpi.result.neg{background:#fff1f2;border-color:#fecaca}
+    .form{display:grid;grid-template-columns:2fr repeat(3,1fr) auto;gap:8px;align-items:end}.field{display:grid;gap:5px}.field label{font-size:11px;color:#475569;font-weight:800}.btn{min-height:44px;padding:9px 14px;border:0;border-radius:11px;background:var(--brand);color:#fff;font-weight:900;cursor:pointer}.btn.secondary{background:#e2e8f0;color:#334155}.btn.danger{background:#fee2e2;color:#991b1b}.btn:disabled{opacity:.6;cursor:wait}
+    .list{display:grid;gap:8px}.item{padding:12px;border:1px solid #e2e8f0;border-radius:13px;background:#f8fafc}.item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.item-title{font-weight:900}.meta{margin-top:5px;color:var(--muted);font-size:11px;line-height:1.5}.values{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}.value{padding:7px;border:1px solid #e2e8f0;border-radius:9px;background:#fff}.value span{display:block;color:var(--muted);font-size:9px;font-weight:800}.value strong{display:block;margin-top:2px;font-size:12px}.badge{display:inline-block;padding:5px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:900}.badge.venda{background:#dcfce7;color:#166534}.badge.compra{background:#e0f2fe;color:#0369a1}.badge.despesa{background:#fee2e2;color:#991b1b}.empty{padding:18px;border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:var(--muted);text-align:center;font-size:12px}
+    .access{max-width:520px;margin:60px auto;padding:22px;border:1px solid #fecaca;border-radius:20px;background:#fff;box-shadow:var(--shadow);text-align:center}.access h2{margin:0 0 8px}.access p{color:var(--muted);line-height:1.5}.toast{position:fixed;left:50%;bottom:max(22px,env(safe-area-inset-bottom));z-index:50;width:min(calc(100% - 28px),480px);transform:translateX(-50%);padding:12px;border-radius:12px;background:#334155;color:#fff;text-align:center;font-size:12px;font-weight:900}.toast.ok{background:var(--green)}.toast.erro{background:var(--red)}
+    @media(max-width:760px){.head-actions .label{display:none}.shell{padding-left:9px;padding-right:9px}.kpis{grid-template-columns:1fr 1fr}.form{grid-template-columns:1fr 1fr}.form>.wide,.form>.btn{grid-column:1/-1}.values{grid-template-columns:1fr 1fr}.period{align-items:stretch;flex-direction:column}.period select{width:100%}}
+  </style>
+</head>
+<body>
+  <header class="head">
+    <div class="head-left">
+      <button class="back" type="button" onclick="window.location.href='./index.html'" aria-label="Voltar">←</button>
+      <div><h1>📈 Comercial</h1><p>Operação separada do uso doméstico.</p></div>
+    </div>
+    <div class="head-actions">
+      <button id="btnAdminComercial" class="icon-btn" type="button" hidden title="Administrar liberações">⚙️ <span class="label">Liberações</span></button>
+    </div>
+  </header>
+
+  <main id="appComercial" class="shell" hidden>
+    <div id="statusComercial" class="status">Carregando Comercial...</div>
+
+    <nav class="nav" aria-label="Recursos do Comercial">
+      <button class="active" data-tela="dashboard">📊 Dashboard</button>
+      <button data-tela="produtos">🏷️ Produtos</button>
+      <button data-tela="compras">📥 Compras</button>
+      <button data-tela="vendas">💰 Vendas</button>
+      <button data-tela="despesas">🧾 Despesas</button>
+      <button data-tela="estoque">📦 Estoque</button>
+      <button data-tela="historico">🕘 Histórico</button>
+    </nav>
+
+    <section id="tela-dashboard" class="screen active">
+      <div class="period"><strong>Visão do negócio</strong><select id="periodoDashboard"></select></div>
+      <div class="kpis">
+        <article class="kpi"><span>Faturamento</span><strong id="kpiReceita">R$ 0,00</strong></article>
+        <article class="kpi"><span>Custo vendido</span><strong id="kpiCusto">R$ 0,00</strong></article>
+        <article class="kpi"><span>Lucro bruto</span><strong id="kpiLucro">R$ 0,00</strong></article>
+        <article class="kpi"><span>Despesas</span><strong id="kpiDespesas">R$ 0,00</strong></article>
+        <article id="cardResultado" class="kpi result"><span>Resultado</span><strong id="kpiResultado">R$ 0,00</strong></article>
+        <article class="kpi"><span>Margem bruta</span><strong id="kpiMargem">0%</strong></article>
+        <article class="kpi"><span>Estoque a custo</span><strong id="kpiEstoqueCusto">R$ 0,00</strong></article>
+        <article class="kpi"><span>Estoque a venda</span><strong id="kpiEstoqueVenda">R$ 0,00</strong></article>
+      </div>
+      <div class="card"><h2>Resumo do estoque</h2><p>Produtos de revenda, separados do estoque doméstico.</p><div id="dashboardProdutos" class="list"></div></div>
+    </section>
+
+    <section id="tela-produtos" class="screen">
+      <div class="card"><h2>Novo produto de revenda</h2><p>Cadastre custo médio inicial, preço de venda e estoque inicial.</p>
+        <form id="formProduto" class="form">
+          <div class="field wide"><label>Produto</label><input id="produtoNome" class="input" required placeholder="Ex.: Café 500g"></div>
+          <div class="field"><label>Custo unitário</label><input id="produtoCusto" class="input" inputmode="decimal" placeholder="0,00"></div>
+          <div class="field"><label>Preço de venda</label><input id="produtoVenda" class="input" inputmode="decimal" placeholder="0,00"></div>
+          <div class="field"><label>Estoque inicial</label><input id="produtoEstoque" class="input" inputmode="decimal" value="0"></div>
+          <button class="btn" type="submit">Cadastrar</button>
+        </form>
+      </div>
+      <div class="card"><h2>Produtos</h2><p>Cadastro comercial ativo.</p><div id="listaProdutos" class="list"></div></div>
+    </section>
+
+    <section id="tela-compras" class="screen">
+      <div class="card"><h2>Registrar compra</h2><p>Aumenta o estoque e recalcula o custo médio ponderado.</p>
+        <form id="formCompra" class="form">
+          <div class="field wide"><label>Produto</label><select id="compraProduto" class="select" required></select></div>
+          <div class="field"><label>Quantidade</label><input id="compraQtd" class="input" inputmode="decimal" required></div>
+          <div class="field"><label>Custo unitário</label><input id="compraCusto" class="input" inputmode="decimal" required></div>
+          <div class="field"><label>Data</label><input id="compraData" class="input" type="date" required></div>
+          <button class="btn" type="submit">Registrar compra</button>
+        </form>
+      </div>
+      <div class="card"><h2>Compras recentes</h2><div id="listaCompras" class="list"></div></div>
+    </section>
+
+    <section id="tela-vendas" class="screen">
+      <div class="card"><h2>Registrar venda</h2><p>Baixa o estoque e congela o custo histórico usado no lucro da venda.</p>
+        <form id="formVenda" class="form">
+          <div class="field wide"><label>Produto</label><select id="vendaProduto" class="select" required></select></div>
+          <div class="field"><label>Quantidade</label><input id="vendaQtd" class="input" inputmode="decimal" required></div>
+          <div class="field"><label>Preço unitário</label><input id="vendaValor" class="input" inputmode="decimal" required></div>
+          <div class="field"><label>Data</label><input id="vendaData" class="input" type="date" required></div>
+          <button class="btn" type="submit">Registrar venda</button>
+        </form>
+      </div>
+      <div class="card"><h2>Vendas recentes</h2><div id="listaVendas" class="list"></div></div>
+    </section>
+
+    <section id="tela-despesas" class="screen">
+      <div class="card"><h2>Registrar despesa</h2><p>Frete, embalagem, taxa, combustível ou outra despesa do negócio.</p>
+        <form id="formDespesa" class="form">
+          <div class="field wide"><label>Descrição</label><input id="despesaDescricao" class="input" required placeholder="Ex.: Frete"></div>
+          <div class="field"><label>Valor</label><input id="despesaValor" class="input" inputmode="decimal" required></div>
+          <div class="field"><label>Data</label><input id="despesaData" class="input" type="date" required></div>
+          <div></div>
+          <button class="btn" type="submit">Registrar despesa</button>
+        </form>
+      </div>
+      <div class="card"><h2>Despesas recentes</h2><div id="listaDespesas" class="list"></div></div>
+    </section>
+
+    <section id="tela-estoque" class="screen">
+      <div class="card"><h2>Estoque comercial</h2><p>Somente produtos de revenda. Não altera a despensa da casa.</p><div id="listaEstoque" class="list"></div></div>
+    </section>
+
+    <section id="tela-historico" class="screen">
+      <div class="card"><h2>Histórico de movimentações</h2><p>Compras, vendas e despesas registradas no Comercial.</p><div id="listaHistorico" class="list"></div></div>
+    </section>
+  </main>
+
+  <section id="acessoNegado" class="access" hidden>
+    <h2>Comercial não liberado</h2>
+    <p>Este usuário não possui acesso ao módulo Comercial. A liberação da família é feita pelo administrador do sistema.</p>
+    <button class="btn" type="button" onclick="window.location.href='./index.html'">Voltar ao ListaLar</button>
+  </section>
+
+  <script type="module" src="./comercial-app.js?v=1.1.0"></script>
+</body>
+</html>
