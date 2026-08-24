@@ -1,5 +1,5 @@
 {
-  "version": "1.0.37",
+  "version": "1.0.38",
   "updatedAt": "2026-08-24",
-  "notes": "Comercial 1.2.0: valores manuais e edição segura de produtos, compras, vendas e despesas já salvos"
+  "notes": "Comercial 1.2.1: campos numéricos reais, teclado decimal e textos maiores na tela Comercial"
 }
