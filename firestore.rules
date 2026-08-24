@@ -101,6 +101,28 @@ service cloud.firestore {
     }
 
 
+    // O módulo Comercial é opt-in por família.
+    // Plano, família piloto, Tarefas ou Gastos não liberam este módulo.
+    // Somente o administrador do sistema altera a lista em
+    // configuracoes/modulos.
+    function comercialHabilitado(familiaId) {
+      return exists(
+          /databases/$(database)/documents/configuracoes/modulos
+        )
+        && get(
+          /databases/$(database)/documents/configuracoes/modulos
+        ).data.keys().hasAny([
+          'comercialFamiliasHabilitadas'
+        ])
+        && get(
+          /databases/$(database)/documents/configuracoes/modulos
+        ).data.comercialFamiliasHabilitadas is list
+        && familiaId in get(
+          /databases/$(database)/documents/configuracoes/modulos
+        ).data.comercialFamiliasHabilitadas;
+    }
+
+
     function conviteValido(token, familiaId) {
       return token is string
         && exists(
@@ -317,6 +339,38 @@ service cloud.firestore {
 
 
       // ========================================
+      // COMERCIAL — PRODUTOS DE REVENDA
+      // ========================================
+
+      match /comercial_produtos/{produtoId} {
+
+        // Sem liberação explícita da família, os dados comerciais
+        // permanecem inacessíveis mesmo que a família use plano Full.
+        allow read: if comercialHabilitado(familiaId)
+          && podeLerFamilia(familiaId);
+
+        allow create, update, delete:
+          if comercialHabilitado(familiaId)
+          && podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
+      // COMERCIAL — MOVIMENTAÇÕES
+      // ========================================
+
+      match /comercial_movimentos/{movimentoId} {
+
+        allow read: if comercialHabilitado(familiaId)
+          && podeLerFamilia(familiaId);
+
+        allow create, update, delete:
+          if comercialHabilitado(familiaId)
+          && podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
       // TAREFAS DA FAMÍLIA
       // ========================================
 
@@ -376,16 +430,14 @@ service cloud.firestore {
 
 
     // ==========================================
-    // CONFIGURAÇÃO DO MÓDULO TAREFAS
+    // CONFIGURAÇÃO DOS MÓDULOS
     // ==========================================
 
     match /configuracoes/modulos {
 
-      // O aplicativo precisa consultar este documento para saber:
-      // - se Tarefas está liberado para todos;
-      // - qual é a família piloto.
-      //
-      // Somente usuários autenticados podem consultar.
+      // O aplicativo consulta este documento para decidir quais
+      // módulos estão liberados e, no Comercial, quais famílias foram
+      // explicitamente habilitadas.
       allow get: if autenticado();
 
       // Não permitimos listar toda a coleção por esta regra.
