@@ -86,7 +86,8 @@ jobs:
           grep -q 'comercial-produto-form.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
-          grep -q 'comercial-main.js?v=1.2.0' comercial-app.js
+          grep -q 'comercial-main.js?v=1.3.1' comercial-app.js
+          grep -q 'comercial-render.js?v=1.3.1' comercial-main.js
 
       - name: Confirmar cadastro e edição de produto
         run: |
@@ -106,6 +107,18 @@ jobs:
           grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
           grep -q 'tipo: "ajuste"' comercial-edicao-inline.js
           ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-campos-numericos.js comercial-produto-form.js comercial-edicao-inline.js comercial-compacto.js
+
+      - name: Confirmar Dashboard financeiro
+        run: |
+          grep -q 'Evolução do negócio' comercial-render.js
+          grep -q 'comercial-dashboard-grafico' comercial-render.js
+          grep -q 'Faturamento' comercial-render.js
+          grep -q 'Despesas' comercial-render.js
+          grep -q 'Resultado' comercial-render.js
+          grep -q 'kpiEstoqueCusto' comercial-render.js
+          grep -q 'kpiEstoqueVenda' comercial-render.js
+          grep -q 'closest(".kpi")?.remove()' comercial-render.js
+          ! grep -q '\$("dashboardProdutos").innerHTML = lista' comercial-render.js
 
       - name: Confirmar valores numéricos
         run: |
@@ -137,7 +150,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.43"' version.json
+          grep -q '"version": "1.0.44"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
