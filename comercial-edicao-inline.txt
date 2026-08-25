@@ -1,7 +1,7 @@
 // ============================================================
-// ListaLar Comercial — edição compacta e inline de produtos
+// ListaLar Comercial — edição de produto em modal compacto
 // Arquivo: comercial-edicao-inline.js
-// Versão: 1.2.2
+// Versão: 1.3.0
 // ============================================================
 
 import { doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -11,38 +11,175 @@ import {
   hoje, toast, escapar
 } from "./comercial-contexto.js?v=1.2.0";
 
+const UNIDADES = ["UN", "PCT", "CX", "KG", "G", "L", "ML"];
+
 const EDICAO = {
   produtoId: "",
-  card: null,
-  htmlOriginal: "",
-  salvando: false
+  salvando: false,
+  overflowAnterior: ""
 };
 
+function unidadeProduto(produto) {
+  const unidade = String(produto?.unidade || "UN").trim().toUpperCase();
+  return UNIDADES.includes(unidade) ? unidade : "UN";
+}
+
 function criarEstilos() {
-  if (document.getElementById("comercialEdicaoInlineEstilos")) return;
+  if (document.getElementById("comercialEdicaoModalEstilos")) return;
 
   const style = document.createElement("style");
-  style.id = "comercialEdicaoInlineEstilos";
+  style.id = "comercialEdicaoModalEstilos";
   style.textContent = `
     body .comercial-btn-editar{
       min-height:44px!important;
-      padding:10px 14px!important;
-      border-radius:11px!important;
+      padding:9px 14px!important;
+      border-radius:12px!important;
       font-size:14px!important;
       line-height:1!important;
       font-weight:900!important;
     }
-    .comercial-inline-edicao{display:grid;gap:12px}
-    .comercial-inline-nome{width:100%;min-height:46px;padding:10px 11px;border:1px solid #94a3b8;border-radius:11px;background:#fff;color:#172033;font:inherit;font-size:16px;font-weight:800}
-    .comercial-inline-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-    .comercial-inline-campo{display:grid;gap:5px;padding:10px;border:1px solid #dbe4ea;border-radius:11px;background:#fff}
-    .comercial-inline-campo label{font-size:13px;color:#64748b;font-weight:900}
-    .comercial-inline-campo input{width:100%;min-width:0;min-height:42px;padding:8px 9px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#172033;font:inherit;font-size:16px;font-weight:800}
-    .comercial-inline-acoes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .comercial-inline-acoes .btn{min-height:44px;font-size:14px}
-    @media(max-width:640px){
-      .comercial-inline-grid{grid-template-columns:1fr 1fr}
-      .comercial-inline-campo.estoque{grid-column:1/-1}
+
+    .comercial-produto-descricao{
+      display:block;
+      width:100%;
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      font-size:21px;
+      line-height:1.18;
+      font-weight:900;
+      color:#152239;
+    }
+    .comercial-produto-meta{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:6px;
+      color:#607086;
+      font-size:14px;
+      font-weight:850;
+      line-height:1.25;
+    }
+    .comercial-produto-meta b{color:#334155}
+    .comercial-produto-acoes{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-top:8px;
+    }
+
+    .comercial-modal-bg{
+      position:fixed;
+      inset:0;
+      z-index:10000;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(15,23,42,.58);
+      backdrop-filter:blur(4px);
+    }
+    .comercial-modal-box{
+      width:min(100%,520px);
+      max-height:calc(100dvh - 36px);
+      overflow:auto;
+      padding:20px;
+      border:1px solid rgba(15,118,110,.18);
+      border-radius:22px;
+      background:#fff;
+      color:#172033;
+      box-shadow:0 24px 70px rgba(15,23,42,.30);
+    }
+    .comercial-modal-box h2{
+      margin:0 0 18px;
+      font-size:27px;
+      line-height:1.1;
+      color:#152239;
+    }
+    .comercial-modal-campo{
+      display:grid;
+      gap:6px;
+      min-width:0;
+    }
+    .comercial-modal-campo>label{
+      color:#40536a;
+      font-size:15px;
+      line-height:1.15;
+      font-weight:900;
+    }
+    .comercial-modal-campo textarea,
+    .comercial-modal-campo input,
+    .comercial-modal-campo select{
+      width:100%;
+      min-width:0;
+      min-height:48px;
+      padding:10px 12px;
+      border:1.5px solid #cbd9df;
+      border-radius:13px;
+      outline:none;
+      background:#fff;
+      color:#172033;
+      font:inherit;
+      font-size:18px;
+      font-weight:800;
+    }
+    .comercial-modal-campo textarea{
+      min-height:76px;
+      max-height:220px;
+      resize:none;
+      overflow-y:auto;
+      line-height:1.35;
+      white-space:pre-wrap;
+    }
+    .comercial-modal-campo textarea:focus,
+    .comercial-modal-campo input:focus,
+    .comercial-modal-campo select:focus{
+      border-color:#0d9488;
+      box-shadow:0 0 0 4px rgba(13,148,136,.12);
+    }
+    .comercial-modal-descricao{margin-bottom:15px}
+    .comercial-modal-linha{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-bottom:15px;
+    }
+    .comercial-modal-acoes{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:4px;
+    }
+    .comercial-modal-acoes button{
+      min-height:50px;
+      border:0;
+      border-radius:14px;
+      padding:10px 12px;
+      font:inherit;
+      font-size:16px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .comercial-modal-cancelar{background:#e8eef3;color:#334155}
+    .comercial-modal-salvar{
+      background:linear-gradient(135deg,#0f766e,#0d9488);
+      color:#fff;
+      box-shadow:0 7px 16px rgba(13,148,136,.20);
+    }
+    .comercial-modal-acoes button:disabled{opacity:.6;cursor:wait}
+
+    @media(max-width:520px){
+      .comercial-modal-bg{padding:12px;align-items:center}
+      .comercial-modal-box{padding:17px 15px;border-radius:20px}
+      .comercial-modal-box h2{font-size:25px;margin-bottom:16px}
+      .comercial-modal-linha{gap:10px;margin-bottom:13px}
+      .comercial-modal-campo>label{font-size:14px}
+      .comercial-modal-campo textarea,
+      .comercial-modal-campo input,
+      .comercial-modal-campo select{font-size:17px;min-height:46px;padding:9px 10px}
+      .comercial-modal-campo textarea{min-height:72px}
+      .comercial-modal-acoes{gap:10px}
+      .comercial-modal-acoes button{min-height:48px;font-size:15px}
     }
   `;
   document.head.appendChild(style);
@@ -85,73 +222,106 @@ function configurarCampoDecimal(campo, { min = 0, step = 0.01, casas = 2 } = {})
   });
 }
 
-function restaurarCard() {
-  if (EDICAO.card?.isConnected && EDICAO.htmlOriginal) {
-    EDICAO.card.innerHTML = EDICAO.htmlOriginal;
-  }
+function ajustarTextarea(campo) {
+  if (!(campo instanceof HTMLTextAreaElement)) return;
+  campo.style.height = "auto";
+  campo.style.height = `${Math.min(Math.max(campo.scrollHeight, 72), 220)}px`;
+}
+
+function fecharModal() {
+  document.getElementById("comercialModalEditarProduto")?.remove();
+  document.body.style.overflow = EDICAO.overflowAnterior;
   EDICAO.produtoId = "";
-  EDICAO.card = null;
-  EDICAO.htmlOriginal = "";
   EDICAO.salvando = false;
 }
 
-function abrirEdicaoInline(botao) {
-  const id = String(botao?.dataset?.editarProduto || "");
-  const produto = produtoPorId(id);
-  const card = botao?.closest(".item");
-  if (!produto || !card) return;
-
-  if (EDICAO.card && EDICAO.card !== card) restaurarCard();
-
-  EDICAO.produtoId = id;
-  EDICAO.card = card;
-  EDICAO.htmlOriginal = card.innerHTML;
-
-  card.innerHTML = `
-    <div class="comercial-inline-edicao" data-inline-produto="${escapar(id)}">
-      <input class="comercial-inline-nome" data-inline-nome type="text" value="${escapar(produto.nome || "")}" aria-label="Nome do produto">
-      <div class="comercial-inline-grid">
-        <div class="comercial-inline-campo">
-          <label>Custo médio</label>
-          <input data-inline-custo type="number" inputmode="decimal" lang="pt-BR" min="0" step="0.01" value="${numeroParaInput(moeda(produto.custoMedio), 2)}">
-        </div>
-        <div class="comercial-inline-campo">
-          <label>Preço de venda</label>
-          <input data-inline-venda type="number" inputmode="decimal" lang="pt-BR" min="0" step="0.01" value="${numeroParaInput(moeda(produto.precoVenda), 2)}">
-        </div>
-        <div class="comercial-inline-campo estoque">
-          <label>Estoque atual</label>
-          <input data-inline-estoque type="number" inputmode="decimal" lang="pt-BR" min="0" step="0.001" value="${numeroParaInput(quantidade(produto.estoque), 3)}">
-        </div>
-      </div>
-      <div class="comercial-inline-acoes">
-        <button class="btn secondary" type="button" data-inline-cancelar>Cancelar</button>
-        <button class="btn" type="button" data-inline-salvar>Salvar</button>
-      </div>
-    </div>
-  `;
-
-  configurarCampoDecimal(card.querySelector("[data-inline-custo]"), { min: 0, step: 0.01, casas: 2 });
-  configurarCampoDecimal(card.querySelector("[data-inline-venda]"), { min: 0, step: 0.01, casas: 2 });
-  configurarCampoDecimal(card.querySelector("[data-inline-estoque]"), { min: 0, step: 0.001, casas: 3 });
-  card.querySelector("[data-inline-nome]")?.focus();
+function opcoesUnidade(selecionada) {
+  return UNIDADES.map((unidade) => (
+    `<option value="${unidade}"${unidade === selecionada ? " selected" : ""}>${unidade}</option>`
+  )).join("");
 }
 
-async function salvarEdicaoInline() {
-  if (EDICAO.salvando || !EDICAO.card || !EDICAO.produtoId) return;
+function abrirModalEdicao(botao) {
+  const id = String(botao?.dataset?.editarProduto || "");
+  const produto = produtoPorId(id);
+  if (!produto) return;
+
+  fecharModal();
+  EDICAO.produtoId = id;
+  EDICAO.overflowAnterior = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+
+  const unidade = unidadeProduto(produto);
+  const modal = document.createElement("div");
+  modal.id = "comercialModalEditarProduto";
+  modal.className = "comercial-modal-bg";
+  modal.innerHTML = `
+    <section class="comercial-modal-box" role="dialog" aria-modal="true" aria-labelledby="comercialModalEditarTitulo">
+      <h2 id="comercialModalEditarTitulo">Editar produto</h2>
+
+      <div class="comercial-modal-campo comercial-modal-descricao">
+        <label for="comercialEditarDescricao">Descrição</label>
+        <textarea id="comercialEditarDescricao" data-modal-descricao rows="2" aria-label="Descrição livre do produto">${escapar(produto.nome || "")}</textarea>
+      </div>
+
+      <div class="comercial-modal-linha">
+        <div class="comercial-modal-campo">
+          <label for="comercialEditarUnidade">Unidade</label>
+          <select id="comercialEditarUnidade" data-modal-unidade>${opcoesUnidade(unidade)}</select>
+        </div>
+        <div class="comercial-modal-campo">
+          <label for="comercialEditarEstoque">Estoque atual</label>
+          <input id="comercialEditarEstoque" data-modal-estoque type="number" inputmode="decimal" lang="pt-BR" min="0" step="0.001" value="${numeroParaInput(quantidade(produto.estoque), 3)}">
+        </div>
+      </div>
+
+      <div class="comercial-modal-linha">
+        <div class="comercial-modal-campo">
+          <label for="comercialEditarCusto">Custo médio</label>
+          <input id="comercialEditarCusto" data-modal-custo type="number" inputmode="decimal" lang="pt-BR" min="0" step="0.01" value="${numeroParaInput(moeda(produto.custoMedio), 2)}">
+        </div>
+        <div class="comercial-modal-campo">
+          <label for="comercialEditarVenda">Preço de venda</label>
+          <input id="comercialEditarVenda" data-modal-venda type="number" inputmode="decimal" lang="pt-BR" min="0" step="0.01" value="${numeroParaInput(moeda(produto.precoVenda), 2)}">
+        </div>
+      </div>
+
+      <div class="comercial-modal-acoes">
+        <button class="comercial-modal-cancelar" type="button" data-modal-cancelar>Cancelar</button>
+        <button class="comercial-modal-salvar" type="button" data-modal-salvar>Salvar</button>
+      </div>
+    </section>
+  `;
+
+  document.body.appendChild(modal);
+
+  const descricao = modal.querySelector("[data-modal-descricao]");
+  ajustarTextarea(descricao);
+  descricao?.addEventListener("input", () => ajustarTextarea(descricao));
+  configurarCampoDecimal(modal.querySelector("[data-modal-custo]"), { min: 0, step: 0.01, casas: 2 });
+  configurarCampoDecimal(modal.querySelector("[data-modal-venda]"), { min: 0, step: 0.01, casas: 2 });
+  configurarCampoDecimal(modal.querySelector("[data-modal-estoque]"), { min: 0, step: 0.001, casas: 3 });
+  descricao?.focus();
+}
+
+async function salvarModal() {
+  const modal = document.getElementById("comercialModalEditarProduto");
+  if (EDICAO.salvando || !modal || !EDICAO.produtoId) return;
 
   const atual = produtoPorId(EDICAO.produtoId);
   if (!atual) {
-    restaurarCard();
+    fecharModal();
     return toast("Produto não encontrado.", "erro");
   }
 
-  const nome = String(EDICAO.card.querySelector("[data-inline-nome]")?.value || "").trim();
-  const custo = numeroDigitado(EDICAO.card.querySelector("[data-inline-custo]")?.value);
-  const precoVenda = numeroDigitado(EDICAO.card.querySelector("[data-inline-venda]")?.value);
-  const estoqueAtual = numeroDigitado(EDICAO.card.querySelector("[data-inline-estoque]")?.value);
+  const nome = String(modal.querySelector("[data-modal-descricao]")?.value || "").trim();
+  const unidade = String(modal.querySelector("[data-modal-unidade]")?.value || "UN").trim().toUpperCase();
+  const custo = numeroDigitado(modal.querySelector("[data-modal-custo]")?.value);
+  const precoVenda = numeroDigitado(modal.querySelector("[data-modal-venda]")?.value);
+  const estoqueAtual = numeroDigitado(modal.querySelector("[data-modal-estoque]")?.value);
 
-  if (!nome) return toast("Informe o produto.", "erro");
+  if (!nome) return toast("Informe a descrição do produto.", "erro");
+  if (!UNIDADES.includes(unidade)) return toast("Selecione uma unidade válida.", "erro");
   if (![custo, precoVenda, estoqueAtual].every(Number.isFinite)) {
     return toast("Preencha custo, preço e estoque com números válidos.", "erro");
   }
@@ -159,11 +329,11 @@ async function salvarEdicaoInline() {
     return toast("Valores não podem ser negativos.", "erro");
   }
   if (ESTADO.produtos.some((p) => p.id !== EDICAO.produtoId && normalizarTexto(p.nome) === normalizarTexto(nome))) {
-    return toast("Já existe outro produto comercial com esse nome.", "erro");
+    return toast("Já existe outro produto comercial com essa descrição.", "erro");
   }
 
   EDICAO.salvando = true;
-  const botaoSalvar = EDICAO.card.querySelector("[data-inline-salvar]");
+  const botaoSalvar = modal.querySelector("[data-modal-salvar]");
   if (botaoSalvar) {
     botaoSalvar.disabled = true;
     botaoSalvar.textContent = "Salvando...";
@@ -182,6 +352,7 @@ async function salvarEdicaoInline() {
 
       tx.update(pRef, {
         nome,
+        unidade,
         custoMedio: moeda(custo),
         precoVenda: moeda(precoVenda),
         estoque: quantidade(estoqueAtual),
@@ -194,6 +365,7 @@ async function salvarEdicaoInline() {
           tipo: "ajuste",
           produtoId: EDICAO.produtoId,
           produtoNome: nome,
+          unidade,
           descricao: "Correção manual do cadastro",
           estoqueAnterior: quantidade(salvo.estoque),
           estoqueNovo: quantidade(estoqueAtual),
@@ -207,7 +379,7 @@ async function salvarEdicaoInline() {
       }
     });
 
-    restaurarCard();
+    fecharModal();
     toast(ajusteNecessario ? "Produto atualizado e ajuste registrado no Histórico." : "Produto atualizado.", "ok");
   } catch (erro) {
     console.error(erro);
@@ -228,24 +400,38 @@ function instalar() {
     if (editar) {
       evento.preventDefault();
       evento.stopImmediatePropagation();
-      abrirEdicaoInline(editar);
+      abrirModalEdicao(editar);
       return;
     }
 
-    if (evento.target.closest("[data-inline-cancelar]")) {
+    if (evento.target.closest("[data-modal-cancelar]")) {
       evento.preventDefault();
       evento.stopImmediatePropagation();
-      restaurarCard();
+      fecharModal();
       return;
     }
 
-    if (evento.target.closest("[data-inline-salvar]")) {
+    if (evento.target.closest("[data-modal-salvar]")) {
       evento.preventDefault();
       evento.stopImmediatePropagation();
-      salvarEdicaoInline();
+      salvarModal();
+      return;
+    }
+
+    const fundo = evento.target.closest(".comercial-modal-bg");
+    if (fundo && evento.target === fundo) {
+      evento.preventDefault();
+      fecharModal();
     }
   }, true);
+
+  document.addEventListener("keydown", (evento) => {
+    if (evento.key === "Escape" && document.getElementById("comercialModalEditarProduto")) {
+      evento.preventDefault();
+      fecharModal();
+    }
+  });
 }
 
 instalar();
-console.log("✅ Comercial 1.2.2: edição compacta no próprio card do produto");
+console.log("✅ Comercial 1.3.0: edição de produto em modal compacto com descrição livre e unidade");
