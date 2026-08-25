@@ -27,6 +27,8 @@ on:
       - 'comercial-campos-numericos.txt'
       - 'comercial-produto-form.js'
       - 'comercial-produto-form.txt'
+      - 'comercial-produtos-ui.js'
+      - 'comercial-produtos-ui.txt'
       - 'comercial-edicao-inline.js'
       - 'comercial-edicao-inline.txt'
       - 'comercial-compacto.js'
@@ -61,6 +63,7 @@ jobs:
           node --check comercial-dashboard-ui.js
           node --check comercial-campos-numericos.js
           node --check comercial-produto-form.js
+          node --check comercial-produtos-ui.js
           node --check comercial-edicao-inline.js
           node --check comercial-compacto.js
           node --check comercial-voz.js
@@ -80,6 +83,7 @@ jobs:
           cmp -s comercial-dashboard-ui.js comercial-dashboard-ui.txt
           cmp -s comercial-campos-numericos.js comercial-campos-numericos.txt
           cmp -s comercial-produto-form.js comercial-produto-form.txt
+          cmp -s comercial-produtos-ui.js comercial-produtos-ui.txt
           cmp -s comercial-edicao-inline.js comercial-edicao-inline.txt
           cmp -s comercial-compacto.js comercial-compacto.txt
           cmp -s comercial-ajuda.js comercial-ajuda.txt
@@ -93,6 +97,7 @@ jobs:
           grep -q 'comercial-campos-numericos.js?v=1.2.2' comercial-app.js
           grep -q 'comercial-dashboard-ui.js?v=1.3.5' comercial-app.js
           grep -q 'comercial-produto-form.js?v=1.3.0' comercial-app.js
+          grep -q 'comercial-produtos-ui.js?v=1.3.6' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
           grep -q 'comercial-main.js?v=1.3.4' comercial-app.js
@@ -109,6 +114,10 @@ jobs:
           grep -q 'prepararDescricaoLivre' comercial-produto-form.js
           grep -q 'produtoUnidade' comercial-produto-form.js
           grep -q 'textarea.style.cssText' comercial-produto-form.js
+          grep -q 'grid-template-areas:"titulo acao" "meta meta" "valores valores"' comercial-produtos-ui.js
+          grep -q '#listaProdutos .comercial-produto-acoes' comercial-produtos-ui.js
+          grep -q '#listaProdutos .values' comercial-produtos-ui.js
+          grep -q 'custo.textContent = "Custo unitário"' comercial-produtos-ui.js
           grep -q 'data-modal-descricao' comercial-edicao-inline.js
           grep -q 'data-modal-unidade' comercial-edicao-inline.js
           grep -q 'data-modal-salvar' comercial-edicao-inline.js
@@ -116,7 +125,7 @@ jobs:
           grep -q 'min-height:44px!important' comercial-edicao-inline.js
           grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
           grep -q 'tipo: "ajuste"' comercial-edicao-inline.js
-          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-venda-ui.js comercial-dashboard-ui.js comercial-campos-numericos.js comercial-produto-form.js comercial-edicao-inline.js comercial-compacto.js
+          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-venda-ui.js comercial-dashboard-ui.js comercial-campos-numericos.js comercial-produto-form.js comercial-produtos-ui.js comercial-edicao-inline.js comercial-compacto.js
 
       - name: Confirmar Dashboard financeiro
         run: |
@@ -199,7 +208,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.48"' version.json
+          grep -q '"version": "1.0.49"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
