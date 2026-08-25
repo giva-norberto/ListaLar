@@ -1,4 +1,4 @@
-// ListaLar Comercial 1.3.3 — inicialização, acesso e listeners
+// ListaLar Comercial 1.3.4 — inicialização, acesso e listeners
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -8,6 +8,7 @@ import {
   renderProdutos, renderMovimentos, renderPeriodos
 } from "./comercial-render.js?v=1.3.3";
 import { configurarEventosOperacoes } from "./comercial-operacoes.js?v=1.2.0";
+import { configurarVendaUi, normalizarSeletoresProdutos } from "./comercial-venda-ui.js?v=1.3.4";
 
 function iniciarListeners() {
   ESTADO.unsubscribeProdutos?.();
@@ -20,6 +21,7 @@ function iniciarListeners() {
     (snap) => {
       ESTADO.produtos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderProdutos();
+      normalizarSeletoresProdutos();
       status("");
     },
     (erro) => {
@@ -65,6 +67,7 @@ onAuthStateChanged(auth, async (usuario) => {
     $("btnAdminComercial").hidden = !ESTADO.adminSistema;
 
     configurarEventosOperacoes();
+    configurarVendaUi();
     renderPeriodos();
     iniciarListeners();
   } catch (erro) {
