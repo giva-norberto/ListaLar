@@ -169,6 +169,21 @@ jobs:
           grep -q 'selectAntigo.replaceWith(area)' comercial-dashboard-periodo.js
           ! grep -q '\$("dashboardProdutos").innerHTML = lista' comercial-render.js
 
+      - name: Confirmar estorno seguro de compra e venda
+        run: |
+          grep -q 'data-estornar-movimento' comercial-main.js
+          grep -q 'Estornar esta compra?' comercial-main.js
+          grep -q 'Estornar esta venda?' comercial-main.js
+          grep -q 'tipo: "estorno"' comercial-main.js
+          grep -q 'tipoOriginal: atual.tipo' comercial-main.js
+          grep -q 'estornado: true' comercial-main.js
+          grep -q 'estornadoEm: serverTimestamp()' comercial-main.js
+          grep -q 'aplicarRecalculoNaTransacao(tx, plano)' comercial-main.js
+          grep -q 'Compra estornada' comercial-main.js
+          grep -q 'Venda estornada' comercial-main.js
+          grep -q 'Histórico preservado' comercial-main.js
+          grep -q 'garantirAcoesMovimentos();' comercial-main.js
+
       - name: Confirmar Estoque compacto
         run: |
           grep -q 'comercial-estoque-resumo' comercial-render.js
@@ -246,7 +261,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.53"' version.json
+          grep -q '"version": "1.0.54"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
