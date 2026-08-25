@@ -1,4 +1,101 @@
-// ListaLar Comercial 1.3.7 — refinamento visual de Produtos
+// ListaLar Comercial 1.3.8 — refinamento visual e exclusão segura de Produtos
+import { updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  ESTADO, produtoPorId, produtoRef, quantidade, fmtNumero, toast
+} from "./comercial-contexto.js?v=1.2.0";
+
+const EXCLUINDO = new Set();
+
+function criarBotaoExcluir(id) {
+  const botao = document.createElement("button");
+  botao.className = "comercial-btn-excluir";
+  botao.type = "button";
+  botao.dataset.excluirProduto = id;
+  botao.title = "Excluir produto";
+  botao.setAttribute("aria-label", "Excluir produto");
+  botao.textContent = "🗑️";
+  return botao;
+}
+
+function produtosAtivos() {
+  return ESTADO.produtos.filter((p) => p.ativo !== false);
+}
+
+function limparProdutosInativosDaTela() {
+  const ativos = produtosAtivos();
+  const idsAtivos = new Set(ativos.map((p) => String(p.id)));
+  const nomesAtivos = new Set(ativos.map((p) => String(p.nome || "")));
+
+  const listaProdutos = document.getElementById("listaProdutos");
+  listaProdutos?.querySelectorAll(":scope > .item").forEach((item) => {
+    const id = String(item.querySelector("[data-editar-produto]")?.dataset?.editarProduto || "");
+    if (id && !idsAtivos.has(id)) item.remove();
+  });
+
+  const listaEstoque = document.getElementById("listaEstoque");
+  listaEstoque?.querySelectorAll(".comercial-estoque-card").forEach((card) => {
+    const nome = String(card.querySelector(".comercial-estoque-produto")?.textContent || "");
+    if (nome && !nomesAtivos.has(nome)) card.remove();
+  });
+
+  if (!ativos.length) {
+    if (listaProdutos) listaProdutos.innerHTML = `<div class="empty">Nenhum produto comercial cadastrado.</div>`;
+    if (listaEstoque) listaEstoque.innerHTML = `<div class="empty">Nenhum produto comercial cadastrado.</div>`;
+  }
+}
+
+export function garantirAcoesProdutos() {
+  limparProdutosInativosDaTela();
+
+  document.querySelectorAll("#listaProdutos > .item").forEach((item) => {
+    const editar = item.querySelector("[data-editar-produto]");
+    const id = String(editar?.dataset?.editarProduto || "");
+    if (!id || item.querySelector("[data-excluir-produto]")) return;
+
+    const acoes = item.querySelector(".comercial-produto-acoes");
+    if (!acoes) return;
+    acoes.appendChild(criarBotaoExcluir(id));
+  });
+}
+
+async function excluirProduto(botao) {
+  const id = String(botao?.dataset?.excluirProduto || "");
+  const produto = produtoPorId(id);
+  if (!produto || produto.ativo === false || EXCLUINDO.has(id)) return;
+
+  const saldo = quantidade(produto.estoque);
+  if (saldo > 0) {
+    toast(`Zere o estoque antes de excluir. Saldo atual: ${fmtNumero(saldo)}.`, "erro");
+    return;
+  }
+
+  const confirmado = window.confirm(
+    `Excluir “${produto.nome}”?\n\nO produto sairá de Produtos, Compras, Vendas e Estoque. O histórico será preservado.`
+  );
+  if (!confirmado) return;
+
+  EXCLUINDO.add(id);
+  botao.disabled = true;
+  botao.setAttribute("aria-busy", "true");
+
+  try {
+    await updateDoc(produtoRef(id), {
+      ativo: false,
+      excluidoPor: ESTADO.usuario?.uid || "",
+      excluidoEm: serverTimestamp(),
+      atualizadoPor: ESTADO.usuario?.uid || "",
+      atualizadoEm: serverTimestamp()
+    });
+    toast("Produto excluído. Histórico preservado.", "ok");
+  } catch (erro) {
+    console.error(erro);
+    toast(erro?.message || "Não foi possível excluir o produto.", "erro");
+    botao.disabled = false;
+    botao.removeAttribute("aria-busy");
+  } finally {
+    EXCLUINDO.delete(id);
+  }
+}
 
 function instalarProdutosUi() {
   if (document.getElementById("comercialProdutosUiEstilos")) return;
@@ -42,7 +139,7 @@ function instalarProdutosUi() {
 
     #listaProdutos>.item{
       display:grid!important;
-      grid-template-columns:minmax(0,1fr) 82px!important;
+      grid-template-columns:minmax(0,1fr) 136px!important;
       grid-template-areas:"titulo acao" "meta meta" "valores valores"!important;
       gap:10px 12px!important;
       padding:14px!important;
@@ -69,11 +166,15 @@ function instalarProdutosUi() {
       grid-area:acao;
       align-self:start;
       justify-self:end;
-      width:82px;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:flex-end!important;
+      gap:7px!important;
+      width:136px;
       margin:0!important;
     }
     #listaProdutos .comercial-produto-acoes .comercial-btn-editar{
-      width:82px!important;
+      width:84px!important;
       min-height:44px!important;
       padding:9px 10px!important;
       border:1px solid #cbd5e1!important;
@@ -84,6 +185,21 @@ function instalarProdutosUi() {
       font-weight:900!important;
       box-shadow:none!important;
     }
+    #listaProdutos .comercial-btn-excluir{
+      flex:0 0 44px;
+      width:44px;
+      height:44px;
+      padding:0;
+      border:1px solid #fecaca;
+      border-radius:12px;
+      background:#fff1f2;
+      color:#b91c1c;
+      font-size:19px;
+      line-height:1;
+      cursor:pointer;
+      box-shadow:none;
+    }
+    #listaProdutos .comercial-btn-excluir:disabled{opacity:.55;cursor:wait}
     #listaProdutos .comercial-produto-meta{
       grid-area:meta;
       display:flex!important;
@@ -149,7 +265,7 @@ function instalarProdutosUi() {
       #formProduto{gap:11px!important}
       #formProduto>.field label{font-size:16px!important}
       #listaProdutos>.item{
-        grid-template-columns:minmax(0,1fr) 76px!important;
+        grid-template-columns:minmax(0,1fr) 128px!important;
         padding:13px!important;
         gap:9px 10px!important;
       }
@@ -158,12 +274,13 @@ function instalarProdutosUi() {
         line-height:1.15!important;
         padding-top:4px;
       }
-      #listaProdutos .comercial-produto-acoes{width:76px}
+      #listaProdutos .comercial-produto-acoes{width:128px;gap:6px!important}
       #listaProdutos .comercial-produto-acoes .comercial-btn-editar{
-        width:76px!important;
+        width:78px!important;
         padding:9px 8px!important;
         font-size:14px!important;
       }
+      #listaProdutos .comercial-btn-excluir{flex-basis:44px;width:44px;height:44px}
       #listaProdutos .comercial-produto-meta{font-size:14px!important}
       #listaProdutos .comercial-produto-meta>span:not([aria-hidden="true"]){padding:5px 9px!important;min-height:30px!important}
       #listaProdutos .values{gap:7px!important}
@@ -176,7 +293,17 @@ function instalarProdutosUi() {
 
   const custo = document.getElementById("produtoCusto")?.closest(".field")?.querySelector("label");
   if (custo) custo.textContent = "Custo unitário";
+
+  document.addEventListener("click", (evento) => {
+    const botao = evento.target.closest("[data-excluir-produto]");
+    if (!botao) return;
+    evento.preventDefault();
+    evento.stopPropagation();
+    excluirProduto(botao);
+  });
+
+  garantirAcoesProdutos();
 }
 
 instalarProdutosUi();
-console.log("✅ Comercial 1.3.7: Produtos com títulos maiores, unidade oculta e descrição protegida do botão Editar");
+console.log("✅ Comercial 1.3.8: Produtos com lixeira segura e histórico preservado");
