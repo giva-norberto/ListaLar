@@ -86,7 +86,7 @@ jobs:
           grep -q 'comercial_produtos' comercial-contexto.js
           grep -q 'comercial_movimentos' comercial-contexto.js
           grep -q 'Módulos → Comercial' admin-comercial.html
-          grep -q 'comercial-campos-numericos.js?v=1.2.1' comercial-app.js
+          grep -q 'comercial-campos-numericos.js?v=1.2.2' comercial-app.js
           grep -q 'comercial-produto-form.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
@@ -157,14 +157,18 @@ jobs:
           grep -q 'fmtCampoMoeda(p.precoVenda)' comercial-operacoes.js
           ! grep -q 'estoque ${fmtNumero' comercial-venda-ui.js
 
-      - name: Confirmar valores numéricos
+      - name: Confirmar valores numéricos com vírgula
         run: |
-          grep -q 'type="number"' comercial.html
           grep -q 'inputmode="decimal"' comercial.html
-          grep -q 'HTMLInputElement.prototype' comercial-campos-numericos.js
-          grep -q 'campo.type = "number"' comercial-campos-numericos.js
+          grep -q 'campo.type = "text"' comercial-campos-numericos.js
+          grep -q 'campo.inputMode = "decimal"' comercial-campos-numericos.js
+          grep -q 'limitarCasasDigitadas' comercial-campos-numericos.js
+          grep -q 'dataset.decimalPtBr' comercial-campos-numericos.js
+          grep -q 'pattern", "\[0-9.,\]\*"' comercial-campos-numericos.js
           grep -q 'numeroDigitado' comercial-produto-form.js
           grep -q 'numeroDigitado' comercial-edicao-inline.js
+          ! grep -q 'HTMLInputElement.prototype' comercial-campos-numericos.js
+          ! grep -q 'campo.type = "number"' comercial-campos-numericos.js
 
       - name: Confirmar visual limpo e compacto do Comercial
         run: |
@@ -187,7 +191,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.47"' version.json
+          grep -q '"version": "1.0.48"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
