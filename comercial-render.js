@@ -1,4 +1,4 @@
-// ListaLar Comercial 1.3.2 — renderização, navegação, estoque compacto e gráfico do Dashboard
+// ListaLar Comercial 1.3.3 — renderização, navegação, estoque compacto e gráfico do Dashboard
 import {
   $, ESTADO, produtoPorId, escapar, moeda,
   fmtMoeda, fmtNumero, competenciaAtual, competenciaMovimento, rotuloCompetencia
@@ -75,6 +75,32 @@ function criarEstilosEstoque() {
   style.id = "comercialEstoqueCompactoEstilos";
   style.textContent = `
     #listaEstoque{gap:10px}
+    .comercial-estoque-resumo{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      margin-bottom:12px;
+      padding:15px 17px;
+      border:1.5px solid #bfdbfe;
+      border-left:7px solid #2563eb;
+      border-radius:17px;
+      background:linear-gradient(135deg,#eff6ff 0%,#ffffff 82%);
+      box-shadow:0 6px 16px rgba(15,23,42,.06);
+    }
+    .comercial-estoque-resumo span{
+      color:#475569;
+      font-size:16px;
+      line-height:1.2;
+      font-weight:900;
+    }
+    .comercial-estoque-resumo strong{
+      color:#1d4ed8;
+      font-size:25px;
+      line-height:1.05;
+      font-weight:950;
+      white-space:nowrap;
+    }
     .comercial-estoque-card{
       position:relative;
       overflow:hidden;
@@ -113,6 +139,9 @@ function criarEstilosEstoque() {
     .comercial-estoque-card.baixo .comercial-estoque-qtd{color:#b45309}
     .comercial-estoque-card.zerado .comercial-estoque-qtd{color:#b91c1c}
     @media(max-width:760px){
+      .comercial-estoque-resumo{padding:14px 15px;border-radius:16px}
+      .comercial-estoque-resumo span{font-size:15px}
+      .comercial-estoque-resumo strong{font-size:23px}
       .comercial-estoque-card{padding:14px 14px 14px 16px;border-radius:16px}
       .comercial-estoque-produto{font-size:19px}
       .comercial-estoque-qtd{font-size:23px}
@@ -124,11 +153,10 @@ function criarEstilosEstoque() {
 function htmlEstoque(p) {
   const estoque = Number(p.estoque) || 0;
   const classe = estoque <= 0 ? "zerado" : estoque <= 3 ? "baixo" : "ok";
-  const unidade = unidadeProduto(p);
 
   return `<article class="comercial-estoque-card ${classe}">
     <div class="comercial-estoque-produto">${escapar(p.nome)}</div>
-    <div class="comercial-estoque-qtd">Estoque: ${fmtNumero(estoque)} ${escapar(unidade)}</div>
+    <div class="comercial-estoque-qtd">Qtd: ${fmtNumero(estoque)}</div>
   </article>`;
 }
 
@@ -136,9 +164,12 @@ export function renderProdutos() {
   const lista = ESTADO.produtos.slice().sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
   const html = lista.length ? lista.map(htmlProduto).join("") : `<div class="empty">Nenhum produto comercial cadastrado.</div>`;
   const htmlEstoqueLista = lista.length ? lista.map(htmlEstoque).join("") : `<div class="empty">Nenhum produto comercial cadastrado.</div>`;
+  const valorEstoqueCusto = lista.reduce((total, p) => total + (Number(p.estoque) || 0) * moeda(p.custoMedio), 0);
   $("listaProdutos").innerHTML = html;
   criarEstilosEstoque();
   $("listaEstoque").innerHTML = htmlEstoqueLista;
+  const resumoEstoque = $("estoqueValorCusto");
+  if (resumoEstoque) resumoEstoque.textContent = fmtMoeda(valorEstoqueCusto);
   renderSelectProdutos();
   renderDashboard();
 }
