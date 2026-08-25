@@ -1,6 +1,6 @@
-// ListaLar Comercial 1.3.9 — filtro do Dashboard por intervalo de datas
+// ListaLar Comercial 1.3.12 — filtro do Dashboard por intervalo de datas e custo líquido
 import {
-  $, ESTADO, moeda, fmtMoeda, escapar, hoje, dataValida
+  $, ESTADO, moeda, quantidade, fmtMoeda, escapar, hoje, dataValida
 } from "./comercial-contexto.js?v=1.2.0";
 
 const ID_AREA = "periodoDashboardDatas";
@@ -37,6 +37,12 @@ function noPeriodo(movimento) {
   const data = dataMovimento(movimento);
   if (!data) return false;
   return data >= ESTADO.dataInicioDashboard && data <= ESTADO.dataFimDashboard;
+}
+
+function valorCompra(movimento) {
+  const registrado = moeda(movimento?.valorTotal);
+  if (registrado) return registrado;
+  return moeda(quantidade(movimento?.quantidade) * moeda(movimento?.custoUnitario));
 }
 
 function formatarDataCurta(data) {
@@ -175,15 +181,18 @@ function dadosGrafico(movimentos) {
     const chave = dataMovimento(m);
     if (!chave) return;
     if (!grupos.has(chave)) {
-      grupos.set(chave, { chave, faturamento: 0, custo: 0, despesas: 0 });
+      grupos.set(chave, { chave, faturamento: 0, custoVendido: 0, custoLiquido: 0, despesas: 0 });
     }
 
     const grupo = grupos.get(chave);
     if (m.tipo === "venda") {
       grupo.faturamento += moeda(m.receita);
-      grupo.custo += moeda(m.custoTotal);
+      grupo.custoVendido += moeda(m.custoTotal);
+    } else if (m.tipo === "compra") {
+      grupo.custoLiquido += valorCompra(m);
     } else if (m.tipo === "despesa") {
       grupo.despesas += moeda(m.valor);
+      grupo.custoLiquido += moeda(m.valor);
     }
   });
 
@@ -191,7 +200,7 @@ function dadosGrafico(movimentos) {
     .sort((a, b) => a.chave.localeCompare(b.chave))
     .map((g) => ({
       ...g,
-      resultado: moeda(g.faturamento - g.custo - g.despesas),
+      resultado: moeda(g.faturamento - g.custoVendido - g.despesas),
       rotulo: formatarDataCurta(g.chave)
     }));
 }
@@ -213,7 +222,7 @@ function circulosSerie(dados, campo, x, y, cor) {
 
 function htmlGrafico(dados) {
   if (!dados.length) {
-    return `<div class="comercial-grafico-vazio">Ainda não há vendas ou despesas nas datas selecionadas.</div>`;
+    return `<div class="comercial-grafico-vazio">Ainda não há vendas, compras ou despesas nas datas selecionadas.</div>`;
   }
 
   const largura = 900;
@@ -224,7 +233,7 @@ function htmlGrafico(dados) {
   const fundo = 48;
   const larguraUtil = largura - esquerda - direita;
   const alturaUtil = altura - topo - fundo;
-  const valores = dados.flatMap((d) => [d.faturamento, d.despesas, d.resultado]);
+  const valores = dados.flatMap((d) => [d.faturamento, d.custoLiquido, d.resultado]);
   let minimo = Math.min(0, ...valores);
   let maximo = Math.max(0, ...valores);
   if (maximo === minimo) maximo = minimo + 1;
@@ -252,18 +261,18 @@ function htmlGrafico(dados) {
   return `
     <div class="comercial-grafico-legenda" aria-label="Legenda do gráfico">
       <span><i style="background:#2563eb"></i>Faturamento</span>
-      <span><i style="background:#e11d48"></i>Despesas</span>
+      <span><i style="background:#e11d48"></i>Custo líquido</span>
       <span><i style="background:#16a34a"></i>Resultado</span>
     </div>
     <div class="comercial-grafico-wrap">
-      <svg viewBox="0 0 ${largura} ${altura}" role="img" aria-label="Gráfico diário de faturamento, despesas e resultado">
+      <svg viewBox="0 0 ${largura} ${altura}" role="img" aria-label="Gráfico diário de faturamento, custo líquido e resultado">
         ${grade}
         <line x1="${esquerda}" y1="${zeroY}" x2="${largura - direita}" y2="${zeroY}" stroke="#94a3b8" stroke-width="1.5"/>
         <polyline points="${pontosSerie(dados, "faturamento", x, y)}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-        <polyline points="${pontosSerie(dados, "despesas", x, y)}" fill="none" stroke="#e11d48" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="${pontosSerie(dados, "custoLiquido", x, y)}" fill="none" stroke="#e11d48" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         <polyline points="${pontosSerie(dados, "resultado", x, y)}" fill="none" stroke="#16a34a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         ${circulosSerie(dados, "faturamento", x, y, "#2563eb")}
-        ${circulosSerie(dados, "despesas", x, y, "#e11d48")}
+        ${circulosSerie(dados, "custoLiquido", x, y, "#e11d48")}
         ${circulosSerie(dados, "resultado", x, y, "#16a34a")}
         ${rotulos}
       </svg>
@@ -276,18 +285,21 @@ export function renderDashboardPorDatas() {
 
   const movs = ESTADO.movimentos.filter(noPeriodo);
   const vendas = movs.filter((m) => m.tipo === "venda");
+  const compras = movs.filter((m) => m.tipo === "compra");
   const despesas = movs.filter((m) => m.tipo === "despesa");
   const receita = vendas.reduce((s, m) => s + moeda(m.receita), 0);
-  const custo = vendas.reduce((s, m) => s + moeda(m.custoTotal), 0);
-  const lucro = moeda(receita - custo);
+  const custoVendido = vendas.reduce((s, m) => s + moeda(m.custoTotal), 0);
+  const lucro = moeda(receita - custoVendido);
   const desp = despesas.reduce((s, m) => s + moeda(m.valor), 0);
+  const totalCompras = compras.reduce((s, m) => s + valorCompra(m), 0);
+  const custoLiquido = moeda(totalCompras + desp);
   const resultado = moeda(lucro - desp);
   const margem = receita > 0 ? (lucro / receita) * 100 : 0;
 
   if ($("kpiReceita")) $("kpiReceita").textContent = fmtMoeda(receita);
-  if ($("kpiCusto")) $("kpiCusto").textContent = fmtMoeda(custo);
+  if ($("kpiCusto")) $("kpiCusto").textContent = fmtMoeda(custoVendido);
   if ($("kpiLucro")) $("kpiLucro").textContent = fmtMoeda(lucro);
-  if ($("kpiDespesas")) $("kpiDespesas").textContent = fmtMoeda(desp);
+  if ($("kpiDespesas")) $("kpiDespesas").textContent = fmtMoeda(custoLiquido);
   if ($("kpiResultado")) $("kpiResultado").textContent = fmtMoeda(resultado);
   if ($("kpiMargem")) $("kpiMargem").textContent = `${margem.toFixed(1)}%`;
   $("cardResultado")?.classList.toggle("neg", resultado < 0);

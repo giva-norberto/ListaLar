@@ -1,5 +1,5 @@
 {
-  "version": "1.0.55",
+  "version": "1.0.56",
   "updatedAt": "2026-08-25",
-  "notes": "Comercial 1.3.11: estorno seguro de compras, vendas e despesas com Historico preservado e fechamento recalculado"
+  "notes": "Comercial 1.3.12: custo liquido no Dashboard e relatorios de vendas e compras por periodo com exportacao CSV"
 }
