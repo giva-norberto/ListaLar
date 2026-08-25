@@ -1,4 +1,4 @@
-// ListaLar Comercial 1.3.1 — renderização, navegação e gráfico do Dashboard
+// ListaLar Comercial 1.3.2 — renderização, navegação, estoque compacto e gráfico do Dashboard
 import {
   $, ESTADO, produtoPorId, escapar, moeda,
   fmtMoeda, fmtNumero, competenciaAtual, competenciaMovimento, rotuloCompetencia
@@ -69,11 +69,76 @@ function htmlProduto(p) {
   </article>`;
 }
 
+function criarEstilosEstoque() {
+  if ($("comercialEstoqueCompactoEstilos")) return;
+  const style = document.createElement("style");
+  style.id = "comercialEstoqueCompactoEstilos";
+  style.textContent = `
+    #listaEstoque{gap:10px}
+    .comercial-estoque-card{
+      position:relative;
+      overflow:hidden;
+      display:grid;
+      gap:7px;
+      padding:15px 16px 15px 18px;
+      border:1.5px solid #bbf7d0;
+      border-left:7px solid #16a34a;
+      border-radius:17px;
+      background:linear-gradient(135deg,#f0fdf4 0%,#ffffff 78%);
+      box-shadow:0 6px 16px rgba(15,23,42,.06);
+    }
+    .comercial-estoque-card.baixo{
+      border-color:#fed7aa;
+      border-left-color:#f59e0b;
+      background:linear-gradient(135deg,#fff7ed 0%,#ffffff 78%);
+    }
+    .comercial-estoque-card.zerado{
+      border-color:#fecaca;
+      border-left-color:#dc2626;
+      background:linear-gradient(135deg,#fff1f2 0%,#ffffff 78%);
+    }
+    .comercial-estoque-produto{
+      color:#172033;
+      font-size:20px;
+      line-height:1.18;
+      font-weight:850;
+      overflow-wrap:anywhere;
+    }
+    .comercial-estoque-qtd{
+      color:#166534;
+      font-size:24px;
+      line-height:1.08;
+      font-weight:950;
+    }
+    .comercial-estoque-card.baixo .comercial-estoque-qtd{color:#b45309}
+    .comercial-estoque-card.zerado .comercial-estoque-qtd{color:#b91c1c}
+    @media(max-width:760px){
+      .comercial-estoque-card{padding:14px 14px 14px 16px;border-radius:16px}
+      .comercial-estoque-produto{font-size:19px}
+      .comercial-estoque-qtd{font-size:23px}
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function htmlEstoque(p) {
+  const estoque = Number(p.estoque) || 0;
+  const classe = estoque <= 0 ? "zerado" : estoque <= 3 ? "baixo" : "ok";
+  const unidade = unidadeProduto(p);
+
+  return `<article class="comercial-estoque-card ${classe}">
+    <div class="comercial-estoque-produto">${escapar(p.nome)}</div>
+    <div class="comercial-estoque-qtd">Estoque: ${fmtNumero(estoque)} ${escapar(unidade)}</div>
+  </article>`;
+}
+
 export function renderProdutos() {
   const lista = ESTADO.produtos.slice().sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
   const html = lista.length ? lista.map(htmlProduto).join("") : `<div class="empty">Nenhum produto comercial cadastrado.</div>`;
+  const htmlEstoqueLista = lista.length ? lista.map(htmlEstoque).join("") : `<div class="empty">Nenhum produto comercial cadastrado.</div>`;
   $("listaProdutos").innerHTML = html;
-  $("listaEstoque").innerHTML = html;
+  criarEstilosEstoque();
+  $("listaEstoque").innerHTML = htmlEstoqueLista;
   renderSelectProdutos();
   renderDashboard();
 }
