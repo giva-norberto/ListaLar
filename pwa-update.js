@@ -188,6 +188,26 @@
     }
   }
 
+  async function limparCachesListaLar() {
+    if (!('caches' in window)) return;
+
+    const chaves = await caches.keys();
+    await Promise.all(
+      chaves
+        .filter((chave) => chave.startsWith('listalar-'))
+        .map((chave) => caches.delete(chave))
+    );
+  }
+
+  function recarregarComVersao() {
+    const url = new URL(window.location.href);
+    url.searchParams.set(
+      'v',
+      versaoDisponivel || String(Date.now())
+    );
+    window.location.replace(url.href);
+  }
+
   async function buscarVersao() {
     const resposta = await fetch(
       `${URL_VERSAO}?t=${Date.now()}`,
@@ -363,6 +383,8 @@
         return;
       }
 
+      await limparCachesListaLar();
+
       if (versaoDisponivel) {
         localStorage.setItem(
           CHAVE_VERSAO,
@@ -370,7 +392,7 @@
         );
       }
 
-      window.location.reload();
+      recarregarComVersao();
     } catch (erro) {
       atualizando = false;
 
@@ -390,7 +412,7 @@
 
   navigator.serviceWorker?.addEventListener(
     'controllerchange',
-    () => {
+    async () => {
       if (recarregou) return;
 
       recarregou = true;
@@ -402,7 +424,13 @@
         );
       }
 
-      window.location.reload();
+      try {
+        await limparCachesListaLar();
+      } catch (erro) {
+        console.warn('Não foi possível limpar o cache antigo:', erro);
+      }
+
+      recarregarComVersao();
     }
   );
 
@@ -436,10 +464,8 @@
     console.warn('Proteção do login Google indisponível:', erro);
   });
 
-  // O carregador de atualização já é servido com revalidação obrigatória.
-  // Usamos esse ponto somente para iniciar o módulo Comercial opcional,
-  // sem tocar no menu, estoque ou código do módulo Gastos existente.
-  import('./comercial.js?v=1.0.0').catch((erro) => {
+  // O carregador de atualização também força a versão do módulo Comercial.
+  import('./comercial.js?v=1.0.61').catch((erro) => {
     console.warn('Módulo Comercial indisponível:', erro);
   });
 })();
