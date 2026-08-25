@@ -97,14 +97,15 @@ jobs:
           grep -q 'comercial-campos-numericos.js?v=1.2.2' comercial-app.js
           grep -q 'comercial-dashboard-ui.js?v=1.3.5' comercial-app.js
           grep -q 'comercial-produto-form.js?v=1.3.0' comercial-app.js
-          grep -q 'comercial-produtos-ui.js?v=1.3.7' comercial-app.js
+          grep -q 'comercial-produtos-ui.js?v=1.3.8' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
-          grep -q 'comercial-main.js?v=1.3.4' comercial-app.js
+          grep -q 'comercial-main.js?v=1.3.8' comercial-app.js
           grep -q 'comercial-render.js?v=1.3.3' comercial-main.js
           grep -q 'comercial-venda-ui.js?v=1.3.4' comercial-main.js
+          grep -q 'comercial-produtos-ui.js?v=1.3.8' comercial-main.js
 
-      - name: Confirmar cadastro e edição de produto
+      - name: Confirmar cadastro, edição e exclusão de produto
         run: |
           grep -q 'data-editar-produto' comercial-render.js
           grep -q 'data-editar-movimento' comercial-render.js
@@ -114,7 +115,7 @@ jobs:
           grep -q 'prepararDescricaoLivre' comercial-produto-form.js
           grep -q 'produtoUnidade' comercial-produto-form.js
           grep -q 'textarea.style.cssText' comercial-produto-form.js
-          grep -q 'grid-template-columns:minmax(0,1fr) 82px' comercial-produtos-ui.js
+          grep -q 'grid-template-columns:minmax(0,1fr) 136px' comercial-produtos-ui.js
           grep -q 'grid-template-areas:"titulo acao" "meta meta" "valores valores"' comercial-produtos-ui.js
           grep -q '#listaProdutos .comercial-produto-acoes' comercial-produtos-ui.js
           grep -q '#listaProdutos .values' comercial-produtos-ui.js
@@ -123,6 +124,12 @@ jobs:
           grep -q 'font-size:15px!important' comercial-produtos-ui.js
           grep -q 'word-break:break-word' comercial-produtos-ui.js
           grep -q 'custo.textContent = "Custo unitário"' comercial-produtos-ui.js
+          grep -q 'data-excluir-produto' comercial-produtos-ui.js
+          grep -q 'comercial-btn-excluir' comercial-produtos-ui.js
+          grep -q 'Zere o estoque antes de excluir' comercial-produtos-ui.js
+          grep -q 'ativo: false' comercial-produtos-ui.js
+          grep -q 'excluidoEm: serverTimestamp()' comercial-produtos-ui.js
+          grep -q 'garantirAcoesProdutos();' comercial-main.js
           grep -q 'data-modal-descricao' comercial-edicao-inline.js
           grep -q 'data-modal-unidade' comercial-edicao-inline.js
           grep -q 'data-modal-salvar' comercial-edicao-inline.js
@@ -213,7 +220,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.50"' version.json
+          grep -q '"version": "1.0.51"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
