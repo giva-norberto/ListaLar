@@ -1,4 +1,4 @@
-// ListaLar Comercial 1.3.1 — inicialização, acesso e listeners
+// ListaLar Comercial 1.3.3 — inicialização, acesso e listeners
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -6,7 +6,7 @@ import {
 } from "./comercial-contexto.js?v=1.2.0";
 import {
   renderProdutos, renderMovimentos, renderPeriodos
-} from "./comercial-render.js?v=1.3.1";
+} from "./comercial-render.js?v=1.3.3";
 import { configurarEventosOperacoes } from "./comercial-operacoes.js?v=1.2.0";
 
 function iniciarListeners() {
