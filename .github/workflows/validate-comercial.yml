@@ -115,7 +115,7 @@ jobs:
           grep -q 'comercial-produtos-ui.js?v=1.3.8' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
-          grep -q 'comercial-menu-ui.js?v=1.3.13' comercial-app.js
+          grep -q 'comercial-menu-ui.js?v=1.3.14' comercial-app.js
           grep -q 'comercial-relatorios.js?v=1.3.12' comercial-app.js
           grep -q 'comercial-main.js?v=1.3.11' comercial-app.js
           grep -q 'comercial-render.js?v=1.3.3' comercial-main.js
@@ -204,14 +204,20 @@ jobs:
           grep -q 'new Blob' comercial-relatorios.js
           grep -q 'text/csv;charset=utf-8' comercial-relatorios.js
 
-      - name: Confirmar menu Comercial responsivo
+      - name: Confirmar menu e telas mobile estáveis
         run: |
           grep -q '@media (min-width: 900px)' comercial-menu-ui.js
-          grep -q 'overflow-x: hidden !important' comercial-menu-ui.js
           grep -q 'flex: 1 1 0 !important' comercial-menu-ui.js
-          grep -q 'white-space: nowrap !important' comercial-menu-ui.js
           grep -q '@media (max-width: 899px)' comercial-menu-ui.js
           grep -q 'overflow-x: auto !important' comercial-menu-ui.js
+          grep -q 'html, body' comercial-menu-ui.js
+          grep -q 'overflow-x: hidden' comercial-menu-ui.js
+          grep -q '#periodoDashboardDatas' comercial-menu-ui.js
+          grep -q 'grid-template-columns: 1fr !important' comercial-menu-ui.js
+          grep -q '.comercial-grafico-wrap' comercial-menu-ui.js
+          grep -q 'overflow-x: hidden !important' comercial-menu-ui.js
+          grep -q '#tela-relatorios .comercial-relatorio-filtros' comercial-menu-ui.js
+          grep -q 'overscroll-behavior-x: contain' comercial-menu-ui.js
 
       - name: Confirmar estorno seguro de compra, venda e despesa
         run: |
@@ -307,7 +313,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.57"' version.json
+          grep -q '"version": "1.0.58"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
