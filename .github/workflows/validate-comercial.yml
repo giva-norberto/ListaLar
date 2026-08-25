@@ -120,6 +120,18 @@ jobs:
           grep -q 'closest(".kpi")?.remove()' comercial-render.js
           ! grep -q '\$("dashboardProdutos").innerHTML = lista' comercial-render.js
 
+      - name: Confirmar Estoque compacto
+        run: |
+          grep -q 'comercial-estoque-card' comercial-render.js
+          grep -q 'comercial-estoque-produto' comercial-render.js
+          grep -q 'comercial-estoque-qtd' comercial-render.js
+          grep -q 'Estoque: ${fmtNumero(estoque)}' comercial-render.js
+          grep -q 'estoque <= 0 ? "zerado" : estoque <= 3 ? "baixo" : "ok"' comercial-render.js
+          grep -q 'border-left:7px solid #16a34a' comercial-render.js
+          grep -q 'border-left-color:#f59e0b' comercial-render.js
+          grep -q 'border-left-color:#dc2626' comercial-render.js
+          grep -q '\$("listaEstoque").innerHTML = htmlEstoqueLista' comercial-render.js
+
       - name: Confirmar valores numéricos
         run: |
           grep -q 'type="number"' comercial.html
@@ -150,7 +162,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.44"' version.json
+          grep -q '"version": "1.0.45"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
