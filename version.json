@@ -1,5 +1,5 @@
 {
-  "version": "1.0.56",
+  "version": "1.0.57",
   "updatedAt": "2026-08-25",
-  "notes": "Comercial 1.3.12: custo liquido no Dashboard e relatorios de vendas e compras por periodo com exportacao CSV"
+  "notes": "Comercial 1.3.13: menu responsivo ajustado para exibir Relatorios e Historico completos no desktop"
 }
