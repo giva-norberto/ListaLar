@@ -21,6 +21,8 @@ on:
       - 'comercial-main.txt'
       - 'comercial-campos-numericos.js'
       - 'comercial-campos-numericos.txt'
+      - 'comercial-produto-form.js'
+      - 'comercial-produto-form.txt'
       - 'comercial-edicao-inline.js'
       - 'comercial-edicao-inline.txt'
       - 'comercial-compacto.js'
@@ -52,6 +54,7 @@ jobs:
           node --check comercial-operacoes.js
           node --check comercial-main.js
           node --check comercial-campos-numericos.js
+          node --check comercial-produto-form.js
           node --check comercial-edicao-inline.js
           node --check comercial-compacto.js
           node --check comercial-voz.js
@@ -68,6 +71,7 @@ jobs:
           cmp -s comercial-operacoes.js comercial-operacoes.txt
           cmp -s comercial-main.js comercial-main.txt
           cmp -s comercial-campos-numericos.js comercial-campos-numericos.txt
+          cmp -s comercial-produto-form.js comercial-produto-form.txt
           cmp -s comercial-edicao-inline.js comercial-edicao-inline.txt
           cmp -s comercial-compacto.js comercial-compacto.txt
           cmp -s comercial-ajuda.js comercial-ajuda.txt
@@ -79,26 +83,38 @@ jobs:
           grep -q 'comercial_movimentos' comercial-contexto.js
           grep -q 'Módulos → Comercial' admin-comercial.html
           grep -q 'comercial-campos-numericos.js?v=1.2.1' comercial-app.js
-          grep -q 'comercial-edicao-inline.js?v=1.2.2' comercial-app.js
+          grep -q 'comercial-produto-form.js?v=1.3.0' comercial-app.js
+          grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
           grep -q 'comercial-main.js?v=1.2.0' comercial-app.js
 
-      - name: Confirmar edição e valores manuais
+      - name: Confirmar cadastro e edição de produto
         run: |
           grep -q 'data-editar-produto' comercial-render.js
           grep -q 'data-editar-movimento' comercial-render.js
-          grep -q 'tipo: "ajuste"' comercial-operacoes.js
-          grep -q 'simularProduto' comercial-calculos.js
-          grep -q 'prepararRecalculo' comercial-calculos.js
+          grep -q 'comercial-produto-descricao' comercial-render.js
+          grep -q 'Unidade:' comercial-render.js
+          grep -q 'Estoque atual:' comercial-render.js
+          grep -q 'prepararDescricaoLivre' comercial-produto-form.js
+          grep -q 'produtoUnidade' comercial-produto-form.js
+          grep -q 'textarea.style.cssText' comercial-produto-form.js
+          grep -q 'data-modal-descricao' comercial-edicao-inline.js
+          grep -q 'data-modal-unidade' comercial-edicao-inline.js
+          grep -q 'data-modal-salvar' comercial-edicao-inline.js
+          grep -q 'data-modal-cancelar' comercial-edicao-inline.js
+          grep -q 'min-height:44px!important' comercial-edicao-inline.js
+          grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
+          grep -q 'tipo: "ajuste"' comercial-edicao-inline.js
+          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-campos-numericos.js comercial-produto-form.js comercial-edicao-inline.js comercial-compacto.js
+
+      - name: Confirmar valores numéricos
+        run: |
           grep -q 'type="number"' comercial.html
           grep -q 'inputmode="decimal"' comercial.html
           grep -q 'HTMLInputElement.prototype' comercial-campos-numericos.js
           grep -q 'campo.type = "number"' comercial-campos-numericos.js
-          grep -q 'data-inline-salvar' comercial-edicao-inline.js
-          grep -q 'data-inline-cancelar' comercial-edicao-inline.js
-          grep -q 'min-height:44px!important' comercial-edicao-inline.js
-          grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
-          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-campos-numericos.js comercial-edicao-inline.js comercial-compacto.js
+          grep -q 'numeroDigitado' comercial-produto-form.js
+          grep -q 'numeroDigitado' comercial-edicao-inline.js
 
       - name: Confirmar visual limpo e compacto do Comercial
         run: |
@@ -121,7 +137,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.42"' version.json
+          grep -q '"version": "1.0.43"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
