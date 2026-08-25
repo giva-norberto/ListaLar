@@ -90,7 +90,7 @@ jobs:
           grep -q 'comercial-produto-form.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
-          grep -q 'comercial-main.js?v=1.3.3' comercial-app.js
+          grep -q 'comercial-main.js?v=1.3.4' comercial-app.js
           grep -q 'comercial-render.js?v=1.3.3' comercial-main.js
           grep -q 'comercial-venda-ui.js?v=1.3.4' comercial-main.js
 
@@ -144,6 +144,8 @@ jobs:
 
       - name: Confirmar venda simplificada
         run: |
+          grep -q '<label>Saldo</label><input id="vendaSaldo"' comercial.html
+          grep -q '<label>Qtd.</label><input id="vendaQtd"' comercial.html
           grep -q 'preencherSelect("compraProduto", opcoes)' comercial-venda-ui.js
           grep -q 'preencherSelect("vendaProduto", opcoes)' comercial-venda-ui.js
           grep -q 'labelQtd.textContent = "Qtd."' comercial-venda-ui.js
@@ -166,7 +168,7 @@ jobs:
 
       - name: Confirmar visual limpo e compacto do Comercial
         run: |
-          grep -q 'comercial-app.js?v=1.3.3' comercial.html
+          grep -q 'comercial-app.js?v=1.3.4' comercial.html
           grep -q 'font-size:27px' comercial.html
           grep -q 'linear-gradient(135deg,#eff6ff,#fff)' comercial.html
           grep -q '.manual-hint,.comercial-edicao-info{display:none!important}' comercial.html
