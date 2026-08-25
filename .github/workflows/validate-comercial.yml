@@ -47,6 +47,7 @@ on:
       - 'admin-comercial.html'
       - 'admin-comercial.js'
       - 'pwa-update.js'
+      - 'service-worker.js'
       - 'login-navegador.js'
       - 'version.json'
       - '.github/workflows/validate-comercial.yml'
@@ -84,6 +85,7 @@ jobs:
           node --check comercial-ajuda.js
           node --check admin-comercial.js
           node --check pwa-update.js
+          node --check service-worker.js
           node --check login-navegador.js
 
       - name: Confirmar cópias TXT do Comercial
@@ -330,6 +332,14 @@ jobs:
           grep -q 'sessionStorageDisponivel' login-navegador.js
           grep -q 'display-mode: standalone' login-navegador.js
 
+      - name: Confirmar atualização forçada do PWA
+        run: |
+          grep -q 'limparCachesListaLar' pwa-update.js
+          grep -q 'recarregarComVersao' pwa-update.js
+          grep -q "comercial.js?v=1.0.61" pwa-update.js
+          grep -q "cache: 'no-store'" service-worker.js
+          grep -q "service-worker.js?v=" pwa-update.js
+
       - name: Confirmar manual do Comercial existente
         run: |
           grep -q 'btnAjudaComercial' comercial.html
@@ -338,7 +348,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.60"' version.json
+          grep -q '"version": "1.0.61"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |

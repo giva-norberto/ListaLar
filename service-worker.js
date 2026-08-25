@@ -85,7 +85,9 @@ self.addEventListener('activate', (event) => {
 async function buscarNaRedeEAtualizarCache(
   request
 ) {
-  const resposta = await fetch(request);
+  const resposta = await fetch(request, {
+    cache: 'no-store'
+  });
 
   if (
     resposta &&
@@ -125,7 +127,7 @@ self.addEventListener('fetch', (event) => {
 
   /*
    * Navegação:
-   * tenta buscar a versão mais recente.
+   * força a rede sem reutilizar o cache HTTP do navegador.
    */
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -143,7 +145,7 @@ self.addEventListener('fetch', (event) => {
 
   /*
    * Arquivos locais:
-   * rede primeiro, cache como contingência.
+   * rede primeiro e sem cache HTTP; Cache Storage é só contingência offline.
    */
   event.respondWith(
     buscarNaRedeEAtualizarCache(request)

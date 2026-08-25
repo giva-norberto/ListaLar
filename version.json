@@ -1,5 +1,5 @@
 {
-  "version": "1.0.60",
+  "version": "1.0.61",
   "updatedAt": "2026-08-25",
-  "notes": "Comercial 1.3.16: Curva ABC de vendas por periodo, ranking por faturamento e classificacao A/B/C"
+  "notes": "Comercial 1.3.17: atualizacao forcada do PWA, cache HTTP ignorado e arquivos do Comercial recarregados"
 }
