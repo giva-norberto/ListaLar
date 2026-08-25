@@ -23,6 +23,8 @@ on:
       - 'comercial-venda-ui.txt'
       - 'comercial-dashboard-ui.js'
       - 'comercial-dashboard-ui.txt'
+      - 'comercial-dashboard-periodo.js'
+      - 'comercial-dashboard-periodo.txt'
       - 'comercial-campos-numericos.js'
       - 'comercial-campos-numericos.txt'
       - 'comercial-produto-form.js'
@@ -63,6 +65,7 @@ jobs:
           node --check comercial-main.js
           node --check comercial-venda-ui.js
           node --check comercial-dashboard-ui.js
+          node --check comercial-dashboard-periodo.js
           node --check comercial-campos-numericos.js
           node --check comercial-produto-form.js
           node --check comercial-produtos-ui.js
@@ -84,6 +87,7 @@ jobs:
           cmp -s comercial-main.js comercial-main.txt
           cmp -s comercial-venda-ui.js comercial-venda-ui.txt
           cmp -s comercial-dashboard-ui.js comercial-dashboard-ui.txt
+          cmp -s comercial-dashboard-periodo.js comercial-dashboard-periodo.txt
           cmp -s comercial-campos-numericos.js comercial-campos-numericos.txt
           cmp -s comercial-produto-form.js comercial-produto-form.txt
           cmp -s comercial-produtos-ui.js comercial-produtos-ui.txt
@@ -103,10 +107,11 @@ jobs:
           grep -q 'comercial-produtos-ui.js?v=1.3.8' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
-          grep -q 'comercial-main.js?v=1.3.8' comercial-app.js
+          grep -q 'comercial-main.js?v=1.3.9' comercial-app.js
           grep -q 'comercial-render.js?v=1.3.3' comercial-main.js
           grep -q 'comercial-venda-ui.js?v=1.3.4' comercial-main.js
           grep -q 'comercial-produtos-ui.js?v=1.3.8' comercial-main.js
+          grep -q 'comercial-dashboard-periodo.js?v=1.3.9' comercial-main.js
 
       - name: Confirmar cadastro, edição e exclusão de produto
         run: |
@@ -140,7 +145,7 @@ jobs:
           grep -q 'min-height:44px!important' comercial-edicao-inline.js
           grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
           grep -q 'tipo: "ajuste"' comercial-edicao-inline.js
-          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-venda-ui.js comercial-dashboard-ui.js comercial-campos-numericos.js comercial-produto-form.js comercial-produtos-ui.js comercial-edicao-inline.js comercial-compacto.js
+          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-venda-ui.js comercial-dashboard-ui.js comercial-dashboard-periodo.js comercial-campos-numericos.js comercial-produto-form.js comercial-produtos-ui.js comercial-edicao-inline.js comercial-compacto.js
 
       - name: Confirmar Dashboard financeiro
         run: |
@@ -155,6 +160,13 @@ jobs:
           grep -q 'ocultarCustoVendido' comercial-dashboard-ui.js
           grep -q 'getElementById("kpiCusto")' comercial-dashboard-ui.js
           grep -q 'card.hidden = true' comercial-dashboard-ui.js
+          grep -q 'periodoDashboardInicio' comercial-dashboard-periodo.js
+          grep -q 'periodoDashboardFim' comercial-dashboard-periodo.js
+          grep -q 'type="date"' comercial-dashboard-periodo.js
+          grep -q 'data >= ESTADO.dataInicioDashboard && data <= ESTADO.dataFimDashboard' comercial-dashboard-periodo.js
+          grep -q 'renderDashboardPorDatas();' comercial-main.js
+          grep -q 'Gráfico diário de faturamento, despesas e resultado' comercial-dashboard-periodo.js
+          grep -q 'selectAntigo.replaceWith(area)' comercial-dashboard-periodo.js
           ! grep -q '\$("dashboardProdutos").innerHTML = lista' comercial-render.js
 
       - name: Confirmar Estoque compacto
@@ -234,7 +246,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.52"' version.json
+          grep -q '"version": "1.0.53"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |

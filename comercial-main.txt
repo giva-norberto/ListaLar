@@ -1,4 +1,4 @@
-// ListaLar Comercial 1.3.8 — inicialização, acesso e listeners
+// ListaLar Comercial 1.3.9 — inicialização, acesso e listeners
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -10,6 +10,9 @@ import {
 import { configurarEventosOperacoes } from "./comercial-operacoes.js?v=1.2.0";
 import { configurarVendaUi, normalizarSeletoresProdutos } from "./comercial-venda-ui.js?v=1.3.4";
 import { garantirAcoesProdutos } from "./comercial-produtos-ui.js?v=1.3.8";
+import {
+  configurarFiltroDashboardDatas, renderDashboardPorDatas
+} from "./comercial-dashboard-periodo.js?v=1.3.9";
 
 function iniciarListeners() {
   ESTADO.unsubscribeProdutos?.();
@@ -24,6 +27,7 @@ function iniciarListeners() {
       renderProdutos();
       garantirAcoesProdutos();
       normalizarSeletoresProdutos();
+      renderDashboardPorDatas();
       status("");
     },
     (erro) => {
@@ -37,6 +41,7 @@ function iniciarListeners() {
     (snap) => {
       ESTADO.movimentos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderMovimentos();
+      renderDashboardPorDatas();
       status("");
     },
     (erro) => {
@@ -71,6 +76,7 @@ onAuthStateChanged(auth, async (usuario) => {
     configurarEventosOperacoes();
     configurarVendaUi();
     renderPeriodos();
+    configurarFiltroDashboardDatas();
     iniciarListeners();
   } catch (erro) {
     console.error(erro);
