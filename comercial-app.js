@@ -1,4 +1,4 @@
-// ListaLar Comercial — carregador 1.3.17
+// ListaLar Comercial — carregador 1.3.18
 import "./comercial-campos-numericos.js?v=1.2.2";
 import "./comercial-dashboard-ui.js?v=1.3.12";
 import "./comercial-produto-form.js?v=1.3.0";
@@ -8,4 +8,5 @@ import "./comercial-compacto.js?v=1.2.4";
 import "./comercial-menu-ui.js?v=1.3.15";
 import "./comercial-relatorios.js?v=1.3.12";
 import "./comercial-relatorios-abc.js?v=1.3.16";
+import "./comercial-relatorios-tema.js?v=1.3.18";
 import "./comercial-main.js?v=1.3.11";
