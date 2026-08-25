@@ -1,143 +1,67 @@
 // ============================================================
-// ListaLar Comercial — campos numéricos reais
+// ListaLar Comercial — campos numéricos com vírgula
 // Arquivo: comercial-campos-numericos.js
-// Versão: 1.2.1
+// Versão: 1.2.2
 // ============================================================
 
 const CAMPOS = Object.freeze({
-  produtoCusto: { min: 0, step: 0.01, casas: 2 },
-  produtoVenda: { min: 0, step: 0.01, casas: 2 },
-  produtoEstoque: { min: 0, step: 0.001, casas: 3 },
-  compraQtd: { min: 0.001, step: 0.001, casas: 3 },
-  compraCusto: { min: 0, step: 0.01, casas: 2 },
-  vendaQtd: { min: 0.001, step: 0.001, casas: 3 },
-  vendaValor: { min: 0, step: 0.01, casas: 2 },
-  despesaValor: { min: 0.01, step: 0.01, casas: 2 }
+  produtoCusto: { min: 0, casas: 2 },
+  produtoVenda: { min: 0, casas: 2 },
+  produtoEstoque: { min: 0, casas: 3 },
+  compraQtd: { min: 0.001, casas: 3 },
+  compraCusto: { min: 0, casas: 2 },
+  vendaQtd: { min: 0.001, casas: 3 },
+  vendaValor: { min: 0, casas: 2 },
+  despesaValor: { min: 0.01, casas: 2 }
 });
 
-const descritorTipo = Object.getOwnPropertyDescriptor(
-  HTMLInputElement.prototype,
-  "type"
-);
+function limparCaracteres(valor) {
+  return String(valor ?? "")
+    .replace(/[^0-9.,]/g, "");
+}
 
-const descritorValor = Object.getOwnPropertyDescriptor(
-  HTMLInputElement.prototype,
-  "value"
-);
-
-function normalizarNumeroParaInput(valor) {
-  if (valor === null || valor === undefined || valor === "") {
-    return "";
-  }
-
-  if (typeof valor === "number") {
-    return Number.isFinite(valor) ? String(valor) : "";
-  }
-
-  let texto = String(valor)
-    .trim()
-    .replace(/\s/g, "")
-    .replace(/^R\$/i, "");
-
+function limitarCasasDigitadas(valor, casas) {
+  const texto = limparCaracteres(valor);
   if (!texto) return "";
 
   const ultimaVirgula = texto.lastIndexOf(",");
   const ultimoPonto = texto.lastIndexOf(".");
+  const separador = Math.max(ultimaVirgula, ultimoPonto);
 
-  if (ultimaVirgula >= 0 && ultimoPonto >= 0) {
-    texto = ultimaVirgula > ultimoPonto
-      ? texto.replace(/\./g, "").replace(",", ".")
-      : texto.replace(/,/g, "");
-  } else if (ultimaVirgula >= 0) {
-    texto = texto.replace(",", ".");
-  }
+  if (separador < 0) return texto;
 
-  return texto;
-}
+  const inteiro = texto.slice(0, separador).replace(/[.,]/g, "");
+  const decimal = texto.slice(separador + 1).replace(/[.,]/g, "").slice(0, casas);
+  const simbolo = texto[separador];
 
-function instalarAcessores(campo) {
-  if (!campo || campo.dataset.numeroRealInstalado === "1") return;
-
-  Object.defineProperty(campo, "type", {
-    configurable: true,
-    enumerable: true,
-    get() {
-      return descritorTipo.get.call(this);
-    },
-    set(valor) {
-      const solicitado = String(valor || "").toLowerCase();
-      descritorTipo.set.call(
-        this,
-        CAMPOS[this.id] && solicitado === "text" ? "number" : valor
-      );
-    }
-  });
-
-  Object.defineProperty(campo, "value", {
-    configurable: true,
-    enumerable: true,
-    get() {
-      return descritorValor.get.call(this);
-    },
-    set(valor) {
-      const preparado = CAMPOS[this.id]
-        ? normalizarNumeroParaInput(valor)
-        : valor;
-      descritorValor.set.call(this, preparado);
-    }
-  });
-
-  campo.dataset.numeroRealInstalado = "1";
-}
-
-function inserirSeparadorDecimal(campo, evento) {
-  if (!campo || evento.defaultPrevented) return;
-  if (evento.key !== "," && evento.data !== ",") return;
-
-  evento.preventDefault();
-
-  const atual = campo.value || "";
-  if (atual.includes(".")) return;
-
-  campo.value = atual ? `${atual}.` : "0.";
-  campo.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-function limitarPrecisao(campo, casas) {
-  const valor = campo.valueAsNumber;
-  if (!Number.isFinite(valor)) return;
-
-  const fator = 10 ** casas;
-  const arredondado = Math.round((valor + Number.EPSILON) * fator) / fator;
-
-  if (arredondado !== valor) {
-    campo.value = String(arredondado);
-  }
+  return `${inteiro || "0"}${simbolo}${decimal}`;
 }
 
 function configurarCampo(id, regra) {
   const campo = document.getElementById(id);
   if (!(campo instanceof HTMLInputElement)) return;
+  if (campo.dataset.decimalPtBr === "1") return;
 
-  instalarAcessores(campo);
-
-  campo.type = "number";
+  // type=text evita a sanitização do input number no iOS, que zerava
+  // valores parciais como "10," antes de o usuário terminar a digitação.
+  campo.type = "text";
   campo.inputMode = "decimal";
   campo.lang = "pt-BR";
   campo.autocomplete = "off";
-  campo.min = String(regra.min);
-  campo.step = String(regra.step);
+  campo.setAttribute("pattern", "[0-9.,]*");
+  campo.dataset.minimo = String(regra.min);
+  campo.dataset.casasDecimais = String(regra.casas);
+  campo.dataset.decimalPtBr = "1";
 
-  campo.addEventListener("keydown", (evento) => {
-    inserirSeparadorDecimal(campo, evento);
-  });
-
-  campo.addEventListener("beforeinput", (evento) => {
-    inserirSeparadorDecimal(campo, evento);
-  });
-
-  campo.addEventListener("blur", () => {
-    limitarPrecisao(campo, regra.casas);
+  campo.addEventListener("input", () => {
+    const atual = campo.value;
+    const limpo = limitarCasasDigitadas(atual, regra.casas);
+    if (limpo !== atual) {
+      const posicao = campo.selectionStart;
+      campo.value = limpo;
+      const novaPosicao = Math.min(posicao ?? limpo.length, limpo.length);
+      campo.setSelectionRange(novaPosicao, novaPosicao);
+    }
   });
 }
 
@@ -149,4 +73,4 @@ export function instalarCamposNumericosComercial() {
 
 instalarCamposNumericosComercial();
 
-console.log("✅ Comercial 1.2.1: campos de valor e quantidade usando input numérico real");
+console.log("✅ Comercial 1.2.2: valores aceitam vírgula ou ponto sem zerar a digitação");
