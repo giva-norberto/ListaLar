@@ -1,5 +1,5 @@
 {
-  "version": "1.0.51",
+  "version": "1.0.52",
   "updatedAt": "2026-08-25",
-  "notes": "Comercial 1.3.8: lixeira segura nos Produtos, com bloqueio de saldo e histórico preservado"
+  "notes": "Login Google protegido em navegadores internos, com orientação para Safari ou Chrome"
 }
