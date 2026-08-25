@@ -77,6 +77,7 @@ function prepararDescricaoLivre() {
     textarea.autocomplete = "off";
     textarea.rows = 2;
     textarea.value = atual.value || "";
+    textarea.style.cssText = atual.style.cssText;
     atual.replaceWith(textarea);
     campo = textarea;
   }
