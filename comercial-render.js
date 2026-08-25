@@ -1,9 +1,13 @@
-// ListaLar Comercial 1.2.0 — renderização e navegação
+// ListaLar Comercial 1.3.0 — renderização e navegação
 import {
   $, ESTADO, produtoPorId, escapar, moeda, numero,
   fmtMoeda, fmtNumero, competenciaAtual, competenciaMovimento, rotuloCompetencia
 } from "./comercial-contexto.js?v=1.2.0";
 import { ordenarMovimentosDesc } from "./comercial-calculos.js?v=1.2.0";
+
+function unidadeProduto(produto) {
+  return String(produto?.unidade || "UN").trim().toUpperCase() || "UN";
+}
 
 export function abrirTela(tela) {
   document.querySelectorAll(".nav button[data-tela]").forEach((btn) => {
@@ -24,7 +28,7 @@ export function renderSelectProdutos() {
   const opcoes = ESTADO.produtos
     .filter((p) => p.ativo !== false)
     .sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"))
-    .map((p) => `<option value="${escapar(p.id)}">${escapar(p.nome)} — estoque ${fmtNumero(p.estoque)}</option>`)
+    .map((p) => `<option value="${escapar(p.id)}">${escapar(p.nome)} — estoque ${fmtNumero(p.estoque)} ${escapar(unidadeProduto(p))}</option>`)
     .join("");
 
   ["compraProduto", "vendaProduto"].forEach((id) => {
@@ -46,15 +50,20 @@ function htmlProduto(p) {
   const lucro = moeda(venda - custo);
   const margem = venda > 0 ? (lucro / venda) * 100 : 0;
   const markup = custo > 0 ? (lucro / custo) * 100 : 0;
+  const unidade = unidadeProduto(p);
+
   return `<article class="item">
-    <div class="item-top">
-      <div class="item-title">${escapar(p.nome)}</div>
-      <div class="comercial-item-acoes"><span class="badge">${fmtNumero(p.estoque)} un</span>${botaoEditarProduto(p.id)}</div>
+    <div class="comercial-produto-descricao">${escapar(p.nome)}</div>
+    <div class="comercial-produto-meta">
+      <span>Unidade: <b>${escapar(unidade)}</b></span>
+      <span aria-hidden="true">•</span>
+      <span>Estoque atual: <b>${fmtNumero(p.estoque)}</b></span>
     </div>
+    <div class="comercial-produto-acoes">${botaoEditarProduto(p.id)}</div>
     <div class="values">
       <div class="value"><span>Custo médio</span><strong>${fmtMoeda(custo)}</strong></div>
       <div class="value"><span>Preço venda</span><strong>${fmtMoeda(venda)}</strong></div>
-      <div class="value"><span>Lucro/un</span><strong>${fmtMoeda(lucro)}</strong></div>
+      <div class="value"><span>Lucro/${escapar(unidade)}</span><strong>${fmtMoeda(lucro)}</strong></div>
       <div class="value"><span>Margem / markup</span><strong>${margem.toFixed(1)}% / ${markup.toFixed(1)}%</strong></div>
     </div>
   </article>`;
@@ -78,12 +87,14 @@ function botaoEditarMovimento(m) {
 function htmlMovimento(m) {
   const tipo = String(m.tipo || "");
   const rotulo = tipo === "venda" ? "Venda" : tipo === "compra" ? "Compra" : tipo === "ajuste" ? "Ajuste" : "Despesa";
-  const produto = produtoPorId(m.produtoId)?.nome || m.produtoNome || "";
+  const produtoAtual = produtoPorId(m.produtoId);
+  const produto = produtoAtual?.nome || m.produtoNome || "";
+  const unidade = String(m.unidade || produtoAtual?.unidade || "UN").trim().toUpperCase() || "UN";
   let detalhe = "";
 
-  if (tipo === "compra") detalhe = `${fmtNumero(m.quantidade)} un × ${fmtMoeda(m.custoUnitario)} = ${fmtMoeda(m.valorTotal)}`;
-  else if (tipo === "venda") detalhe = `${fmtNumero(m.quantidade)} un × ${fmtMoeda(m.precoUnitario)} = ${fmtMoeda(m.receita)} · lucro bruto ${fmtMoeda(m.lucroBruto)}`;
-  else if (tipo === "ajuste") detalhe = `Estoque ${fmtNumero(m.estoqueAnterior)} → ${fmtNumero(m.estoqueNovo)} · custo ${fmtMoeda(m.custoAnterior)} → ${fmtMoeda(m.custoNovo)}`;
+  if (tipo === "compra") detalhe = `${fmtNumero(m.quantidade)} ${unidade} × ${fmtMoeda(m.custoUnitario)} = ${fmtMoeda(m.valorTotal)}`;
+  else if (tipo === "venda") detalhe = `${fmtNumero(m.quantidade)} ${unidade} × ${fmtMoeda(m.precoUnitario)} = ${fmtMoeda(m.receita)} · lucro bruto ${fmtMoeda(m.lucroBruto)}`;
+  else if (tipo === "ajuste") detalhe = `Estoque ${fmtNumero(m.estoqueAnterior)} → ${fmtNumero(m.estoqueNovo)} ${unidade} · custo ${fmtMoeda(m.custoAnterior)} → ${fmtMoeda(m.custoNovo)}`;
   else detalhe = fmtMoeda(m.valor);
 
   return `<article class="item">
