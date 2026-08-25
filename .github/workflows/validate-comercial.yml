@@ -107,7 +107,7 @@ jobs:
           grep -q 'comercial-produtos-ui.js?v=1.3.8' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
-          grep -q 'comercial-main.js?v=1.3.9' comercial-app.js
+          grep -q 'comercial-main.js?v=1.3.11' comercial-app.js
           grep -q 'comercial-render.js?v=1.3.3' comercial-main.js
           grep -q 'comercial-venda-ui.js?v=1.3.4' comercial-main.js
           grep -q 'comercial-produtos-ui.js?v=1.3.8' comercial-main.js
@@ -169,18 +169,20 @@ jobs:
           grep -q 'selectAntigo.replaceWith(area)' comercial-dashboard-periodo.js
           ! grep -q '\$("dashboardProdutos").innerHTML = lista' comercial-render.js
 
-      - name: Confirmar estorno seguro de compra e venda
+      - name: Confirmar estorno seguro de compra, venda e despesa
         run: |
           grep -q 'data-estornar-movimento' comercial-main.js
+          grep -q 'TIPOS_ESTORNAVEIS = new Set(\["compra", "venda", "despesa"\])' comercial-main.js
           grep -q 'Estornar esta compra?' comercial-main.js
           grep -q 'Estornar esta venda?' comercial-main.js
+          grep -q 'Estornar esta despesa?' comercial-main.js
+          grep -q 'adicionarBotoesEstorno("listaDespesas", "despesa")' comercial-main.js
           grep -q 'tipo: "estorno"' comercial-main.js
           grep -q 'tipoOriginal: atual.tipo' comercial-main.js
           grep -q 'estornado: true' comercial-main.js
           grep -q 'estornadoEm: serverTimestamp()' comercial-main.js
           grep -q 'aplicarRecalculoNaTransacao(tx, plano)' comercial-main.js
-          grep -q 'Compra estornada' comercial-main.js
-          grep -q 'Venda estornada' comercial-main.js
+          grep -q 'Despesa estornada' comercial-main.js
           grep -q 'Histórico preservado' comercial-main.js
           grep -q 'garantirAcoesMovimentos();' comercial-main.js
 
@@ -261,7 +263,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.54"' version.json
+          grep -q '"version": "1.0.55"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |

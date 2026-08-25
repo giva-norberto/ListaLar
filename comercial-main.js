@@ -1,4 +1,4 @@
-// ListaLar Comercial 1.3.10 — inicialização, acesso, listeners e estorno de movimentos
+// ListaLar Comercial 1.3.11 — inicialização, acesso, listeners e estorno de movimentos
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   onSnapshot, query, orderBy, runTransaction, serverTimestamp
@@ -24,10 +24,18 @@ import {
 } from "./comercial-calculos.js?v=1.2.0";
 
 const ESTORNANDO = new Set();
+const TIPOS_ESTORNAVEIS = new Set(["compra", "venda", "despesa"]);
 let eventosEstornoConfigurados = false;
 
 function movimentoEstado(id) {
   return ESTADO.movimentos.find((m) => String(m.id) === String(id)) || null;
+}
+
+function rotuloTipo(tipo) {
+  if (tipo === "compra") return "Compra";
+  if (tipo === "venda") return "Venda";
+  if (tipo === "despesa") return "Despesa";
+  return "Movimentação";
 }
 
 function unidadeMovimento(movimento) {
@@ -36,6 +44,10 @@ function unidadeMovimento(movimento) {
 }
 
 function detalheMovimentoEstornado(movimento) {
+  if (movimento.tipoOriginal === "despesa") {
+    return `${fmtMoeda(movimento.valor)} · ESTORNADO`;
+  }
+
   const unidade = unidadeMovimento(movimento);
   if (movimento.tipoOriginal === "compra") {
     return `${fmtNumero(movimento.quantidade)} ${unidade} × ${fmtMoeda(movimento.custoUnitario)} = ${fmtMoeda(movimento.valorTotal)} · ESTORNADO`;
@@ -48,7 +60,7 @@ function criarBotaoEstorno(id, tipo) {
   botao.type = "button";
   botao.className = "comercial-btn-estornar";
   botao.dataset.estornarMovimento = id;
-  botao.title = tipo === "compra" ? "Estornar compra" : "Estornar venda";
+  botao.title = `Estornar ${rotuloTipo(tipo).toLowerCase()}`;
   botao.setAttribute("aria-label", botao.title);
   botao.textContent = "🗑️";
   return botao;
@@ -127,7 +139,7 @@ function marcarHistoricoEstornado() {
     const badge = item.querySelector(".badge");
     if (badge) {
       badge.className = "badge estornado";
-      badge.textContent = movimento.tipoOriginal === "compra" ? "Compra estornada" : "Venda estornada";
+      badge.textContent = `${rotuloTipo(movimento.tipoOriginal)} estornada`;
     }
     item.querySelector("[data-editar-movimento]")?.remove();
 
@@ -140,31 +152,114 @@ function garantirAcoesMovimentos() {
   criarEstilosEstorno();
   adicionarBotoesEstorno("listaCompras", "compra");
   adicionarBotoesEstorno("listaVendas", "venda");
+  adicionarBotoesEstorno("listaDespesas", "despesa");
   marcarHistoricoEstornado();
 }
 
 function movimentoAlvoCompativel(atual, esperado) {
   if (!atual || !esperado) return false;
   if (String(atual.tipo || "") !== String(esperado.tipo || "")) return false;
+  if (String(atual.data || "") !== String(esperado.data || "")) return false;
+
+  if (esperado.tipo === "despesa") {
+    return (
+      String(atual.descricao || "") === String(esperado.descricao || "") &&
+      moeda(atual.valor) === moeda(esperado.valor)
+    );
+  }
+
   if (String(atual.produtoId || "") !== String(esperado.produtoId || "")) return false;
   if (quantidade(atual.quantidade) !== quantidade(esperado.quantidade)) return false;
-  if (String(atual.data || "") !== String(esperado.data || "")) return false;
   if (esperado.tipo === "compra") {
     return moeda(atual.custoUnitario) === moeda(esperado.custoUnitario);
   }
   return moeda(atual.precoUnitario) === moeda(esperado.precoUnitario);
 }
 
+function mensagemConfirmacaoEstorno(tipo) {
+  if (tipo === "compra") {
+    return "Estornar esta compra?\n\nA entrada será retirada do estoque e o custo médio será recalculado. Se o estorno deixar alguma venda posterior sem estoque, a operação será bloqueada. O registro continuará no Histórico.";
+  }
+  if (tipo === "venda") {
+    return "Estornar esta venda?\n\nA quantidade será devolvida ao estoque e a venda deixará de compor faturamento, lucro e resultado. O registro continuará no Histórico.";
+  }
+  return "Estornar esta despesa?\n\nA despesa sairá da tela de Despesas e deixará de compor o Dashboard e o fechamento. O registro continuará no Histórico.";
+}
+
+function dadosEstorno(atual) {
+  return {
+    tipo: "estorno",
+    tipoOriginal: atual.tipo,
+    estornado: true,
+    estornadoPor: ESTADO.usuario?.uid || "",
+    estornadoEm: serverTimestamp(),
+    atualizadoPor: ESTADO.usuario?.uid || "",
+    atualizadoEm: serverTimestamp()
+  };
+}
+
+async function estornarDespesa(atual) {
+  await runTransaction(db, async (tx) => {
+    const alvoRef = movimentoRef(atual.id);
+    const alvoSnap = await tx.get(alvoRef);
+    if (!alvoSnap.exists()) throw new Error("Movimentação não encontrada.");
+    if (!movimentoAlvoCompativel(alvoSnap.data(), atual)) {
+      throw new Error("A despesa mudou enquanto o estorno era preparado. Aguarde a atualização da tela e tente novamente.");
+    }
+    tx.update(alvoRef, dadosEstorno(atual));
+  });
+}
+
+async function estornarMovimentoComEstoque(atual, movimentosFrescos) {
+  const produtoId = String(atual.produtoId || "");
+  if (!produtoId) throw new Error("A movimentação não possui produto relacionado.");
+
+  const simulacaoAntes = simularProduto(produtoId, movimentosFrescos);
+  const movimentosDepois = substituirMovimento(movimentosFrescos, atual.id, {
+    tipo: "estorno",
+    tipoOriginal: atual.tipo,
+    estornado: true
+  });
+  const simulacaoDepois = simularProduto(produtoId, movimentosDepois);
+  const simulacoes = new Map([[produtoId, simulacaoDepois]]);
+  const plano = prepararRecalculo(simulacoes, movimentosFrescos);
+  const movimentosPorId = new Map(movimentosFrescos.map((m) => [m.id, m]));
+
+  await runTransaction(db, async (tx) => {
+    const alvoRef = movimentoRef(atual.id);
+    const alvoSnap = await tx.get(alvoRef);
+    const produtoSnap = await tx.get(produtoRef(produtoId));
+
+    const vendasLidas = new Map();
+    for (const idVenda of plano.atualizacoesVendas.keys()) {
+      vendasLidas.set(idVenda, await tx.get(movimentoRef(idVenda)));
+    }
+
+    if (!alvoSnap.exists()) throw new Error("Movimentação não encontrada.");
+    if (!produtoSnap.exists()) throw new Error("Produto relacionado não encontrado.");
+    if (!movimentoAlvoCompativel(alvoSnap.data(), atual)) {
+      throw new Error("A movimentação mudou enquanto o estorno era preparado. Aguarde a atualização da tela e tente novamente.");
+    }
+    if (!estadoProdutoCompativel(produtoSnap.data(), simulacaoAntes)) {
+      throw new Error("O estoque mudou enquanto o estorno era preparado. Aguarde a atualização da tela e tente novamente.");
+    }
+
+    for (const [idVenda, vendaSnap] of vendasLidas.entries()) {
+      if (!vendaSnap.exists() || !movimentoCompativel(vendaSnap.data(), movimentosPorId.get(idVenda))) {
+        throw new Error("Uma venda relacionada mudou enquanto o estorno era preparado. Aguarde a atualização da tela e tente novamente.");
+      }
+    }
+
+    tx.update(alvoRef, dadosEstorno(atual));
+    aplicarRecalculoNaTransacao(tx, plano);
+  });
+}
+
 async function estornarMovimento(id) {
   const exibido = movimentoEstado(id);
-  if (!exibido || !["compra", "venda"].includes(exibido.tipo) || ESTORNANDO.has(id)) return;
+  if (!exibido || !TIPOS_ESTORNAVEIS.has(exibido.tipo) || ESTORNANDO.has(id)) return;
 
-  const rotulo = exibido.tipo === "compra" ? "compra" : "venda";
-  const mensagem = exibido.tipo === "compra"
-    ? "Estornar esta compra?\n\nA entrada será retirada do estoque e o custo médio será recalculado. Se o estorno deixar alguma venda posterior sem estoque, a operação será bloqueada. O registro continuará no Histórico."
-    : "Estornar esta venda?\n\nA quantidade será devolvida ao estoque e a venda deixará de compor faturamento, lucro e resultado. O registro continuará no Histórico.";
-
-  if (!window.confirm(mensagem)) return;
+  if (!window.confirm(mensagemConfirmacaoEstorno(exibido.tipo))) return;
   if (ESTADO.salvando) return toast("Aguarde a operação atual terminar.", "erro");
 
   ESTORNANDO.add(id);
@@ -176,65 +271,20 @@ async function estornarMovimento(id) {
     const movimentosFrescos = await carregarMovimentosFrescos();
     const atual = movimentosFrescos.find((m) => String(m.id) === String(id));
     if (!atual) throw new Error("Movimentação não encontrada.");
-    if (!["compra", "venda"].includes(atual.tipo)) {
+    if (!TIPOS_ESTORNAVEIS.has(atual.tipo)) {
       throw new Error("Esta movimentação já foi estornada ou não pode ser estornada.");
     }
 
-    const produtoId = String(atual.produtoId || "");
-    if (!produtoId) throw new Error("A movimentação não possui produto relacionado.");
-
-    const simulacaoAntes = simularProduto(produtoId, movimentosFrescos);
-    const movimentosDepois = substituirMovimento(movimentosFrescos, id, {
-      tipo: "estorno",
-      tipoOriginal: atual.tipo,
-      estornado: true
-    });
-    const simulacaoDepois = simularProduto(produtoId, movimentosDepois);
-    const simulacoes = new Map([[produtoId, simulacaoDepois]]);
-    const plano = prepararRecalculo(simulacoes, movimentosFrescos);
-    const movimentosPorId = new Map(movimentosFrescos.map((m) => [m.id, m]));
-
-    await runTransaction(db, async (tx) => {
-      const alvoRef = movimentoRef(id);
-      const alvoSnap = await tx.get(alvoRef);
-      const produtoSnap = await tx.get(produtoRef(produtoId));
-
-      const vendasLidas = new Map();
-      for (const idVenda of plano.atualizacoesVendas.keys()) {
-        vendasLidas.set(idVenda, await tx.get(movimentoRef(idVenda)));
-      }
-
-      if (!alvoSnap.exists()) throw new Error("Movimentação não encontrada.");
-      if (!produtoSnap.exists()) throw new Error("Produto relacionado não encontrado.");
-      if (!movimentoAlvoCompativel(alvoSnap.data(), atual)) {
-        throw new Error("A movimentação mudou enquanto o estorno era preparado. Aguarde a atualização da tela e tente novamente.");
-      }
-      if (!estadoProdutoCompativel(produtoSnap.data(), simulacaoAntes)) {
-        throw new Error("O estoque mudou enquanto o estorno era preparado. Aguarde a atualização da tela e tente novamente.");
-      }
-
-      for (const [idVenda, vendaSnap] of vendasLidas.entries()) {
-        if (!vendaSnap.exists() || !movimentoCompativel(vendaSnap.data(), movimentosPorId.get(idVenda))) {
-          throw new Error("Uma venda relacionada mudou enquanto o estorno era preparado. Aguarde a atualização da tela e tente novamente.");
-        }
-      }
-
-      tx.update(alvoRef, {
-        tipo: "estorno",
-        tipoOriginal: atual.tipo,
-        estornado: true,
-        estornadoPor: ESTADO.usuario?.uid || "",
-        estornadoEm: serverTimestamp(),
-        atualizadoPor: ESTADO.usuario?.uid || "",
-        atualizadoEm: serverTimestamp()
-      });
-      aplicarRecalculoNaTransacao(tx, plano);
-    });
-
-    toast(`${rotulo === "compra" ? "Compra" : "Venda"} estornada. Estoque e fechamento recalculados; Histórico preservado.`, "ok");
+    if (atual.tipo === "despesa") {
+      await estornarDespesa(atual);
+      toast("Despesa estornada. Fechamento recalculado; Histórico preservado.", "ok");
+    } else {
+      await estornarMovimentoComEstoque(atual, movimentosFrescos);
+      toast(`${rotuloTipo(atual.tipo)} estornada. Estoque e fechamento recalculados; Histórico preservado.`, "ok");
+    }
   } catch (erro) {
     console.error(erro);
-    toast(erro?.message || `Não foi possível estornar a ${rotulo}.`, "erro");
+    toast(erro?.message || "Não foi possível estornar a movimentação.", "erro");
     if (botao) botao.disabled = false;
   } finally {
     ESTORNANDO.delete(id);
@@ -334,4 +384,4 @@ window.addEventListener("beforeunload", () => {
   ESTADO.unsubscribeMovimentos?.();
 });
 
-console.log(`✅ Comercial independente ${VERSAO} · estorno seguro ativo`);
+console.log(`✅ Comercial independente ${VERSAO} · estorno seguro ativo para compras, vendas e despesas`);
