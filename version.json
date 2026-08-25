@@ -1,5 +1,5 @@
 {
-  "version": "1.0.49",
+  "version": "1.0.50",
   "updatedAt": "2026-08-25",
-  "notes": "Comercial 1.3.6: formulário e cards de Produtos reorganizados, com Editar no topo direito"
+  "notes": "Comercial 1.3.7: card de Produtos com títulos maiores, unidade oculta e descrição longa protegida do botão Editar"
 }
