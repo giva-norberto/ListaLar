@@ -27,6 +27,8 @@ on:
       - 'comercial-dashboard-periodo.txt'
       - 'comercial-relatorios.js'
       - 'comercial-relatorios.txt'
+      - 'comercial-relatorios-abc.js'
+      - 'comercial-relatorios-abc.txt'
       - 'comercial-campos-numericos.js'
       - 'comercial-campos-numericos.txt'
       - 'comercial-produto-form.js'
@@ -71,6 +73,7 @@ jobs:
           node --check comercial-dashboard-ui.js
           node --check comercial-dashboard-periodo.js
           node --check comercial-relatorios.js
+          node --check comercial-relatorios-abc.js
           node --check comercial-campos-numericos.js
           node --check comercial-produto-form.js
           node --check comercial-produtos-ui.js
@@ -95,6 +98,7 @@ jobs:
           cmp -s comercial-dashboard-ui.js comercial-dashboard-ui.txt
           cmp -s comercial-dashboard-periodo.js comercial-dashboard-periodo.txt
           cmp -s comercial-relatorios.js comercial-relatorios.txt
+          cmp -s comercial-relatorios-abc.js comercial-relatorios-abc.txt
           cmp -s comercial-campos-numericos.js comercial-campos-numericos.txt
           cmp -s comercial-produto-form.js comercial-produto-form.txt
           cmp -s comercial-produtos-ui.js comercial-produtos-ui.txt
@@ -117,6 +121,7 @@ jobs:
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
           grep -q 'comercial-menu-ui.js?v=1.3.15' comercial-app.js
           grep -q 'comercial-relatorios.js?v=1.3.12' comercial-app.js
+          grep -q 'comercial-relatorios-abc.js?v=1.3.16' comercial-app.js
           grep -q 'comercial-main.js?v=1.3.11' comercial-app.js
           grep -q 'comercial-render.js?v=1.3.3' comercial-main.js
           grep -q 'comercial-venda-ui.js?v=1.3.4' comercial-main.js
@@ -155,7 +160,7 @@ jobs:
           grep -q 'min-height:44px!important' comercial-edicao-inline.js
           grep -q 'evento.stopImmediatePropagation' comercial-edicao-inline.js
           grep -q 'tipo: "ajuste"' comercial-edicao-inline.js
-          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-venda-ui.js comercial-dashboard-ui.js comercial-dashboard-periodo.js comercial-relatorios.js comercial-campos-numericos.js comercial-produto-form.js comercial-produtos-ui.js comercial-edicao-inline.js comercial-compacto.js comercial-menu-ui.js
+          ! grep -q 'MutationObserver' comercial-contexto.js comercial-calculos.js comercial-render.js comercial-operacoes.js comercial-main.js comercial-venda-ui.js comercial-dashboard-ui.js comercial-dashboard-periodo.js comercial-relatorios.js comercial-relatorios-abc.js comercial-campos-numericos.js comercial-produto-form.js comercial-produtos-ui.js comercial-edicao-inline.js comercial-compacto.js comercial-menu-ui.js
 
       - name: Confirmar Dashboard financeiro e custo líquido
         run: |
@@ -203,6 +208,23 @@ jobs:
           grep -q 'Exportar CSV' comercial-relatorios.js
           grep -q 'new Blob' comercial-relatorios.js
           grep -q 'text/csv;charset=utf-8' comercial-relatorios.js
+
+      - name: Confirmar Curva ABC por faturamento
+        run: |
+          grep -q 'botao.dataset.relatorioTipo = "abc"' comercial-relatorios-abc.js
+          grep -q 'botao.textContent = "Curva ABC"' comercial-relatorios-abc.js
+          grep -q 'movimento.tipo !== "venda"' comercial-relatorios-abc.js
+          grep -q 'b.faturamento - a.faturamento' comercial-relatorios-abc.js
+          grep -q 'participacao' comercial-relatorios-abc.js
+          grep -q 'acumuladoAntes < 80' comercial-relatorios-abc.js
+          grep -q 'acumuladoAntes < 95' comercial-relatorios-abc.js
+          grep -q 'Qtd. vendida' comercial-relatorios-abc.js
+          grep -q 'Faturamento' comercial-relatorios-abc.js
+          grep -q 'Participação' comercial-relatorios-abc.js
+          grep -q 'Acumulado' comercial-relatorios-abc.js
+          grep -q 'Classe' comercial-relatorios-abc.js
+          grep -q 'relatorio-curva-abc-' comercial-relatorios-abc.js
+          grep -q 'text/csv;charset=utf-8' comercial-relatorios-abc.js
 
       - name: Confirmar menu, telas e datas mobile estáveis
         run: |
@@ -316,7 +338,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.59"' version.json
+          grep -q '"version": "1.0.60"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
