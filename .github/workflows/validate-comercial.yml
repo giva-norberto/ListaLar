@@ -86,8 +86,8 @@ jobs:
           grep -q 'comercial-produto-form.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-edicao-inline.js?v=1.3.0' comercial-app.js
           grep -q 'comercial-compacto.js?v=1.2.4' comercial-app.js
-          grep -q 'comercial-main.js?v=1.3.1' comercial-app.js
-          grep -q 'comercial-render.js?v=1.3.1' comercial-main.js
+          grep -q 'comercial-main.js?v=1.3.3' comercial-app.js
+          grep -q 'comercial-render.js?v=1.3.3' comercial-main.js
 
       - name: Confirmar cadastro e edição de produto
         run: |
@@ -122,15 +122,20 @@ jobs:
 
       - name: Confirmar Estoque compacto
         run: |
+          grep -q 'comercial-estoque-resumo' comercial-render.js
+          grep -q 'Valor em estoque (custo)' comercial.html
+          grep -q 'estoqueValorCusto' comercial.html
+          grep -q 'valorEstoqueCusto = lista.reduce' comercial-render.js
           grep -q 'comercial-estoque-card' comercial-render.js
           grep -q 'comercial-estoque-produto' comercial-render.js
           grep -q 'comercial-estoque-qtd' comercial-render.js
-          grep -q 'Estoque: ${fmtNumero(estoque)}' comercial-render.js
+          grep -q 'Qtd: ${fmtNumero(estoque)}' comercial-render.js
           grep -q 'estoque <= 0 ? "zerado" : estoque <= 3 ? "baixo" : "ok"' comercial-render.js
           grep -q 'border-left:7px solid #16a34a' comercial-render.js
           grep -q 'border-left-color:#f59e0b' comercial-render.js
           grep -q 'border-left-color:#dc2626' comercial-render.js
           grep -q '\$("listaEstoque").innerHTML = htmlEstoqueLista' comercial-render.js
+          ! grep -q '<h2>Estoque comercial</h2>' comercial.html
 
       - name: Confirmar valores numéricos
         run: |
@@ -143,7 +148,7 @@ jobs:
 
       - name: Confirmar visual limpo e compacto do Comercial
         run: |
-          grep -q 'comercial-app.js?v=1.2.3' comercial.html
+          grep -q 'comercial-app.js?v=1.3.3' comercial.html
           grep -q 'font-size:27px' comercial.html
           grep -q 'linear-gradient(135deg,#eff6ff,#fff)' comercial.html
           grep -q '.manual-hint,.comercial-edicao-info{display:none!important}' comercial.html
@@ -162,7 +167,7 @@ jobs:
 
       - name: Confirmar versão nova
         run: |
-          grep -q '"version": "1.0.45"' version.json
+          grep -q '"version": "1.0.46"' version.json
 
       - name: Confirmar que Gastos permaneceu intocado
         run: |
