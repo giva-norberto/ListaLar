@@ -430,6 +430,12 @@
     INTERVALO_VERIFICACAO
   );
 
+  // Protege o login Google quando o ListaLar é aberto em navegadores
+  // internos de Teams, WhatsApp, Instagram e similares.
+  import('./login-navegador.js?v=1.0.0').catch((erro) => {
+    console.warn('Proteção do login Google indisponível:', erro);
+  });
+
   // O carregador de atualização já é servido com revalidação obrigatória.
   // Usamos esse ponto somente para iniciar o módulo Comercial opcional,
   // sem tocar no menu, estoque ou código do módulo Gastos existente.
