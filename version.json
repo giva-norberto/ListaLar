@@ -1,5 +1,5 @@
 {
-  "version": "1.0.47",
+  "version": "1.0.48",
   "updatedAt": "2026-08-24",
-  "notes": "Comercial 1.3.4: seletores de produtos simplificados e campo Saldo separado na venda"
+  "notes": "Comercial 1.3.5: campos de valor e quantidade aceitam vírgula ou ponto sem zerar durante a digitação"
 }
