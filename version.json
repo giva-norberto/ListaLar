@@ -1,5 +1,5 @@
 {
-  "version": "1.0.53",
+  "version": "1.0.54",
   "updatedAt": "2026-08-25",
-  "notes": "Comercial 1.3.9: Dashboard com filtro por intervalo de datas e retorno diário"
+  "notes": "Comercial 1.3.10: estorno seguro de compras e vendas com Historico preservado e fechamento recalculado"
 }
