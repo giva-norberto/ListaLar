@@ -1,5 +1,5 @@
 {
-  "version": "1.0.62",
-  "updatedAt": "2026-08-25",
-  "notes": "Comercial 1.3.18: cores semanticas nos Relatorios, destaque visual da Curva ABC e calendario mobile simplificado"
+  "version": "1.0.63",
+  "updatedAt": "2026-08-30",
+  "notes": "Avisos administrativos em tempo real via Firestore, sem Functions"
 }
