@@ -1,5 +1,5 @@
 {
-  "version": "1.0.63",
+  "version": "1.0.64",
   "updatedAt": "2026-08-30",
-  "notes": "Avisos administrativos em tempo real via Firestore, sem Functions"
+  "notes": "Confirmação de leitura dos avisos persistida por usuário no Firestore"
 }
