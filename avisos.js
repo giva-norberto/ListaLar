@@ -27,6 +27,8 @@ const REFERENCIA_COMUNICADO = [
 const ID_ESTILO = "listalar-aviso-global-estilos";
 const ID_MODAL = "listalar-aviso-global";
 const PREFIXO_ULTIMO_LIDO = "listalarUltimoComunicadoLido";
+const MAXIMO_TENTATIVAS_FIREBASE = 100;
+const INTERVALO_FIREBASE = 50;
 
 let unsubscribeComunicado = null;
 let uidAtual = "";
@@ -40,6 +42,26 @@ function obterAplicativo() {
   }
 
   return getApp();
+}
+
+async function aguardarAplicativo() {
+  for (
+    let tentativa = 0;
+    tentativa < MAXIMO_TENTATIVAS_FIREBASE;
+    tentativa += 1
+  ) {
+    const aplicativo = obterAplicativo();
+
+    if (aplicativo) {
+      return aplicativo;
+    }
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, INTERVALO_FIREBASE);
+    });
+  }
+
+  throw new Error("Firebase do ListaLar não foi inicializado.");
 }
 
 function normalizarTipo(tipo) {
@@ -468,35 +490,34 @@ function configurarEventosGlobais() {
   });
 }
 
-function iniciarAvisos() {
-  const aplicativo = obterAplicativo();
+async function iniciarAvisos() {
+  try {
+    const aplicativo = await aguardarAplicativo();
 
-  if (!aplicativo) {
-    console.warn("Avisos: Firebase não disponível na inicialização.");
-    return;
-  }
+    configurarEventosGlobais();
 
-  configurarEventosGlobais();
+    const auth = getAuth(aplicativo);
 
-  const auth = getAuth(aplicativo);
+    onAuthStateChanged(
+      auth,
+      (usuario) => {
+        if (!usuario) {
+          uidAtual = "";
+          pararObservacaoComunicado();
+          return;
+        }
 
-  onAuthStateChanged(
-    auth,
-    (usuario) => {
-      if (!usuario) {
+        iniciarObservacaoComunicado(usuario);
+      },
+      (erro) => {
+        console.error("Avisos: erro ao observar autenticação.", erro);
         uidAtual = "";
         pararObservacaoComunicado();
-        return;
       }
-
-      iniciarObservacaoComunicado(usuario);
-    },
-    (erro) => {
-      console.error("Avisos: erro ao observar autenticação.", erro);
-      uidAtual = "";
-      pararObservacaoComunicado();
-    }
-  );
+    );
+  } catch (erro) {
+    console.error("Avisos: não foi possível iniciar o módulo.", erro);
+  }
 }
 
 if (document.readyState === "loading") {
