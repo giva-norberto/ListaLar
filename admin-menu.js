@@ -7,6 +7,8 @@
 // administrativo estar completamente definido.
 // ==========================================
 
+import "./avisos.js";
+
 import {
   getApps,
   getApp
