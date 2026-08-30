@@ -1,0 +1,471 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // FUNÇÕES GERAIS
+    // ==========================================
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+
+    function donoDadosAntigos() {
+      return autenticado()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'giva.norberto@gmail.com';
+    }
+
+
+    function usuarioExiste() {
+      return autenticado()
+        && exists(
+          /databases/$(database)/documents/usuarios/$(request.auth.uid)
+        );
+    }
+
+
+    function ehAdminSistema() {
+      return usuarioExiste()
+        && get(
+          /databases/$(database)/documents/usuarios/$(request.auth.uid)
+        ).data.adminSistema == true;
+    }
+
+
+    function pertenceFamilia(familiaId) {
+      return usuarioExiste()
+        && get(
+          /databases/$(database)/documents/usuarios/$(request.auth.uid)
+        ).data.familiaId == familiaId;
+    }
+
+
+    function ehMembroAtivoFamilia(familiaId) {
+      return autenticado()
+        && exists(
+          /databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)
+        )
+        && (
+          !get(
+            /databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)
+          ).data.keys().hasAny([
+            'ativo'
+          ])
+          ||
+          get(
+            /databases/$(database)/documents/familias/$(familiaId)/membros/$(request.auth.uid)
+          ).data.ativo == true
+        );
+    }
+
+
+    function ehDonoFamilia(familiaId) {
+      return autenticado()
+        && exists(
+          /databases/$(database)/documents/familias/$(familiaId)
+        )
+        && get(
+          /databases/$(database)/documents/familias/$(familiaId)
+        ).data.donoId == request.auth.uid;
+    }
+
+
+    function podeLerFamilia(familiaId) {
+      return pertenceFamilia(familiaId)
+        || ehMembroAtivoFamilia(familiaId)
+        || ehDonoFamilia(familiaId)
+        || ehAdminSistema();
+    }
+
+
+    function podeAlterarFamilia(familiaId) {
+      return pertenceFamilia(familiaId)
+        || ehMembroAtivoFamilia(familiaId)
+        || ehDonoFamilia(familiaId);
+    }
+
+
+    // Comercial permanece bloqueado por padrão.
+    // Full não libera automaticamente.
+    function comercialHabilitado(familiaId) {
+      return exists(
+          /databases/$(database)/documents/configuracoes/modulos
+        )
+        && get(
+          /databases/$(database)/documents/configuracoes/modulos
+        ).data.keys().hasAny([
+          'comercialFamiliasHabilitadas'
+        ])
+        && get(
+          /databases/$(database)/documents/configuracoes/modulos
+        ).data.comercialFamiliasHabilitadas is list
+        && familiaId in get(
+          /databases/$(database)/documents/configuracoes/modulos
+        ).data.comercialFamiliasHabilitadas;
+    }
+
+
+    function conviteValido(token, familiaId) {
+      return token is string
+        && exists(
+          /databases/$(database)/documents/convites/$(token)
+        )
+        && get(
+          /databases/$(database)/documents/convites/$(token)
+        ).data.ativo == true
+        && get(
+          /databases/$(database)/documents/convites/$(token)
+        ).data.familiaId == familiaId;
+    }
+
+
+    // ==========================================
+    // USUÁRIOS
+    // ==========================================
+
+    match /usuarios/{uid} {
+
+      allow read: if autenticado()
+        && (
+          request.auth.uid == uid
+          || ehAdminSistema()
+        );
+
+
+      allow create: if autenticado()
+        && request.auth.uid == uid
+        && !request.resource.data.keys().hasAny([
+          'adminSistema'
+        ])
+        && (
+          (
+            request.resource.data.familiaId == uid
+            && request.resource.data.papel == 'admin'
+          )
+          ||
+          conviteValido(
+            request.resource.data.conviteToken,
+            request.resource.data.familiaId
+          )
+        );
+
+
+      allow update: if autenticado()
+        && request.auth.uid == uid
+        && !request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasAny([
+            'adminSistema'
+          ])
+        && (
+          resource.data.familiaId
+            == request.resource.data.familiaId
+          ||
+          conviteValido(
+            request.resource.data.conviteToken,
+            request.resource.data.familiaId
+          )
+        );
+
+
+      allow delete: if false;
+
+
+      match /tarefasPessoais/{tarefaId} {
+
+        allow read: if autenticado()
+          && request.auth.uid == uid;
+
+        allow create, update, delete: if autenticado()
+          && request.auth.uid == uid;
+      }
+    }
+
+
+    // ==========================================
+    // FAMÍLIAS
+    // ==========================================
+
+    match /familias/{familiaId} {
+
+      allow create: if autenticado()
+        && request.resource.data.donoId
+          == request.auth.uid;
+
+
+      allow read: if podeLerFamilia(familiaId);
+
+
+      allow update: if podeAlterarFamilia(familiaId)
+        && request.resource.data.donoId
+          == resource.data.donoId;
+
+
+      allow delete: if autenticado()
+        && resource.data.donoId
+          == request.auth.uid;
+
+
+      // ========================================
+      // MEMBROS
+      // ========================================
+
+      match /membros/{uid} {
+
+        allow read: if podeLerFamilia(familiaId);
+
+
+        allow create: if autenticado()
+          && request.auth.uid == uid
+          && (
+            (
+              familiaId == request.auth.uid
+              && request.resource.data.papel == 'admin'
+            )
+            ||
+            ehDonoFamilia(familiaId)
+            ||
+            conviteValido(
+              request.resource.data.conviteToken,
+              familiaId
+            )
+          );
+
+
+        allow update: if autenticado()
+          && request.auth.uid == uid
+          && podeAlterarFamilia(familiaId);
+
+
+        allow delete: if false;
+      }
+
+
+      // ========================================
+      // PRODUTOS
+      // ========================================
+
+      match /produtos/{produtoId} {
+
+        allow read: if podeLerFamilia(familiaId);
+
+        allow write: if podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
+      // HISTÓRICO DE COMPRAS
+      // ========================================
+
+      match /historico_compras/{historicoId} {
+
+        allow read: if podeLerFamilia(familiaId);
+
+        allow write: if podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
+      // GASTOS
+      // ========================================
+
+      match /gastos/{gastoId} {
+
+        allow read: if podeLerFamilia(familiaId);
+
+        allow create, update, delete:
+          if podeAlterarFamilia(familiaId);
+
+
+        match /itens/{itemId} {
+
+          allow read: if podeLerFamilia(familiaId);
+
+          allow create, update, delete:
+            if podeAlterarFamilia(familiaId);
+        }
+      }
+
+
+      // ========================================
+      // COMERCIAL — PRODUTOS DE REVENDA
+      // ========================================
+
+      match /comercial_produtos/{produtoId} {
+
+        allow read: if comercialHabilitado(familiaId)
+          && podeLerFamilia(familiaId);
+
+        allow create, update, delete:
+          if comercialHabilitado(familiaId)
+          && podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
+      // COMERCIAL — MOVIMENTAÇÕES
+      // ========================================
+
+      match /comercial_movimentos/{movimentoId} {
+
+        allow read: if comercialHabilitado(familiaId)
+          && podeLerFamilia(familiaId);
+
+        allow create, update, delete:
+          if comercialHabilitado(familiaId)
+          && podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
+      // TAREFAS
+      // ========================================
+
+      match /tarefas/{tarefaId} {
+
+        allow read: if podeLerFamilia(familiaId);
+
+        allow create, update, delete:
+          if podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
+      // LEMBRETES DE MEDICAMENTOS
+      // ========================================
+
+      match /lembretesMedicamentos/{lembreteId} {
+
+        allow read: if podeLerFamilia(familiaId);
+
+        allow create, update, delete:
+          if podeAlterarFamilia(familiaId);
+      }
+
+
+      // ========================================
+      // HISTÓRICO DE MEDICAMENTOS
+      // ========================================
+
+      match /historicoMedicamentos/{historicoId} {
+
+        allow read: if podeLerFamilia(familiaId);
+
+        allow create:
+          if podeAlterarFamilia(familiaId);
+
+        allow update, delete: if false;
+      }
+    }
+
+
+    // ==========================================
+    // CONFIGURAÇÃO DOS MÓDULOS
+    // ==========================================
+
+    match /configuracoes/modulos {
+
+      allow get: if autenticado();
+
+      allow list: if false;
+
+      allow create, update, delete:
+        if ehAdminSistema();
+    }
+
+
+    // ==========================================
+    // COMUNICADO GERAL
+    // ==========================================
+
+    match /configuracoes/comunicadoGeral {
+
+      // Qualquer usuário autenticado pode receber o aviso em tempo real.
+      allow get: if autenticado();
+
+      // Não permite listar a coleção de configurações.
+      allow list: if false;
+
+      // Somente administrador do sistema pode publicar, alterar ou excluir.
+      allow create, update, delete: if ehAdminSistema();
+    }
+
+
+    // ==========================================
+    // DEMAIS CONFIGURAÇÕES
+    // ==========================================
+
+    match /configuracoes/{configuracaoId} {
+
+      allow read, write: if ehAdminSistema();
+    }
+
+
+    // ==========================================
+    // CONVITES
+    // ==========================================
+
+    match /convites/{token} {
+
+      allow get: if autenticado();
+
+      allow list: if false;
+
+
+      allow create: if autenticado()
+        && (
+          pertenceFamilia(
+            request.resource.data.familiaId
+          )
+          ||
+          ehMembroAtivoFamilia(
+            request.resource.data.familiaId
+          )
+          ||
+          ehDonoFamilia(
+            request.resource.data.familiaId
+          )
+        );
+
+
+      allow update, delete: if autenticado()
+        && (
+          pertenceFamilia(
+            resource.data.familiaId
+          )
+          ||
+          ehMembroAtivoFamilia(
+            resource.data.familiaId
+          )
+          ||
+          ehDonoFamilia(
+            resource.data.familiaId
+          )
+        );
+    }
+
+
+    // ==========================================
+    // DADOS ANTIGOS
+    // ==========================================
+
+    match /produtos/{produtoId} {
+
+      allow read: if donoDadosAntigos();
+
+      allow write: if false;
+    }
+
+
+    match /historico_compras/{historicoId} {
+
+      allow read: if donoDadosAntigos();
+
+      allow write: if false;
+    }
+  }
+}
