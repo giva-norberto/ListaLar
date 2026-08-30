@@ -16,7 +16,10 @@ import {
 import {
   getFirestore,
   doc,
-  onSnapshot
+  onSnapshot,
+  getDoc,
+  setDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const REFERENCIA_COMUNICADO = [
@@ -35,6 +38,7 @@ let uidAtual = "";
 let chaveEmExibicao = "";
 let obrigatorioEmExibicao = false;
 let eventosGlobaisConfigurados = false;
+let ultimoLidoFirestore = "";
 
 function obterAplicativo() {
   if (getApps().length === 0) {
@@ -102,16 +106,74 @@ function lerUltimoComunicadoLido(uid) {
   }
 }
 
+async function carregarUltimoLidoFirestore(db, uid) {
+  if (!db || !uid) {
+    return "";
+  }
+
+  try {
+    const snapshotUsuario = await getDoc(doc(db, "usuarios", uid));
+
+    if (!snapshotUsuario.exists()) {
+      return "";
+    }
+
+    return String(
+      snapshotUsuario.data()?.ultimoComunicadoLido || ""
+    );
+  } catch (erro) {
+    console.warn(
+      "Avisos: não foi possível consultar a última leitura no Firestore.",
+      erro
+    );
+    return "";
+  }
+}
+
+async function salvarLeituraNoFirestore(uid, chave) {
+  if (!uid || !chave) {
+    return;
+  }
+
+  const aplicativo = obterAplicativo();
+
+  if (!aplicativo) {
+    return;
+  }
+
+  try {
+    const db = getFirestore(aplicativo);
+
+    await setDoc(
+      doc(db, "usuarios", uid),
+      {
+        ultimoComunicadoLido: chave,
+        ultimoComunicadoLidoEm: serverTimestamp()
+      },
+      { merge: true }
+    );
+  } catch (erro) {
+    console.warn(
+      "Avisos: não foi possível registrar a leitura no Firestore.",
+      erro
+    );
+  }
+}
+
 function marcarComoLido(uid, chave) {
   if (!uid || !chave) {
     return;
   }
+
+  ultimoLidoFirestore = chave;
 
   try {
     localStorage.setItem(chaveStorage(uid), chave);
   } catch (erro) {
     console.warn("Avisos: não foi possível registrar a leitura local.", erro);
   }
+
+  salvarLeituraNoFirestore(uid, chave);
 }
 
 function hashTexto(texto) {
@@ -415,9 +477,12 @@ function processarSnapshot(snapshot) {
     return;
   }
 
-  const ultimoLido = lerUltimoComunicadoLido(uidAtual);
+  const ultimoLidoLocal = lerUltimoComunicadoLido(uidAtual);
 
-  if (ultimoLido === chave) {
+  if (
+    ultimoLidoFirestore === chave ||
+    ultimoLidoLocal === chave
+  ) {
     if (chaveEmExibicao === chave) {
       fecharModal();
     }
@@ -440,8 +505,9 @@ function pararObservacaoComunicado() {
   fecharModal();
 }
 
-function iniciarObservacaoComunicado(usuario) {
+async function iniciarObservacaoComunicado(usuario) {
   pararObservacaoComunicado();
+  ultimoLidoFirestore = "";
 
   if (!usuario?.uid) {
     uidAtual = "";
@@ -457,7 +523,18 @@ function iniciarObservacaoComunicado(usuario) {
 
   uidAtual = usuario.uid;
 
+  const uidDaConsulta = usuario.uid;
   const db = getFirestore(aplicativo);
+
+  ultimoLidoFirestore = await carregarUltimoLidoFirestore(
+    db,
+    uidDaConsulta
+  );
+
+  if (uidAtual !== uidDaConsulta) {
+    return;
+  }
+
   const referencia = doc(db, ...REFERENCIA_COMUNICADO);
 
   unsubscribeComunicado = onSnapshot(
@@ -503,6 +580,7 @@ async function iniciarAvisos() {
       (usuario) => {
         if (!usuario) {
           uidAtual = "";
+          ultimoLidoFirestore = "";
           pararObservacaoComunicado();
           return;
         }
@@ -512,6 +590,7 @@ async function iniciarAvisos() {
       (erro) => {
         console.error("Avisos: erro ao observar autenticação.", erro);
         uidAtual = "";
+        ultimoLidoFirestore = "";
         pararObservacaoComunicado();
       }
     );
