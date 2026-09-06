@@ -1,11 +1,13 @@
 // ==========================================
 // ListaLar - Estimativa de valor da lista
-// Versão: 1.0.0
+// Versão: 1.1.0
 //
-// Calcula o valor estimado da lista usando o
-// último preço conhecido no histórico de Gastos.
-// Funciona independentemente da exibição do
-// Controle de Preços estar ativa ou não.
+// Regra simples:
+// - soma somente itens da lista que possuem preço histórico reconhecido;
+// - itens sem histórico ficam fora da estimativa;
+// - mostra um pequeno indicador "R$" apenas nos itens com histórico;
+// - reconhece produtoId, nome exato e, como fallback, nome contido em descrições
+//   mais completas vindas das notas fiscais (ex.: "Feijão" x "Feijão Carioca...").
 // ==========================================
 
 import {
@@ -32,19 +34,31 @@ import {
 
 const ID_ESTILO = "listalar-estimativa-lista-estilos";
 const ID_CARD = "listalar-estimativa-lista";
+const ID_AREA_LISTA = "listaCompras";
+const CLASSE_INDICADOR = "listalar-preco-historico-ok";
 const MAXIMO_GASTOS_HISTORICOS = 60;
 const MAXIMO_TENTATIVAS_FIREBASE = 100;
 const INTERVALO_FIREBASE = 50;
 
+const PALAVRAS_IGNORADAS = new Set([
+  "DE", "DA", "DO", "DAS", "DOS", "E", "EM", "COM", "SEM", "TIPO",
+  "UN", "UND", "UNID", "UNIDADE", "UNIDADES", "KG", "KGS", "G", "GR",
+  "L", "LT", "LTS", "ML", "PCT", "PACOTE", "PACOTES", "CX", "CAIXA",
+  "CAIXAS", "BDJ", "BANDEJA", "LATA", "LATAS", "VD", "VIDRO"
+]);
+
 let familiaIdAtual = "";
 let produtos = [];
 let precosHistoricos = new Map();
+let itensHistoricos = [];
 let unsubscribeProdutos = null;
 let unsubscribeGastos = null;
+let observadorLista = null;
 let carregandoHistorico = false;
 let cargaHistoricoPendente = false;
 let geracaoCargaHistorico = 0;
 let historicoPronto = false;
+let renderizacaoIndicadoresPendente = false;
 
 function obterAplicativo() {
   return getApps().length ? getApp() : null;
@@ -87,8 +101,9 @@ function normalizarNome(valor) {
   return String(valor || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .trim()
     .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim()
     .replace(/\s+/g, " ");
 }
 
@@ -103,6 +118,15 @@ function normalizarUnidade(valor) {
     .replace(/^LITROS$/, "L");
 
   return unidade || "UN";
+}
+
+function tokensRelevantes(valor) {
+  return normalizarNome(valor)
+    .split(" ")
+    .filter(Boolean)
+    .filter((token) => !PALAVRAS_IGNORADAS.has(token))
+    .filter((token) => !/^\d+$/.test(token))
+    .filter((token) => token.length >= 2);
 }
 
 function nomeItemHistorico(item) {
@@ -215,7 +239,6 @@ function produtoEstaNaLista(produto) {
 function quantidadeAtualDaLista(produto) {
   const sugerido = qtdParaLista(produto);
   const informada = numeroSeguro(produto?.qtdComprada, 0);
-
   return Math.max(0, informada || sugerido);
 }
 
@@ -228,8 +251,8 @@ function criarEstilos() {
     #${ID_CARD} {
       margin: 0 0 10px;
       border: 1px solid #bfdbfe;
-      border-radius: 18px;
-      padding: 13px 14px;
+      border-radius: 16px;
+      padding: 10px 12px;
       background: #eff6ff;
     }
 
@@ -237,35 +260,46 @@ function criarEstilos() {
       display: none !important;
     }
 
-    #${ID_CARD} .estimativa-cabecalho {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
     #${ID_CARD} .estimativa-titulo {
       color: #1e3a8a;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: .03em;
     }
 
     #${ID_CARD} .estimativa-valor {
-      margin-top: 4px;
+      margin-top: 3px;
       color: #172033;
-      font-size: 27px;
+      font-size: 24px;
       line-height: 1.05;
       font-weight: 900;
     }
 
     #${ID_CARD} .estimativa-info {
-      margin-top: 7px;
-      color: #475569;
-      font-size: 11px;
-      line-height: 1.35;
+      margin-top: 5px;
+      color: #64748b;
+      font-size: 10.5px;
+      line-height: 1.3;
       font-weight: 800;
+    }
+
+    .${CLASSE_INDICADOR} {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 6px;
+      padding: 1px 5px;
+      min-height: 17px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+      font-size: 9px;
+      line-height: 1;
+      font-weight: 900;
+      vertical-align: middle;
+      opacity: .82;
     }
   `;
 
@@ -280,7 +314,6 @@ function garantirCard() {
 
   const telaLista = document.getElementById("lista");
   const resumo = telaLista?.querySelector(".summary");
-
   if (!telaLista || !resumo) return null;
 
   card = document.createElement("div");
@@ -288,10 +321,8 @@ function garantirCard() {
   card.hidden = true;
   card.setAttribute("aria-live", "polite");
   card.innerHTML = `
-    <div class="estimativa-cabecalho">
-      <div class="estimativa-titulo">Estimativa da compra</div>
-    </div>
-    <div class="estimativa-valor">Calculando...</div>
+    <div class="estimativa-titulo">Estimativa da compra</div>
+    <div class="estimativa-valor"></div>
     <div class="estimativa-info"></div>
   `;
 
@@ -299,36 +330,162 @@ function garantirCard() {
   return card;
 }
 
-function localizarPreco(produto) {
-  for (const chave of chavesProduto(produto)) {
-    const preco = numeroSeguro(precosHistoricos.get(chave), 0);
-    if (preco > 0) return preco;
+function pontuarCorrespondencia(produto, historico) {
+  const tokensProduto = tokensRelevantes(produto?.nome);
+  const tokensHistorico = historico?.tokens || [];
+
+  if (!tokensProduto.length || !tokensHistorico.length) return 0;
+
+  const conjuntoHistorico = new Set(tokensHistorico);
+  if (!tokensProduto.every((token) => conjuntoHistorico.has(token))) {
+    return 0;
   }
 
-  return 0;
+  const nomeProduto = normalizarNome(produto?.nome);
+  const nomeHistorico = historico?.nomeNormalizado || "";
+
+  if (nomeProduto === nomeHistorico) return 1000;
+  if (nomeHistorico.startsWith(nomeProduto + " ")) return 800;
+  if (nomeHistorico.includes(" " + nomeProduto + " ")) return 700;
+
+  const proporcao = tokensProduto.length / Math.max(tokensHistorico.length, 1);
+  return 500 + proporcao * 100;
+}
+
+function localizarPrecoDetalhado(produto) {
+  for (const chave of chavesProduto(produto)) {
+    const registro = precosHistoricos.get(chave);
+    if (registro && numeroSeguro(registro.preco, 0) > 0) {
+      return registro;
+    }
+  }
+
+  let melhor = null;
+  let melhorPontuacao = 0;
+
+  for (const historico of itensHistoricos) {
+    const pontuacao = pontuarCorrespondencia(produto, historico);
+    if (pontuacao <= 0) continue;
+
+    if (
+      pontuacao > melhorPontuacao ||
+      (
+        pontuacao === melhorPontuacao &&
+        numeroSeguro(historico.data, 0) > numeroSeguro(melhor?.data, 0)
+      )
+    ) {
+      melhor = historico;
+      melhorPontuacao = pontuacao;
+    }
+  }
+
+  return melhor;
+}
+
+function localizarPreco(produto) {
+  return numeroSeguro(localizarPrecoDetalhado(produto)?.preco, 0);
+}
+
+function produtoPorNomeVisivel(nome) {
+  const normalizado = normalizarNome(nome);
+  if (!normalizado) return null;
+  return produtos.find((produto) => normalizarNome(produto.nome) === normalizado) || null;
+}
+
+function nomeOriginalElemento(elementoNome) {
+  if (!elementoNome) return "";
+
+  const textos = Array.from(elementoNome.childNodes)
+    .filter((no) => no.nodeType === Node.TEXT_NODE)
+    .map((no) => String(no.textContent || ""))
+    .join(" ")
+    .trim();
+
+  return textos || elementoNome.dataset.nomeOriginalEstimativa || "";
+}
+
+function renderizarIndicadoresHistorico() {
+  const area = document.getElementById(ID_AREA_LISTA);
+  if (!area) return;
+
+  const linhas = area.querySelectorAll(".buy-item");
+
+  linhas.forEach((linha) => {
+    const nomeEl = linha.querySelector(".item-name");
+    if (!nomeEl) return;
+
+    const nome = nomeOriginalElemento(nomeEl);
+    if (nome) nomeEl.dataset.nomeOriginalEstimativa = nome;
+
+    const produto = produtoPorNomeVisivel(nomeEl.dataset.nomeOriginalEstimativa || nome);
+    const registro = historicoPronto && produto
+      ? localizarPrecoDetalhado(produto)
+      : null;
+
+    let indicador = nomeEl.querySelector(`.${CLASSE_INDICADOR}`);
+
+    if (!registro || numeroSeguro(registro.preco, 0) <= 0) {
+      if (indicador) indicador.remove();
+      return;
+    }
+
+    if (!indicador) {
+      indicador = document.createElement("span");
+      indicador.className = CLASSE_INDICADOR;
+      indicador.textContent = "R$";
+      nomeEl.appendChild(indicador);
+    }
+
+    indicador.title = `Preço histórico disponível: ${formatarMoeda(registro.preco)}`;
+    indicador.setAttribute(
+      "aria-label",
+      `Preço histórico disponível: ${formatarMoeda(registro.preco)}`
+    );
+  });
+}
+
+function agendarRenderizacaoIndicadores() {
+  if (renderizacaoIndicadoresPendente) return;
+  renderizacaoIndicadoresPendente = true;
+
+  window.requestAnimationFrame(() => {
+    renderizacaoIndicadoresPendente = false;
+    renderizarIndicadoresHistorico();
+  });
+}
+
+function iniciarObservadorLista() {
+  const area = document.getElementById(ID_AREA_LISTA);
+  if (!area) return;
+
+  if (observadorLista) observadorLista.disconnect();
+
+  observadorLista = new MutationObserver(() => {
+    agendarRenderizacaoIndicadores();
+  });
+
+  observadorLista.observe(area, {
+    childList: true,
+    subtree: true
+  });
+
+  agendarRenderizacaoIndicadores();
 }
 
 function renderizarEstimativa() {
   const card = garantirCard();
   if (!card) return;
 
-  const lista = produtos.filter(produtoEstaNaLista);
-
-  if (!lista.length) {
+  if (!historicoPronto) {
     card.hidden = true;
+    agendarRenderizacaoIndicadores();
     return;
   }
 
-  card.hidden = false;
-
-  const titulo = card.querySelector(".estimativa-titulo");
-  const valor = card.querySelector(".estimativa-valor");
-  const info = card.querySelector(".estimativa-info");
-
-  if (!historicoPronto) {
-    if (titulo) titulo.textContent = "Estimativa da compra";
-    if (valor) valor.textContent = "Calculando...";
-    if (info) info.textContent = "Consultando os preços mais recentes do histórico da família.";
+  const lista = produtos.filter(produtoEstaNaLista);
+  if (!lista.length) {
+    card.hidden = true;
+    agendarRenderizacaoIndicadores();
     return;
   }
 
@@ -345,35 +502,23 @@ function renderizarEstimativa() {
     itensComPreco += 1;
   }
 
-  const faltantes = Math.max(0, lista.length - itensComPreco);
-
-  if (titulo) {
-    titulo.textContent = faltantes > 0
-      ? "Estimativa parcial da compra"
-      : "Estimativa da compra";
+  if (itensComPreco === 0) {
+    card.hidden = true;
+    agendarRenderizacaoIndicadores();
+    return;
   }
 
-  if (valor) {
-    valor.textContent = itensComPreco > 0
-      ? formatarMoeda(total)
-      : "Sem estimativa";
-  }
+  const valor = card.querySelector(".estimativa-valor");
+  const info = card.querySelector(".estimativa-info");
 
+  if (valor) valor.textContent = formatarMoeda(total);
   if (info) {
-    if (itensComPreco === 0) {
-      info.textContent =
-        `Ainda não há preço histórico para os ${lista.length} ` +
-        `${lista.length === 1 ? "item" : "itens"} desta lista.`;
-      return;
-    }
-
     info.textContent =
-      `Baseado no último preço conhecido de ${itensComPreco} de ${lista.length} ` +
-      `${lista.length === 1 ? "item" : "itens"}.` +
-      (faltantes > 0
-        ? ` ${faltantes} ${faltantes === 1 ? "item ainda está" : "itens ainda estão"} sem referência de preço.`
-        : "");
+      `${itensComPreco} ${itensComPreco === 1 ? "item com preço histórico" : "itens com preço histórico"}.`;
   }
+
+  card.hidden = false;
+  agendarRenderizacaoIndicadores();
 }
 
 function dataOrdenacaoGasto(dados = {}) {
@@ -454,6 +599,7 @@ async function carregarPrecosHistoricos() {
     const db = getFirestore(aplicativo);
     const gastos = await obterGastosRecentes(db);
     const novoMapa = new Map();
+    const novosItensHistoricos = [];
 
     const resultados = await Promise.all(
       gastos.map(async (gasto) => {
@@ -486,11 +632,24 @@ async function carregarPrecosHistoricos() {
       .forEach((gasto) => {
         gasto.itens.forEach((item) => {
           const preco = precoUnitarioItem(item);
-          if (preco <= 0) return;
+          const nome = nomeItemHistorico(item);
+          if (preco <= 0 || !normalizarNome(nome)) return;
+
+          const registro = {
+            preco,
+            data: gasto.data,
+            produtoId: String(item?.produtoId || "").trim(),
+            nome,
+            nomeNormalizado: normalizarNome(nome),
+            unidade: normalizarUnidade(unidadeItemHistorico(item)),
+            tokens: tokensRelevantes(nome)
+          };
+
+          novosItensHistoricos.push(registro);
 
           chavesItemHistorico(item).forEach((chave) => {
             if (!novoMapa.has(chave)) {
-              novoMapa.set(chave, preco);
+              novoMapa.set(chave, registro);
             }
           });
         });
@@ -499,6 +658,7 @@ async function carregarPrecosHistoricos() {
     if (minhaGeracao !== geracaoCargaHistorico) return;
 
     precosHistoricos = novoMapa;
+    itensHistoricos = novosItensHistoricos;
     historicoPronto = true;
     renderizarEstimativa();
   } catch (erro) {
@@ -509,6 +669,7 @@ async function carregarPrecosHistoricos() {
 
     if (minhaGeracao === geracaoCargaHistorico) {
       precosHistoricos = new Map();
+      itensHistoricos = [];
       historicoPronto = true;
       renderizarEstimativa();
     }
@@ -525,17 +686,22 @@ async function carregarPrecosHistoricos() {
 function pararListeners() {
   if (typeof unsubscribeProdutos === "function") unsubscribeProdutos();
   if (typeof unsubscribeGastos === "function") unsubscribeGastos();
+  if (observadorLista) observadorLista.disconnect();
 
   unsubscribeProdutos = null;
   unsubscribeGastos = null;
+  observadorLista = null;
   produtos = [];
   precosHistoricos = new Map();
+  itensHistoricos = [];
   historicoPronto = false;
   familiaIdAtual = "";
   geracaoCargaHistorico += 1;
 
   const card = document.getElementById(ID_CARD);
   if (card) card.hidden = true;
+
+  document.querySelectorAll(`.${CLASSE_INDICADOR}`).forEach((el) => el.remove());
 }
 
 function iniciarProdutos(db) {
@@ -616,7 +782,6 @@ function iniciarMonitorGastos(db) {
 
 async function iniciarParaUsuario(usuario) {
   pararListeners();
-
   if (!usuario?.uid) return;
 
   const aplicativo = obterAplicativo();
@@ -637,6 +802,7 @@ async function iniciarParaUsuario(usuario) {
 
   familiaIdAtual = familiaId;
   garantirCard();
+  iniciarObservadorLista();
   iniciarProdutos(db);
   iniciarMonitorGastos(db);
 }
@@ -645,6 +811,7 @@ async function iniciarEstimativaLista() {
   try {
     const aplicativo = await aguardarAplicativo();
     garantirCard();
+    iniciarObservadorLista();
 
     const auth = getAuth(aplicativo);
 
