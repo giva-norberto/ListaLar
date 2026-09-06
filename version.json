@@ -1,5 +1,5 @@
 {
-  "version": "1.0.67",
+  "version": "1.0.68",
   "updatedAt": "2026-09-06",
-  "notes": "Estimativa valida de forma inteligente o nome da lista contra descricoes mais completas da nota fiscal"
+  "notes": "Estimativa permanece visivel e reconhece descricoes fiscais abreviadas como feijao e arroz"
 }
