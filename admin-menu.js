@@ -8,6 +8,7 @@
 // ==========================================
 
 import "./avisos.js?v=1.0.64";
+import "./estimativa-lista.js?v=1.0.65";
 
 import {
   getApps,
