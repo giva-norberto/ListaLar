@@ -1,13 +1,12 @@
 // ==========================================
 // ListaLar - Estimativa de valor da lista
-// Versão: 1.1.0
+// Versão: 1.2.0
 //
-// Regra simples:
-// - soma somente itens da lista que possuem preço histórico reconhecido;
-// - itens sem histórico ficam fora da estimativa;
-// - mostra um pequeno indicador "R$" apenas nos itens com histórico;
-// - reconhece produtoId, nome exato e, como fallback, nome contido em descrições
-//   mais completas vindas das notas fiscais (ex.: "Feijão" x "Feijão Carioca...").
+// Objetivo:
+// - estimar a lista usando o último preço histórico reconhecido;
+// - aceitar descrições fiscais mais completas que o nome da lista;
+// - evitar falsos positivos com validação conservadora;
+// - mostrar R$ discretamente somente quando a correspondência é válida.
 // ==========================================
 
 import {
@@ -65,17 +64,10 @@ function obterAplicativo() {
 }
 
 async function aguardarAplicativo() {
-  for (
-    let tentativa = 0;
-    tentativa < MAXIMO_TENTATIVAS_FIREBASE;
-    tentativa += 1
-  ) {
+  for (let tentativa = 0; tentativa < MAXIMO_TENTATIVAS_FIREBASE; tentativa += 1) {
     const aplicativo = obterAplicativo();
     if (aplicativo) return aplicativo;
-
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, INTERVALO_FIREBASE);
-    });
+    await new Promise((resolve) => window.setTimeout(resolve, INTERVALO_FIREBASE));
   }
 
   throw new Error("Firebase do ListaLar não foi inicializado.");
@@ -120,6 +112,12 @@ function normalizarUnidade(valor) {
   return unidade || "UN";
 }
 
+function singularBasico(token) {
+  const texto = String(token || "");
+  if (texto.length > 4 && texto.endsWith("S")) return texto.slice(0, -1);
+  return texto;
+}
+
 function tokensRelevantes(valor) {
   return normalizarNome(valor)
     .split(" ")
@@ -127,6 +125,52 @@ function tokensRelevantes(valor) {
     .filter((token) => !PALAVRAS_IGNORADAS.has(token))
     .filter((token) => !/^\d+$/.test(token))
     .filter((token) => token.length >= 2);
+}
+
+function prefixoComum(a, b) {
+  const limite = Math.min(a.length, b.length);
+  let quantidade = 0;
+
+  while (quantidade < limite && a[quantidade] === b[quantidade]) {
+    quantidade += 1;
+  }
+
+  return quantidade;
+}
+
+function compararTokens(tokenLista, tokenFiscal, permitirAbreviacao) {
+  const a = singularBasico(tokenLista);
+  const b = singularBasico(tokenFiscal);
+
+  if (!a || !b) return { corresponde: false, exato: false };
+  if (a === b) return { corresponde: true, exato: true };
+  if (!permitirAbreviacao) return { corresponde: false, exato: false };
+
+  const menor = a.length <= b.length ? a : b;
+  const maior = a.length <= b.length ? b : a;
+  const diferenca = maior.length - menor.length;
+
+  // Abreviações fiscais comuns: PAP/PAPEL, ESC/ESCOVA, HIG/HIGIENICO.
+  if (menor.length === 3 && maior.startsWith(menor)) {
+    return { corresponde: true, exato: false };
+  }
+
+  // Truncamentos moderados: FRANG/FRANGO, FEIJ/FEIJAO etc.
+  if (menor.length >= 4 && maior.startsWith(menor) && diferenca <= 3) {
+    return { corresponde: true, exato: false };
+  }
+
+  // Variações próximas de raiz: DENTE/DENTAL.
+  if (
+    a.length >= 4 &&
+    b.length >= 4 &&
+    Math.abs(a.length - b.length) <= 2 &&
+    prefixoComum(a, b) >= 4
+  ) {
+    return { corresponde: true, exato: false };
+  }
+
+  return { corresponde: false, exato: false };
 }
 
 function nomeItemHistorico(item) {
@@ -141,43 +185,24 @@ function nomeItemHistorico(item) {
 }
 
 function unidadeItemHistorico(item) {
-  return String(
-    item?.unidade ||
-    item?.un ||
-    item?.siglaUnidade ||
-    "UN"
-  ).trim();
+  return String(item?.unidade || item?.un || item?.siglaUnidade || "UN").trim();
 }
 
 function precoUnitarioItem(item) {
   let preco = numeroSeguro(
-    item?.precoUnitario ??
-    item?.valorUnitario ??
-    item?.precoCompra ??
-    item?.preco,
+    item?.precoUnitario ?? item?.valorUnitario ?? item?.precoCompra ?? item?.preco,
     0
   );
 
   if (preco > 0) return arredondarMoeda(preco);
 
   const quantidade = numeroSeguro(
-    item?.quantidade ??
-    item?.qtd ??
-    item?.quantidadeComprada,
+    item?.quantidade ?? item?.qtd ?? item?.quantidadeComprada,
     0
   );
+  const total = numeroSeguro(item?.valorTotal ?? item?.total ?? item?.subtotal, 0);
 
-  const total = numeroSeguro(
-    item?.valorTotal ??
-    item?.total ??
-    item?.subtotal,
-    0
-  );
-
-  if (quantidade > 0 && total > 0) {
-    preco = total / quantidade;
-  }
-
+  if (quantidade > 0 && total > 0) preco = total / quantidade;
   return preco > 0 ? arredondarMoeda(preco) : 0;
 }
 
@@ -212,27 +237,19 @@ function chavesItemHistorico(item) {
 }
 
 function comprarQtd(produto) {
-  return Math.max(
-    0,
-    numeroSeguro(produto?.minimo) - numeroSeguro(produto?.estoque)
-  );
+  return Math.max(0, numeroSeguro(produto?.minimo) - numeroSeguro(produto?.estoque));
 }
 
 function qtdParaLista(produto) {
   if (produto?.manualLista === true && comprarQtd(produto) === 0) {
     return Math.max(1, numeroSeguro(produto?.qtdManual, 1));
   }
-
   return comprarQtd(produto);
 }
 
 function produtoEstaNaLista(produto) {
-  return (
-    produto?.manualLista === true ||
-    (
-      produto?.listaAutomatica === true &&
-      comprarQtd(produto) > 0
-    )
+  return produto?.manualLista === true || (
+    produto?.listaAutomatica === true && comprarQtd(produto) > 0
   );
 }
 
@@ -255,54 +272,25 @@ function criarEstilos() {
       padding: 10px 12px;
       background: #eff6ff;
     }
-
-    #${ID_CARD}[hidden] {
-      display: none !important;
-    }
-
+    #${ID_CARD}[hidden] { display: none !important; }
     #${ID_CARD} .estimativa-titulo {
-      color: #1e3a8a;
-      font-size: 11px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: .03em;
+      color:#1e3a8a; font-size:11px; font-weight:900;
+      text-transform:uppercase; letter-spacing:.03em;
     }
-
     #${ID_CARD} .estimativa-valor {
-      margin-top: 3px;
-      color: #172033;
-      font-size: 24px;
-      line-height: 1.05;
-      font-weight: 900;
+      margin-top:3px; color:#172033; font-size:24px; line-height:1.05; font-weight:900;
     }
-
     #${ID_CARD} .estimativa-info {
-      margin-top: 5px;
-      color: #64748b;
-      font-size: 10.5px;
-      line-height: 1.3;
-      font-weight: 800;
+      margin-top:5px; color:#64748b; font-size:10.5px; line-height:1.3; font-weight:800;
     }
-
     .${CLASSE_INDICADOR} {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-left: 6px;
-      padding: 1px 5px;
-      min-height: 17px;
-      border-radius: 999px;
-      background: #dcfce7;
-      color: #166534;
-      border: 1px solid #bbf7d0;
-      font-size: 9px;
-      line-height: 1;
-      font-weight: 900;
-      vertical-align: middle;
-      opacity: .82;
+      display:inline-flex; align-items:center; justify-content:center;
+      margin-left:6px; padding:1px 5px; min-height:17px;
+      border-radius:999px; background:#dcfce7; color:#166534;
+      border:1px solid #bbf7d0; font-size:9px; line-height:1;
+      font-weight:900; vertical-align:middle; opacity:.82;
     }
   `;
-
   document.head.appendChild(estilo);
 }
 
@@ -325,41 +313,81 @@ function garantirCard() {
     <div class="estimativa-valor"></div>
     <div class="estimativa-info"></div>
   `;
-
   resumo.insertAdjacentElement("afterend", card);
   return card;
 }
 
 function pontuarCorrespondencia(produto, historico) {
-  const tokensProduto = tokensRelevantes(produto?.nome);
-  const tokensHistorico = historico?.tokens || [];
+  const nomeLista = normalizarNome(produto?.nome);
+  const nomeFiscal = historico?.nomeNormalizado || "";
+  const tokensLista = tokensRelevantes(produto?.nome);
+  const tokensFiscal = historico?.tokens || [];
 
-  if (!tokensProduto.length || !tokensHistorico.length) return 0;
+  if (!nomeLista || !nomeFiscal || !tokensLista.length || !tokensFiscal.length) return 0;
+  if (nomeLista === nomeFiscal) return 1000;
 
-  const conjuntoHistorico = new Set(tokensHistorico);
-  if (!tokensProduto.every((token) => conjuntoHistorico.has(token))) {
-    return 0;
+  // Para nomes genéricos de uma palavra (ex.: Feijão), exigimos a palavra exata.
+  // Isso permite "FEIJAO CARIOCA T1 1KG" sem aceitar apenas palavras parecidas.
+  if (tokensLista.length === 1) {
+    const procurado = singularBasico(tokensLista[0]);
+    const existeExato = tokensFiscal.some(
+      (token) => singularBasico(token) === procurado
+    );
+    return existeExato ? 900 : 0;
   }
 
-  const nomeProduto = normalizarNome(produto?.nome);
-  const nomeHistorico = historico?.nomeNormalizado || "";
+  // Para nomes compostos, cada conceito importante da lista deve existir na
+  // descrição fiscal, podendo estar abreviado. Isso evita casar só por uma palavra.
+  const usados = new Set();
+  let exatos = 0;
+  let aproximados = 0;
 
-  if (nomeProduto === nomeHistorico) return 1000;
-  if (nomeHistorico.startsWith(nomeProduto + " ")) return 800;
-  if (nomeHistorico.includes(" " + nomeProduto + " ")) return 700;
+  for (const tokenLista of tokensLista) {
+    let melhorIndice = -1;
+    let melhorExato = false;
 
-  const proporcao = tokensProduto.length / Math.max(tokensHistorico.length, 1);
-  return 500 + proporcao * 100;
+    for (let indice = 0; indice < tokensFiscal.length; indice += 1) {
+      if (usados.has(indice)) continue;
+
+      const comparacao = compararTokens(tokenLista, tokensFiscal[indice], true);
+      if (!comparacao.corresponde) continue;
+
+      if (comparacao.exato) {
+        melhorIndice = indice;
+        melhorExato = true;
+        break;
+      }
+
+      if (melhorIndice < 0) melhorIndice = indice;
+    }
+
+    if (melhorIndice < 0) return 0;
+    usados.add(melhorIndice);
+
+    if (melhorExato) exatos += 1;
+    else aproximados += 1;
+  }
+
+  let pontos = 700 + exatos * 45 + aproximados * 25;
+
+  if (nomeFiscal.startsWith(nomeLista + " ")) pontos += 40;
+  if (nomeFiscal.includes(" " + nomeLista + " ")) pontos += 25;
+
+  // Pequeno desempate favorecendo descrições menos genéricas e, depois, a compra mais recente.
+  pontos -= Math.min(40, Math.max(0, tokensFiscal.length - tokensLista.length) * 2);
+  return pontos;
 }
 
 function localizarPrecoDetalhado(produto) {
+  // 1) Vínculo direto ou nome exato: confiança máxima.
   for (const chave of chavesProduto(produto)) {
     const registro = precosHistoricos.get(chave);
     if (registro && numeroSeguro(registro.preco, 0) > 0) {
-      return registro;
+      return { ...registro, confianca: 100, criterio: "exato" };
     }
   }
 
+  // 2) Descrição fiscal: escolhe somente uma correspondência validada.
   let melhor = null;
   let melhorPontuacao = 0;
 
@@ -379,7 +407,13 @@ function localizarPrecoDetalhado(produto) {
     }
   }
 
-  return melhor;
+  if (!melhor) return null;
+
+  return {
+    ...melhor,
+    confianca: Math.min(99, Math.max(80, Math.round(melhorPontuacao / 10))),
+    criterio: "descricao_fiscal"
+  };
 }
 
 function localizarPreco(produto) {
@@ -408,9 +442,7 @@ function renderizarIndicadoresHistorico() {
   const area = document.getElementById(ID_AREA_LISTA);
   if (!area) return;
 
-  const linhas = area.querySelectorAll(".buy-item");
-
-  linhas.forEach((linha) => {
+  area.querySelectorAll(".buy-item").forEach((linha) => {
     const nomeEl = linha.querySelector(".item-name");
     if (!nomeEl) return;
 
@@ -418,10 +450,7 @@ function renderizarIndicadoresHistorico() {
     if (nome) nomeEl.dataset.nomeOriginalEstimativa = nome;
 
     const produto = produtoPorNomeVisivel(nomeEl.dataset.nomeOriginalEstimativa || nome);
-    const registro = historicoPronto && produto
-      ? localizarPrecoDetalhado(produto)
-      : null;
-
+    const registro = historicoPronto && produto ? localizarPrecoDetalhado(produto) : null;
     let indicador = nomeEl.querySelector(`.${CLASSE_INDICADOR}`);
 
     if (!registro || numeroSeguro(registro.preco, 0) <= 0) {
@@ -436,11 +465,11 @@ function renderizarIndicadoresHistorico() {
       nomeEl.appendChild(indicador);
     }
 
-    indicador.title = `Preço histórico disponível: ${formatarMoeda(registro.preco)}`;
-    indicador.setAttribute(
-      "aria-label",
-      `Preço histórico disponível: ${formatarMoeda(registro.preco)}`
-    );
+    const descricaoFiscal = String(registro.nome || produto.nome || "").trim();
+    indicador.title =
+      `Preço histórico: ${formatarMoeda(registro.preco)}` +
+      (descricaoFiscal ? ` · referência: ${descricaoFiscal}` : "");
+    indicador.setAttribute("aria-label", `Preço histórico disponível: ${formatarMoeda(registro.preco)}`);
   });
 }
 
@@ -457,18 +486,10 @@ function agendarRenderizacaoIndicadores() {
 function iniciarObservadorLista() {
   const area = document.getElementById(ID_AREA_LISTA);
   if (!area) return;
-
   if (observadorLista) observadorLista.disconnect();
 
-  observadorLista = new MutationObserver(() => {
-    agendarRenderizacaoIndicadores();
-  });
-
-  observadorLista.observe(area, {
-    childList: true,
-    subtree: true
-  });
-
+  observadorLista = new MutationObserver(agendarRenderizacaoIndicadores);
+  observadorLista.observe(area, { childList: true, subtree: true });
   agendarRenderizacaoIndicadores();
 }
 
@@ -495,7 +516,6 @@ function renderizarEstimativa() {
   for (const produto of lista) {
     const preco = localizarPreco(produto);
     const quantidade = quantidadeAtualDaLista(produto);
-
     if (preco <= 0 || quantidade <= 0) continue;
 
     total += preco * quantidade;
@@ -513,8 +533,9 @@ function renderizarEstimativa() {
 
   if (valor) valor.textContent = formatarMoeda(total);
   if (info) {
-    info.textContent =
-      `${itensComPreco} ${itensComPreco === 1 ? "item com preço histórico" : "itens com preço histórico"}.`;
+    info.textContent = `${itensComPreco} ${
+      itensComPreco === 1 ? "item validado pelo histórico" : "itens validados pelo histórico"
+    }.`;
   }
 
   card.hidden = false;
@@ -532,26 +553,16 @@ function dataOrdenacaoGasto(dados = {}) {
   }
 
   const criadoEm = dados.criadoEm;
-  if (criadoEm && typeof criadoEm.toMillis === "function") {
-    return criadoEm.toMillis();
-  }
+  if (criadoEm && typeof criadoEm.toMillis === "function") return criadoEm.toMillis();
 
   const atualizadoEm = dados.atualizadoEm;
-  if (atualizadoEm && typeof atualizadoEm.toMillis === "function") {
-    return atualizadoEm.toMillis();
-  }
+  if (atualizadoEm && typeof atualizadoEm.toMillis === "function") return atualizadoEm.toMillis();
 
   return 0;
 }
 
 async function obterGastosRecentes(db) {
-  const referencia = collection(
-    db,
-    "familias",
-    familiaIdAtual,
-    "gastos"
-  );
-
+  const referencia = collection(db, "familias", familiaIdAtual, "gastos");
   const tentativas = [
     query(referencia, orderBy("dataCompraMs", "desc"), limit(MAXIMO_GASTOS_HISTORICOS)),
     query(referencia, orderBy("criadoEm", "desc"), limit(MAXIMO_GASTOS_HISTORICOS)),
@@ -604,10 +615,7 @@ async function carregarPrecosHistoricos() {
     const resultados = await Promise.all(
       gastos.map(async (gasto) => {
         try {
-          const snapshotItens = await getDocs(
-            collection(gasto.referencia, "itens")
-          );
-
+          const snapshotItens = await getDocs(collection(gasto.referencia, "itens"));
           return {
             data: dataOrdenacaoGasto(gasto.dados),
             itens: snapshotItens.docs.map((documento) => ({
@@ -648,9 +656,7 @@ async function carregarPrecosHistoricos() {
           novosItensHistoricos.push(registro);
 
           chavesItemHistorico(item).forEach((chave) => {
-            if (!novoMapa.has(chave)) {
-              novoMapa.set(chave, registro);
-            }
+            if (!novoMapa.has(chave)) novoMapa.set(chave, registro);
           });
         });
       });
@@ -662,10 +668,7 @@ async function carregarPrecosHistoricos() {
     historicoPronto = true;
     renderizarEstimativa();
   } catch (erro) {
-    console.error(
-      "Estimativa ListaLar: não foi possível carregar o histórico de preços.",
-      erro
-    );
+    console.error("Estimativa ListaLar: não foi possível carregar o histórico de preços.", erro);
 
     if (minhaGeracao === geracaoCargaHistorico) {
       precosHistoricos = new Map();
@@ -700,45 +703,24 @@ function pararListeners() {
 
   const card = document.getElementById(ID_CARD);
   if (card) card.hidden = true;
-
-  document.querySelectorAll(`.${CLASSE_INDICADOR}`).forEach((el) => el.remove());
+  document.querySelectorAll(`.${CLASSE_INDICADOR}`).forEach((elemento) => elemento.remove());
 }
 
 function iniciarProdutos(db) {
-  const referencia = collection(
-    db,
-    "familias",
-    familiaIdAtual,
-    "produtos"
-  );
+  const referencia = collection(db, "familias", familiaIdAtual, "produtos");
 
   unsubscribeProdutos = onSnapshot(
     query(referencia, orderBy("nome")),
     (snapshot) => {
-      produtos = snapshot.docs.map((documento) => ({
-        id: documento.id,
-        ...documento.data()
-      }));
-
+      produtos = snapshot.docs.map((documento) => ({ id: documento.id, ...documento.data() }));
       renderizarEstimativa();
     },
-    (erro) => {
-      console.error(
-        "Estimativa ListaLar: não foi possível acompanhar os produtos.",
-        erro
-      );
-    }
+    (erro) => console.error("Estimativa ListaLar: não foi possível acompanhar os produtos.", erro)
   );
 }
 
 function iniciarMonitorGastos(db) {
-  const referencia = collection(
-    db,
-    "familias",
-    familiaIdAtual,
-    "gastos"
-  );
-
+  const referencia = collection(db, "familias", familiaIdAtual, "gastos");
   let primeiraLeitura = true;
   let assinaturaAnterior = "";
 
@@ -760,11 +742,7 @@ function iniciarMonitorGastos(db) {
         }
       },
       (erro) => {
-        console.warn(
-          "Estimativa ListaLar: monitor de gastos indisponível; usando carga direta.",
-          erro
-        );
-
+        console.warn("Estimativa ListaLar: monitor de gastos indisponível; usando carga direta.", erro);
         if (primeiraLeitura) {
           primeiraLeitura = false;
           carregarPrecosHistoricos();
@@ -772,10 +750,7 @@ function iniciarMonitorGastos(db) {
       }
     );
   } catch (erro) {
-    console.warn(
-      "Estimativa ListaLar: não foi possível iniciar o monitor de gastos.",
-      erro
-    );
+    console.warn("Estimativa ListaLar: não foi possível iniciar o monitor de gastos.", erro);
     carregarPrecosHistoricos();
   }
 }
@@ -788,16 +763,10 @@ async function iniciarParaUsuario(usuario) {
   if (!aplicativo) return;
 
   const db = getFirestore(aplicativo);
-  const snapshotUsuario = await getDoc(
-    doc(db, "usuarios", usuario.uid)
-  );
-
+  const snapshotUsuario = await getDoc(doc(db, "usuarios", usuario.uid));
   if (!snapshotUsuario.exists()) return;
 
-  const familiaId = String(
-    snapshotUsuario.data().familiaId || ""
-  ).trim();
-
+  const familiaId = String(snapshotUsuario.data().familiaId || "").trim();
   if (!familiaId) return;
 
   familiaIdAtual = familiaId;
@@ -814,39 +783,25 @@ async function iniciarEstimativaLista() {
     iniciarObservadorLista();
 
     const auth = getAuth(aplicativo);
-
     onAuthStateChanged(
       auth,
       (usuario) => {
         iniciarParaUsuario(usuario).catch((erro) => {
-          console.error(
-            "Estimativa ListaLar: erro ao iniciar para o usuário.",
-            erro
-          );
+          console.error("Estimativa ListaLar: erro ao iniciar para o usuário.", erro);
         });
       },
       (erro) => {
-        console.error(
-          "Estimativa ListaLar: erro ao acompanhar autenticação.",
-          erro
-        );
+        console.error("Estimativa ListaLar: erro ao acompanhar autenticação.", erro);
         pararListeners();
       }
     );
   } catch (erro) {
-    console.error(
-      "Estimativa ListaLar: módulo não foi iniciado.",
-      erro
-    );
+    console.error("Estimativa ListaLar: módulo não foi iniciado.", erro);
   }
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener(
-    "DOMContentLoaded",
-    iniciarEstimativaLista,
-    { once: true }
-  );
+  document.addEventListener("DOMContentLoaded", iniciarEstimativaLista, { once: true });
 } else {
   iniciarEstimativaLista();
 }
