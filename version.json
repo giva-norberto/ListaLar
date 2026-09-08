@@ -1,5 +1,5 @@
 {
-  "version": "1.0.69",
-  "updatedAt": "2026-09-06",
-  "notes": "Central de Ajuda atualizada com estimativa da compra, avisos diretos, voz e cadastro de novos produtos"
+  "version": "1.0.70",
+  "updatedAt": "2026-09-08",
+  "notes": "Estimativa da lista passa a conciliar descricoes de nota fiscal por familias e aliases de produtos"
 }
