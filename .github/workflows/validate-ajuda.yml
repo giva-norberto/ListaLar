@@ -33,7 +33,8 @@ jobs:
 
       - name: Confirmar recursos documentados
         run: |
-          grep -q "Central de Ajuda 3.0.0" central-ajuda.js
+          grep -q "Central de Ajuda 3.0.1" central-ajuda.js
+          grep -q "Conciliação por famílias de produto" central-ajuda-conteudo.js
           grep -q "Controle de Preços" central-ajuda-conteudo.js
           grep -q "Gastos" central-ajuda-conteudo.js
           grep -q "Tarefas" central-ajuda-conteudo.js
