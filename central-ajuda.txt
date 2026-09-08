@@ -1,9 +1,9 @@
 // ============================================================
-// ListaLar - Central de Ajuda 3.0.0
+// ListaLar - Central de Ajuda 3.0.1
 // UI pesquisável carregada pela interrogação principal.
 // ============================================================
 
-import { AJUDA_CATEGORIAS } from './central-ajuda-conteudo.js?v=3.0.0';
+import { AJUDA_CATEGORIAS } from './central-ajuda-conteudo.js?v=3.0.1';
 
 const ESTADO = { aberta:false, categoria:null, overflow:'', foco:null };
 const el = (id) => document.getElementById(id);
@@ -25,7 +25,7 @@ function criarEstilos() {
     .central-ajuda-painel{width:100%;max-width:720px;max-height:94dvh;display:flex;flex-direction:column;overflow:hidden;border-radius:25px 25px 0 0;background:#f8fafc;color:#172033;box-shadow:0 -20px 60px rgba(15,23,42,.30)}
     .central-ajuda-topo{padding:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;color:#fff;background:linear-gradient(135deg,#2563eb,#06b6d4)}
     .central-ajuda-topo h2{margin:0;font-size:21px}.central-ajuda-topo p{margin:4px 0 0;font-size:12px;font-weight:700;opacity:.92}
-    .central-ajuda-fechar{width:40px;height:40px;border:1px solid rgba(255,255,255,.45);border-radius:13px;background:rgba(255,255,255,.14);color:#fff;font-size:24px;font-weight:900;cursor:pointer}
+    .central-ajuda-fechar{width:40px;height:40px;flex:0 0 auto;border:1px solid rgba(255,255,255,.45);border-radius:13px;background:rgba(255,255,255,.14);color:#fff;font-size:24px;font-weight:900;cursor:pointer}
     .central-ajuda-corpo{min-height:0;flex:1;padding:15px;overflow:auto;overscroll-behavior:contain}.central-ajuda-inicio.oculto,.central-ajuda-detalhe{display:none}.central-ajuda-detalhe.aberto{display:block}
     .central-ajuda-intro{margin-bottom:13px;padding:15px;border:1px solid #bfdbfe;border-radius:17px;background:#eff6ff}.central-ajuda-intro strong{color:#1d4ed8}.central-ajuda-intro p{margin:5px 0 0;color:#475569;font-size:13px;font-weight:700}
     .central-ajuda-busca{width:100%;min-height:48px;margin-bottom:13px;padding:0 14px;border:2px solid #dbeafe;border-radius:14px;outline:0;background:#fff;color:#172033;font-size:14px;font-weight:700}.central-ajuda-busca:focus{border-color:#2563eb}
@@ -117,5 +117,5 @@ function criarInterface() {
 function instalar(){ criarEstilos(); criarInterface(); }
 window.abrirCentralAjuda=(categoria=null)=>abrir(categoria);
 window.fecharCentralAjuda=()=>fechar();
-window.ListaLarAjuda=Object.freeze({versao:'3.0.0',abrir,fechar,abrirCategoria,instalar});
+window.ListaLarAjuda=Object.freeze({versao:'3.0.1',abrir,fechar,abrirCategoria,instalar});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',instalar,{once:true});else instalar();
