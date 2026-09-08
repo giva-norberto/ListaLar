@@ -1,5 +1,5 @@
 {
-  "version": "1.0.70",
+  "version": "1.0.71",
   "updatedAt": "2026-09-08",
-  "notes": "Estimativa da lista passa a conciliar descricoes de nota fiscal por familias e aliases de produtos"
+  "notes": "Conciliação da estimativa por famílias e aliases de produtos, com Central de Ajuda atualizada"
 }
