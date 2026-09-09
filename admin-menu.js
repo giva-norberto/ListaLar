@@ -9,6 +9,7 @@
 
 import "./avisos.js?v=1.0.64";
 import "./estimativa-lista-v2.js?v=2.0.0";
+import "./tipografia-mobile.js?v=1.0.72";
 
 import {
   getApps,
