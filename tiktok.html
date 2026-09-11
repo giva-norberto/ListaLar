@@ -61,8 +61,12 @@
     .mini{background:#fff;border:1px solid #e5edf8;border-radius:18px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.06);margin-bottom:10px}.miniTop{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px}.miniTop strong{font-size:1rem}.tag{font-size:.7rem;font-weight:900;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px}
     .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #edf2f7}.row:first-of-type{border-top:0}.row small{color:#64748b;font-weight:700}
     .estimate{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;border-radius:18px;padding:15px 16px}.estimate small{color:#cbd5e1}.estimate strong{font-size:1.45rem}
-    .strip{background:#071426;color:#fff;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
-    .stripIn{display:flex;gap:12px;overflow:hidden;padding:14px 0}.pill{flex:0 0 auto;padding:9px 12px;border-radius:999px;background:#0f223b;border:1px solid rgba(255,255,255,.08);font-weight:800;font-size:.9rem}
+    .strip{background:#071426;color:#fff;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);overflow:hidden}
+    .ticker{display:flex;width:max-content;will-change:transform;animation:listalarTicker 24s linear infinite}
+    .tickerGroup{display:flex;gap:12px;flex:none;padding:14px 12px 14px 0}
+    .pill{flex:0 0 auto;padding:9px 12px;border-radius:999px;background:#0f223b;border:1px solid rgba(255,255,255,.08);font-weight:800;font-size:.9rem;white-space:nowrap}
+    @keyframes listalarTicker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+    @media(prefers-reduced-motion:reduce){.ticker{animation:none}}
     .section{padding:64px 0}.section.soft{background:var(--soft)}
     .head{max-width:760px;margin-bottom:28px}.over{font-weight:900;color:#1d4ed8;text-transform:uppercase;letter-spacing:.09em;font-size:.78rem}.head h2{font-size:clamp(2rem,4vw,3.2rem);line-height:1.03;letter-spacing:-.04em;margin:8px 0 12px}.head p{margin:0;color:var(--muted);font-size:1.04rem}
     .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.feature{background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow)}.feature b{display:block;font-size:1.55rem;margin-bottom:12px}.feature strong{display:block;font-size:1.05rem;margin-bottom:6px}.feature span{color:var(--muted);font-size:.93rem}
@@ -73,7 +77,7 @@
       .heroGrid{grid-template-columns:1fr;padding:28px 0 42px}.phone{width:min(340px,92vw);transform:none}.phoneWrap{margin-top:8px}.screen{min-height:0}.grid4{grid-template-columns:repeat(2,1fr)}.shareBox,.ctaGrid{grid-template-columns:1fr}.navBtn{font-size:.88rem}.points{gap:10px 15px}
     }
     @media(max-width:520px){
-      .wrap{width:min(100% - 20px,1120px)}.nav{padding:12px 0}.brand span{font-size:1rem}.brand img{width:38px;height:38px}.navBtn{min-height:40px;padding:0 12px}.heroGrid{padding-top:18px}h1{font-size:2.7rem}.lead{font-size:1rem}.btn{width:100%}.grid4{grid-template-columns:1fr}.section{padding:48px 0}.phone{width:100%}.points{font-size:.84rem}.shareBox{padding:21px}.foot{flex-direction:column}
+      .wrap{width:min(100% - 20px,1120px)}.nav{padding:12px 0}.brand span{font-size:1rem}.brand img{width:38px;height:38px}.navBtn{min-height:40px;padding:0 12px}.heroGrid{padding-top:18px}h1{font-size:2.7rem}.lead{font-size:1rem}.btn{width:100%}.grid4{grid-template-columns:1fr}.section{padding:48px 0}.phone{width:100%}.points{font-size:.84rem}.shareBox{padding:21px}.foot{flex-direction:column}.ticker{animation-duration:19s}
     }
   </style>
 </head>
@@ -132,12 +136,25 @@
   </div>
 
   <div class="strip">
-    <div class="wrap stripIn" aria-label="Recursos do ListaLar">
-      <span class="pill">🛒 Lista compartilhada</span>
-      <span class="pill">📦 Estoque doméstico</span>
-      <span class="pill">🎙️ Itens por voz</span>
-      <span class="pill">📊 Histórico de preços</span>
-      <span class="pill">💰 Estimativa de gastos</span>
+    <div class="ticker" aria-label="Recursos do ListaLar">
+      <div class="tickerGroup">
+        <span class="pill">🛒 Lista compartilhada</span>
+        <span class="pill">📦 Estoque doméstico</span>
+        <span class="pill">🎙️ Itens por voz</span>
+        <span class="pill">📊 Histórico de preços</span>
+        <span class="pill">💰 Estimativa de gastos</span>
+        <span class="pill">✅ Tarefas da casa</span>
+        <span class="pill">📱 Feito para o celular</span>
+      </div>
+      <div class="tickerGroup" aria-hidden="true">
+        <span class="pill">🛒 Lista compartilhada</span>
+        <span class="pill">📦 Estoque doméstico</span>
+        <span class="pill">🎙️ Itens por voz</span>
+        <span class="pill">📊 Histórico de preços</span>
+        <span class="pill">💰 Estimativa de gastos</span>
+        <span class="pill">✅ Tarefas da casa</span>
+        <span class="pill">📱 Feito para o celular</span>
+      </div>
     </div>
   </div>
 
