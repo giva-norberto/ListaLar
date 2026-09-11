@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b63ce">
-  <meta name="description" content="ListaLar: lista de compras compartilhada, estoque doméstico, lista por voz, estimativa pelo histórico de compras, gastos, preços e ajuda dentro do app.">
-  <meta property="og:title" content="ListaLar | Lista de compras inteligente para sua casa">
-  <meta property="og:description" content="Organize lista, estoque e gastos da família em um só lugar.">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="description" content="ListaLar: lista de compras compartilhada, estoque doméstico, voz, histórico de preços, estimativa de gastos e recursos para organizar a casa em família.">
+  <meta property="og:title" content="ListaLar | A lista de compras que a família toda consegue usar">
+  <meta property="og:description" content="Lista, estoque, voz, histórico de preços e gastos da casa em um só lugar.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="./icon-512.png">
-  <title>ListaLar | Lista de compras inteligente para sua casa</title>
+  <title>ListaLar | A lista de compras que a família toda consegue usar</title>
   <link rel="icon" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,34 +17,45 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root{
-      --azul:#0b63ce;--azul2:#1b7bea;--azul-claro:#eaf4ff;--verde:#20a55a;--verde-claro:#eafaf1;
-      --texto:#122033;--muted:#5d6b7f;--borda:#dfe8f3;--fundo:#f6f9fd;--branco:#fff;--shadow:0 18px 50px rgba(18,32,51,.10)
+      --azul:#2563eb;--azul2:#06b6d4;--azul-claro:#eaf1ff;--verde:#16a34a;--verde-claro:#dcfce7;
+      --texto:#172033;--muted:#5d6b7f;--borda:#dbeafe;--fundo:#f6f9fd;--branco:#fff;--escuro:#0f2543;
+      --shadow:0 18px 50px rgba(18,32,51,.10)
     }
-    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--texto);background:var(--fundo);line-height:1.5;-webkit-font-smoothing:antialiased}a{text-decoration:none;color:inherit}
-    .container{width:min(1120px,calc(100% - 32px));margin:0 auto}
-    .topbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);border-bottom:1px solid rgba(223,232,243,.9)}
-    .topbar-inner{min-height:70px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;align-items:center;gap:11px;font-weight:900;font-size:1.22rem;letter-spacing:-.03em}.brand img{width:42px;height:42px;border-radius:12px;box-shadow:0 6px 18px rgba(11,99,206,.18)}.brand b{color:var(--azul)}.brand em{font-style:normal;color:var(--verde)}
-    .nav{display:flex;align-items:center;gap:20px;color:var(--muted);font-size:.92rem;font-weight:700}.nav a:hover{color:var(--azul)}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 20px;border-radius:14px;font-weight:800;transition:.2s ease;border:1px solid transparent;cursor:pointer;font:inherit}.btn-primary{background:linear-gradient(135deg,var(--azul),var(--azul2));color:#fff;box-shadow:0 10px 24px rgba(11,99,206,.25)}.btn-primary:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(11,99,206,.30)}.btn-light{background:#fff;border-color:var(--borda);color:var(--azul)}
-    .hero{position:relative;overflow:hidden;padding:76px 0 66px;background:radial-gradient(circle at 88% 10%,rgba(32,165,90,.14),transparent 30%),radial-gradient(circle at 10% 20%,rgba(27,123,234,.15),transparent 32%),linear-gradient(180deg,#fff 0%,#f6f9fd 100%)}
-    .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:58px;align-items:center}.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:var(--azul-claro);color:var(--azul);font-size:.82rem;font-weight:800;margin-bottom:18px}.hero h1{font-size:clamp(2.45rem,5.5vw,4.55rem);line-height:.98;letter-spacing:-.065em;margin:0 0 22px;max-width:720px}.hero h1 span{color:var(--azul)}.hero p{font-size:1.13rem;color:var(--muted);max-width:650px;margin:0 0 28px}.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}.hero-points{display:flex;gap:16px;flex-wrap:wrap;color:#40506a;font-size:.9rem;font-weight:700}.hero-points span{display:flex;align-items:center;gap:7px}.hero-points i{font-style:normal;color:var(--verde)}
-    .phone-wrap{display:flex;justify-content:center}.phone{width:min(365px,100%);padding:14px;border-radius:38px;background:#152033;box-shadow:0 34px 70px rgba(16,31,54,.22);transform:rotate(1.2deg)}.screen{border-radius:28px;background:#f7f9fc;overflow:hidden;min-height:640px;border:1px solid rgba(255,255,255,.15)}.screen-head{padding:20px 18px 14px;background:linear-gradient(135deg,#0b63ce,#1b7bea);color:#fff}.screen-brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:1.18rem}.screen-brand img{width:34px;height:34px;border-radius:10px}.screen-sub{font-size:.8rem;opacity:.9;margin-top:4px}.screen-body{padding:15px}.mini-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:13px}.mini-tab{font-size:.78rem;font-weight:800;text-align:center;padding:9px 5px;border-radius:10px;background:#edf3fa;color:#52627a}.mini-tab.active{background:#dcecff;color:var(--azul)}.stock-card{padding:14px;border-radius:16px;background:#fff;border:1px solid var(--borda);box-shadow:0 8px 20px rgba(18,32,51,.05);margin-bottom:11px}.stock-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.stock-top strong{font-size:.94rem}.tag{font-size:.72rem;font-weight:800;padding:5px 8px;border-radius:999px;background:var(--verde-claro);color:var(--verde)}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #edf1f6}.row:first-of-type{border-top:0}.row-name{display:flex;align-items:center;gap:9px;font-size:.9rem;font-weight:700}.row-name b{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:var(--azul-claro)}.qty{font-size:.8rem;color:var(--muted);font-weight:700}.estimate{padding:14px;border-radius:16px;background:linear-gradient(135deg,#eaf4ff,#fff);border:1px solid #cfe5ff;display:flex;align-items:center;justify-content:space-between;gap:14px}.estimate small{display:block;color:var(--muted);font-weight:700}.estimate strong{font-size:1.28rem;color:var(--azul)}
-    section{padding:72px 0}.section-head{max-width:760px;margin:0 auto 36px;text-align:center}.overline{color:var(--azul);font-weight:900;text-transform:uppercase;letter-spacing:.11em;font-size:.74rem}.section-head h2{font-size:clamp(2rem,4vw,3rem);letter-spacing:-.045em;line-height:1.06;margin:10px 0 12px}.section-head p{margin:0;color:var(--muted);font-size:1.02rem}
-    .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.feature{background:#fff;border:1px solid var(--borda);border-radius:20px;padding:23px;box-shadow:0 10px 30px rgba(18,32,51,.045)}.feature-icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:1.45rem;background:var(--azul-claro);margin-bottom:15px}.feature:nth-child(2n) .feature-icon{background:var(--verde-claro)}.feature h3{font-size:1.06rem;margin:0 0 7px}.feature p{margin:0;color:var(--muted);font-size:.92rem}
-    .recent{padding-top:0}.recent-box{background:#fff;border:1px solid var(--borda);border-radius:24px;padding:26px;box-shadow:var(--shadow)}.recent-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}.recent-item{padding:16px;border-radius:16px;background:#f8fbff;border:1px solid #e1ecf7}.recent-item strong{display:block;margin-bottom:5px;font-size:.94rem}.recent-item span{color:var(--muted);font-size:.84rem}
-    .highlight{background:#0f2543;color:#fff;overflow:hidden;position:relative}.highlight:before{content:"";position:absolute;width:420px;height:420px;border-radius:50%;background:rgba(27,123,234,.22);right:-100px;top:-160px}.highlight-grid{position:relative;display:grid;grid-template-columns:.9fr 1.1fr;gap:50px;align-items:center}.highlight h2{font-size:clamp(2rem,4vw,3rem);line-height:1.05;letter-spacing:-.045em;margin:0 0 16px}.highlight p{color:#c7d4e7;margin:0 0 22px}.history-card{background:#fff;color:var(--texto);border-radius:22px;padding:22px;box-shadow:0 22px 55px rgba(0,0,0,.18)}.history-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:11px}.history-title small{color:var(--verde);font-weight:900}.hist-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:12px 0;border-top:1px solid #e9eef4}.hist-row span{font-size:.9rem;font-weight:700}.hist-row b{color:var(--azul)}.history-note{margin-top:12px;padding:11px 12px;border-radius:12px;background:#f4f8fc;color:#5b687a;font-size:.8rem;font-weight:600}
-    .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:passo}.step{position:relative;background:#fff;border:1px solid var(--borda);border-radius:20px;padding:26px 22px;counter-increment:passo}.step:before{content:counter(passo);width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--azul);color:#fff;font-weight:900;margin-bottom:15px}.step h3{margin:0 0 7px;font-size:1.03rem}.step p{margin:0;color:var(--muted);font-size:.9rem}
-    .cta{padding-top:18px;padding-bottom:86px}.cta-box{background:linear-gradient(135deg,#0b63ce,#1752a4);color:#fff;border-radius:28px;padding:44px;display:grid;grid-template-columns:1fr auto;gap:28px;align-items:center;box-shadow:0 22px 55px rgba(11,99,206,.22)}.cta h2{margin:0 0 9px;font-size:clamp(1.75rem,4vw,2.65rem);letter-spacing:-.04em;line-height:1.05}.cta p{margin:0;color:#dcecff;max-width:650px}.cta-actions{display:flex;gap:10px;flex-wrap:wrap}.cta .btn{background:#fff;color:var(--azul);white-space:nowrap}.cta .share{background:transparent;color:#fff;border-color:rgba(255,255,255,.42)}
-    footer{padding:24px 0 34px;border-top:1px solid var(--borda);background:#fff;color:var(--muted);font-size:.84rem}.footer-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.footer-brand{font-weight:900;color:var(--texto)}
-    @media(max-width:900px){.nav a:not(.btn){display:none}.hero{padding:54px 0 56px}.hero-grid,.highlight-grid{grid-template-columns:1fr;gap:40px}.hero-copy{text-align:center}.hero p{margin-left:auto;margin-right:auto}.hero-actions,.hero-points{justify-content:center}.phone{width:min(360px,92%);transform:none}.features{grid-template-columns:repeat(2,1fr)}.recent-grid{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr}.cta-box{grid-template-columns:1fr;text-align:center}.cta-actions{justify-content:center}}
-    @media(max-width:600px){.container{width:min(100% - 24px,1120px)}.topbar-inner{min-height:64px}.brand{font-size:1.08rem}.brand img{width:38px;height:38px}.nav{gap:8px}.nav .btn{min-height:42px;padding:0 13px;font-size:.83rem}.hero{padding-top:38px}.hero h1{font-size:2.48rem}.hero p{font-size:1rem}.btn{width:100%}.hero-actions{display:grid;grid-template-columns:1fr;width:100%}.hero-points{gap:10px 16px;font-size:.82rem}.phone{width:100%}.screen{min-height:580px}section{padding:56px 0}.features,.recent-grid{grid-template-columns:1fr}.feature{padding:20px}.highlight-grid{gap:30px}.cta{padding-bottom:64px}.cta-box{padding:30px 20px;border-radius:22px}.cta-actions{display:grid;grid-template-columns:1fr;width:100%}.footer-inner{justify-content:center;text-align:center}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--texto);background:var(--fundo);line-height:1.55;-webkit-font-smoothing:antialiased}a{text-decoration:none;color:inherit}
+    .container{width:min(1080px,calc(100% - 32px));margin:0 auto}
+    .topbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);border-bottom:1px solid rgba(219,234,254,.9)}
+    .topbar-inner{min-height:68px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;align-items:center;gap:11px;font-weight:900;font-size:1.18rem;letter-spacing:-.03em}.brand img{width:40px;height:40px;border-radius:11px}.brand b{color:var(--azul)}.brand em{font-style:normal;color:var(--verde)}
+    .nav{display:flex;align-items:center;gap:18px;color:var(--muted);font-size:.9rem;font-weight:700}.nav a:hover{color:var(--azul)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 20px;border-radius:14px;font-weight:800;transition:.2s ease;border:1px solid transparent;cursor:pointer;font:inherit;font-size:.96rem}.btn-primary{background:linear-gradient(135deg,var(--azul),var(--azul2));color:#fff;box-shadow:0 10px 24px rgba(37,99,235,.25)}.btn-primary:hover{transform:translateY(-1px)}.btn-light{background:#fff;border-color:var(--borda);color:var(--azul)}
+
+    .hero{position:relative;overflow:hidden;padding:66px 0 60px;background:radial-gradient(circle at 88% 10%,rgba(6,182,212,.12),transparent 30%),radial-gradient(circle at 10% 20%,rgba(37,99,235,.13),transparent 32%),linear-gradient(180deg,#fff 0%,#f6f9fd 100%)}
+    .hero-grid{display:grid;grid-template-columns:1.03fr .97fr;gap:54px;align-items:center}.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:var(--azul-claro);color:var(--azul);font-size:.82rem;font-weight:800;margin-bottom:16px}
+    .hero h1{font-size:clamp(2.2rem,5vw,3.9rem);line-height:1.02;letter-spacing:-.045em;margin:0 0 18px;max-width:700px}.hero h1 span{color:var(--azul)}.hero p{font-size:1.08rem;color:var(--muted);max-width:640px;margin:0 0 25px}.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}.hero-points{display:flex;gap:15px;flex-wrap:wrap;color:#40506a;font-size:.88rem;font-weight:700}.hero-points span{display:flex;align-items:center;gap:7px}.hero-points i{font-style:normal;color:var(--verde)}
+
+    .phone-wrap{display:flex;justify-content:center}.phone{width:min(350px,100%);padding:13px;border-radius:36px;background:#152033;box-shadow:0 34px 70px rgba(16,31,54,.22);transform:rotate(1deg)}.screen{border-radius:26px;background:#f7f9fc;overflow:hidden;min-height:585px;border:1px solid rgba(255,255,255,.15)}.screen-head{padding:19px 17px 13px;background:linear-gradient(135deg,var(--azul),var(--azul2));color:#fff}.screen-brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:1.13rem}.screen-brand img{width:33px;height:33px;border-radius:9px}.screen-sub{font-size:.78rem;opacity:.9;margin-top:4px}.screen-body{padding:14px}.mini-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}.mini-tab{font-size:.75rem;font-weight:800;text-align:center;padding:9px 4px;border-radius:9px;background:#edf3fa;color:#52627a}.mini-tab.active{background:var(--azul-claro);color:var(--azul)}.stock-card{padding:13px;border-radius:15px;background:#fff;border:1px solid var(--borda);box-shadow:0 8px 20px rgba(18,32,51,.05);margin-bottom:10px}.stock-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}.stock-top strong{font-size:.91rem}.tag{font-size:.69rem;font-weight:800;padding:5px 8px;border-radius:999px;background:var(--verde-claro);color:var(--verde)}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #edf1f6}.row:first-of-type{border-top:0}.row-name{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:700}.row-name b{width:29px;height:29px;display:grid;place-items:center;border-radius:8px;background:var(--azul-claro)}.qty{font-size:.77rem;color:var(--muted);font-weight:700}.estimate{padding:13px;border-radius:15px;background:linear-gradient(135deg,#eaf1ff,#fff);border:1px solid #cfe0ff;display:flex;align-items:center;justify-content:space-between;gap:14px}.estimate small{display:block;color:var(--muted);font-weight:700}.estimate strong{font-size:1.24rem;color:var(--azul)}
+
+    section{padding:62px 0}.section-head{max-width:720px;margin:0 auto 32px;text-align:center}.overline{color:var(--azul);font-weight:900;text-transform:uppercase;letter-spacing:.09em;font-size:.72rem}.section-head h2{font-size:clamp(1.8rem,3.6vw,2.65rem);letter-spacing:-.035em;line-height:1.08;margin:9px 0 11px}.section-head p{margin:0;color:var(--muted);font-size:1rem}
+
+    .como-funciona{background:#fff;border-top:1px solid var(--borda);border-bottom:1px solid var(--borda)}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:passo}.step{position:relative;background:var(--fundo);border:1px solid var(--borda);border-radius:18px;padding:22px 20px;counter-increment:passo}.step:before{content:counter(passo);width:35px;height:35px;border-radius:10px;display:grid;place-items:center;background:var(--azul);color:#fff;font-weight:900;margin-bottom:13px}.step h3{margin:0 0 6px;font-size:1rem}.step p{margin:0;color:var(--muted);font-size:.9rem}
+
+    .beneficios-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.beneficio{background:#fff;border:1px solid var(--borda);border-radius:20px;padding:23px;box-shadow:0 10px 30px rgba(18,32,51,.045)}.beneficio-icon{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:1.38rem;background:var(--azul-claro);margin-bottom:14px}.beneficio:nth-child(2n) .beneficio-icon{background:var(--verde-claro)}.beneficio h3{font-size:1.03rem;margin:0 0 7px}.beneficio p{margin:0;color:var(--muted);font-size:.91rem}
+
+    .mais-recursos{padding-top:0}.recursos-box{background:#fff;border:1px solid var(--borda);border-radius:24px;padding:28px;box-shadow:var(--shadow)}.recursos-box h3{font-size:1.25rem;margin:0 0 7px}.recursos-box>p{margin:0;color:var(--muted)}.resource-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:20px}.resource-pill{min-height:104px;padding:15px;border-radius:16px;background:#f8fbff;border:1px solid #e1ecf7}.resource-pill b{display:block;font-size:1.35rem;margin-bottom:8px}.resource-pill strong{display:block;font-size:.9rem;margin-bottom:4px}.resource-pill span{display:block;color:var(--muted);font-size:.8rem;line-height:1.4}
+
+    .highlight{background:var(--escuro);color:#fff;overflow:hidden;position:relative}.highlight:before{content:"";position:absolute;width:420px;height:420px;border-radius:50%;background:rgba(37,99,235,.24);right:-100px;top:-160px}.highlight-grid{position:relative;display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:center}.highlight h2{font-size:clamp(1.9rem,3.7vw,2.75rem);line-height:1.07;letter-spacing:-.035em;margin:0 0 15px}.highlight p{color:#c7d4e7;margin:0 0 21px}.history-card{background:#fff;color:var(--texto);border-radius:22px;padding:22px;box-shadow:0 22px 55px rgba(0,0,0,.18)}.history-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:11px}.history-title small{color:var(--verde);font-weight:900}.hist-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:12px 0;border-top:1px solid #e9eef4}.hist-row span{font-size:.88rem;font-weight:700}.hist-row b{color:var(--azul)}.history-note{margin-top:12px;padding:11px 12px;border-radius:12px;background:#f4f8fc;color:#5b687a;font-size:.78rem;font-weight:600}
+
+    .cta{padding-top:20px;padding-bottom:76px}.cta-box{background:linear-gradient(135deg,var(--azul),#1752a4);color:#fff;border-radius:26px;padding:40px;display:grid;grid-template-columns:1fr auto;gap:26px;align-items:center;box-shadow:0 22px 55px rgba(37,99,235,.22)}.cta h2{margin:0 0 9px;font-size:clamp(1.7rem,3.5vw,2.5rem);letter-spacing:-.035em;line-height:1.07}.cta p{margin:0;color:#dcecff;max-width:620px}.cta-actions{display:flex;gap:10px;flex-wrap:wrap}.cta .btn{background:#fff;color:var(--azul);white-space:nowrap}.cta .share{background:transparent;color:#fff;border-color:rgba(255,255,255,.42)}
+    footer{padding:22px 0 30px;border-top:1px solid var(--borda);background:#fff;color:var(--muted);font-size:.82rem}.footer-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.footer-brand{font-weight:900;color:var(--texto)}
+
+    @media(max-width:900px){.nav a:not(.btn){display:none}.hero{padding:52px 0 54px}.hero-grid,.highlight-grid{grid-template-columns:1fr;gap:38px}.hero-copy{text-align:center}.hero p{margin-left:auto;margin-right:auto}.hero-actions,.hero-points{justify-content:center}.phone{width:min(350px,92%);transform:none}.steps{grid-template-columns:1fr}.resource-strip{grid-template-columns:repeat(2,1fr)}.cta-box{grid-template-columns:1fr;text-align:center}.cta-actions{justify-content:center}}
+    @media(max-width:600px){.container{width:min(100% - 24px,1080px)}.topbar-inner{min-height:64px}.brand{font-size:1.08rem}.brand img{width:38px;height:38px}.nav{gap:8px}.nav .btn{min-height:42px;padding:0 13px;font-size:.83rem}.hero{padding-top:36px}.hero h1{font-size:2.35rem}.hero p{font-size:1rem}.btn{width:100%}.hero-actions{display:grid;grid-template-columns:1fr;width:100%}.hero-points{gap:10px 16px;font-size:.82rem}.phone{width:100%}.screen{min-height:550px}section{padding:52px 0}.beneficios-grid,.resource-strip{grid-template-columns:1fr}.beneficio{padding:20px}.recursos-box{padding:22px}.highlight-grid{gap:28px}.cta{padding-bottom:60px}.cta-box{padding:28px 20px;border-radius:22px}.cta-actions{display:grid;grid-template-columns:1fr;width:100%}.footer-inner{justify-content:center;text-align:center}}
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="container topbar-inner">
       <a class="brand" href="#inicio" aria-label="ListaLar - início"><img src="./icon-192.png" alt="Logo ListaLar"><span><b>Lista</b><em>Lar</em></span></a>
-      <nav class="nav" aria-label="Navegação principal"><a href="#recursos">Recursos</a><a href="#novidades">Novidades</a><a href="#como-funciona">Como funciona</a><a class="btn btn-primary" href="./index.html">Abrir ListaLar</a></nav>
+      <nav class="nav" aria-label="Navegação principal"><a href="#como-funciona">Como funciona</a><a href="#recursos">Recursos</a><a class="btn btn-primary" href="./index.html">Abrir ListaLar</a></nav>
     </div>
   </header>
 
@@ -52,53 +63,64 @@
     <section class="hero" id="inicio">
       <div class="container hero-grid">
         <div class="hero-copy">
-          <div class="eyebrow">🏠 Organização inteligente para a sua casa</div>
-          <h1>Compras da casa sem esquecer, <span>sem adivinhar.</span></h1>
-          <p>O ListaLar reúne lista compartilhada, estoque doméstico, inclusão por voz, histórico de compras, preços e estimativa de gastos em um só lugar.</p>
-          <div class="hero-actions"><a class="btn btn-primary" href="./index.html">Experimentar o ListaLar →</a><a class="btn btn-light" href="#recursos">Conhecer os recursos</a></div>
-          <div class="hero-points"><span><i>✓</i> Lista da família sincronizada</span><span><i>✓</i> Estoque e reposição</span><span><i>✓</i> Feito para o celular</span></div>
+          <div class="eyebrow">🏠 Para a família toda usar</div>
+          <h1>A lista de compras da casa, <span>que todo mundo consegue usar.</span></h1>
+          <p>Lista compartilhada, estoque, compras por voz, histórico de preços e controle de gastos — tudo em um só lugar e sem complicação.</p>
+          <div class="hero-actions"><a class="btn btn-primary" href="./index.html">Experimentar o ListaLar →</a><a class="btn btn-light" href="#como-funciona">Ver como funciona</a></div>
+          <div class="hero-points"><span><i>✓</i> Lista sincronizada</span><span><i>✓</i> Estoque e reposição</span><span><i>✓</i> Feito para o celular</span></div>
         </div>
+
         <div class="phone-wrap" aria-label="Demonstração visual do ListaLar">
           <div class="phone"><div class="screen">
             <div class="screen-head"><div class="screen-brand"><img src="./icon-192.png" alt=""><span>ListaLar</span></div><div class="screen-sub">Lista inteligente da família</div></div>
             <div class="screen-body">
               <div class="mini-tabs"><div class="mini-tab active">🛒 Lista</div><div class="mini-tab">📦 Estoque</div><div class="mini-tab">✨ IA</div></div>
               <div class="stock-card"><div class="stock-top"><strong>Lista de compras</strong><span class="tag">Atualizada</span></div><div class="row"><div class="row-name"><b>🫘</b>Feijão</div><div class="qty">Comprar 2</div></div><div class="row"><div class="row-name"><b>🍝</b>Macarrão</div><div class="qty">Comprar 1</div></div><div class="row"><div class="row-name"><b>🎙️</b>Adicionar por voz</div><div class="qty">Falar</div></div></div>
-              <div class="stock-card"><div class="stock-top"><strong>Rotina da família</strong><span class="tag">Sincronizada</span></div><div class="row"><div class="row-name"><b>📦</b>Estoque mínimo</div><div class="qty">Reposição</div></div><div class="row"><div class="row-name"><b>💰</b>Controle de preços</div><div class="qty">Opcional</div></div></div>
-              <div class="estimate"><div><small>Estimativa pelo histórico</small><strong>R$ 78,40</strong></div><div style="font-size:1.55rem">📊</div></div>
+              <div class="stock-card"><div class="stock-top"><strong>Estoque doméstico</strong><span class="tag">Sincronizado</span></div><div class="row"><div class="row-name"><b>📦</b>Arroz</div><div class="qty">1 un.</div></div><div class="row"><div class="row-name"><b>🧻</b>Papel higiênico</div><div class="qty">Estoque baixo</div></div></div>
+              <div class="estimate"><div><small>Estimativa pelo histórico</small><strong>R$ 78,40</strong></div><div style="font-size:1.5rem">📊</div></div>
             </div>
           </div></div>
         </div>
       </div>
     </section>
 
-    <section id="recursos">
+    <section class="como-funciona" id="como-funciona">
       <div class="container">
-        <div class="section-head"><div class="overline">Muito além de uma lista</div><h2>O ListaLar acompanha a rotina real da casa</h2><p>Menos memória, menos retrabalho e mais clareza para decidir o que comprar e quanto pode gastar.</p></div>
-        <div class="features">
-          <article class="feature"><div class="feature-icon">👨‍👩‍👦</div><h3>Lista compartilhada</h3><p>A família usa a mesma lista e mantém os itens organizados em um único lugar.</p></article>
-          <article class="feature"><div class="feature-icon">🎙️</div><h3>Lista por voz</h3><p>Adicione itens falando e registre rapidamente o que acabou sem precisar digitar tudo.</p></article>
-          <article class="feature"><div class="feature-icon">📦</div><h3>Controle de estoque</h3><p>Acompanhe o que existe em casa, defina mínimos e deixe a reposição mais previsível.</p></article>
-          <article class="feature"><div class="feature-icon">💰</div><h3>Estimativa da compra</h3><p>Quando há histórico compatível, o ListaLar usa compras anteriores para estimar o valor da lista atual.</p></article>
-          <article class="feature"><div class="feature-icon">📈</div><h3>Gastos e preços</h3><p>Registre compras, acompanhe valores e use o controle de preços quando quiser detalhar a compra.</p></article>
-          <article class="feature"><div class="feature-icon">🧾</div><h3>Importação de compras</h3><p>Aproveite dados de nota/PDF para alimentar o histórico e reduzir trabalho manual.</p></article>
-          <article class="feature"><div class="feature-icon">✨</div><h3>Sugestões inteligentes</h3><p>O app combina estoque, lista e contexto de uso para ajudar na organização das próximas compras.</p></article>
-          <article class="feature"><div class="feature-icon">✅</div><h3>Tarefas da casa</h3><p>Centralize pequenas tarefas junto da rotina doméstica sem depender de várias ferramentas.</p></article>
-          <article class="feature"><div class="feature-icon">❓</div><h3>Central de ajuda</h3><p>Uma ajuda pesquisável dentro do próprio aplicativo facilita o uso dos principais recursos.</p></article>
+        <div class="section-head"><div class="overline">Passo a passo</div><h2>Três passos simples para começar</h2><p>Não precisa mudar a rotina da casa de uma vez. É só começar pelo que já faz hoje.</p></div>
+        <div class="steps">
+          <article class="step"><h3>Monte a lista</h3><p>Adicione os itens digitando ou falando e compartilhe com quem também faz compras em casa.</p></article>
+          <article class="step"><h3>Registre o que comprou</h3><p>Ao finalizar a compra, o ListaLar atualiza o estoque e mantém o histórico daquela família.</p></article>
+          <article class="step"><h3>Use o histórico a seu favor</h3><p>Consulte preços, gastos, reposições e estimativas antes da próxima ida ao mercado.</p></article>
         </div>
       </div>
     </section>
 
-    <section class="recent" id="novidades">
+    <section id="recursos">
       <div class="container">
-        <div class="recent-box">
-          <div class="overline">Melhorias recentes</div>
-          <h2 style="margin:8px 0 0;font-size:clamp(1.6rem,3vw,2.25rem);letter-spacing:-.04em">O app continua evoluindo sem complicar o uso.</h2>
-          <div class="recent-grid">
-            <div class="recent-item"><strong>Estimativa mais segura</strong><span>Conciliação por famílias de produtos e proteção contra correspondências incompatíveis.</span></div>
-            <div class="recent-item"><strong>Leitura melhorada</strong><span>Tipografia ampliada em pontos importantes da lista, resumo, estimativa e navegação.</span></div>
-            <div class="recent-item"><strong>Ajuda dentro do app</strong><span>Central pesquisável para orientar o usuário sem sair do ListaLar.</span></div>
-            <div class="recent-item"><strong>Atualização controlada</strong><span>O app verifica novas versões para reduzir problemas com arquivos antigos em cache.</span></div>
+        <div class="section-head"><div class="overline">O que muda na rotina</div><h2>Quatro benefícios que você percebe no dia a dia</h2><p>Em vez de uma lista enorme de funções, o ListaLar organiza o que realmente ajuda a casa.</p></div>
+        <div class="beneficios-grid">
+          <article class="beneficio"><div class="beneficio-icon">👨‍👩‍👦</div><h3>Todo mundo vê a mesma lista</h3><p>Não tem mais “achei que você ia comprar”. A família usa a mesma lista, atualizada para todos.</p></article>
+          <article class="beneficio"><div class="beneficio-icon">🎙️</div><h3>Fale em vez de digitar</h3><p>Acabou alguma coisa? Use a voz para incluir o item rapidamente e continuar o que estava fazendo.</p></article>
+          <article class="beneficio"><div class="beneficio-icon">📦</div><h3>Saiba o que ainda tem em casa</h3><p>Estoque mínimo e reposição ajudam a evitar falta do essencial e compra repetida sem necessidade.</p></article>
+          <article class="beneficio"><div class="beneficio-icon">📊</div><h3>Entenda melhor os gastos</h3><p>Histórico de compras, preços e estimativas dão mais contexto antes de decidir o que comprar.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="mais-recursos">
+      <div class="container">
+        <div class="recursos-box">
+          <h3>Tem mais recursos sem deixar o app complicado</h3>
+          <p>Os recursos complementares ficam disponíveis quando você precisa deles.</p>
+          <div class="resource-strip">
+            <div class="resource-pill"><b>💰</b><strong>Controle de preços</strong><span>Registre valores e acompanhe o total durante a compra.</span></div>
+            <div class="resource-pill"><b>🧾</b><strong>Histórico de compras</strong><span>Guarde compras e notas para consultar depois.</span></div>
+            <div class="resource-pill"><b>✅</b><strong>Tarefas da casa</strong><span>Centralize pequenas tarefas junto da rotina doméstica.</span></div>
+            <div class="resource-pill"><b>❓</b><strong>Central de Ajuda</strong><span>Orientações pesquisáveis dentro do próprio ListaLar.</span></div>
+            <div class="resource-pill"><b>🔔</b><strong>Avisos importantes</strong><span>Comunicados aparecem diretamente no aplicativo quando necessário.</span></div>
+            <div class="resource-pill"><b>📱</b><strong>Instalação no celular</strong><span>Use como aplicativo na tela inicial, sem depender da loja.</span></div>
+            <div class="resource-pill"><b>🔄</b><strong>Atualizações controladas</strong><span>Nova versão disponível sem perder o contexto da família.</span></div>
+            <div class="resource-pill"><b>👪</b><strong>Uso por família</strong><span>Cada família mantém sua própria rotina, lista e histórico.</span></div>
           </div>
         </div>
       </div>
@@ -106,15 +128,20 @@
 
     <section class="highlight">
       <div class="container highlight-grid">
-        <div><div class="eyebrow" style="background:rgba(255,255,255,.1);color:#dcecff">📊 Histórico que trabalha por você</div><h2>Uma lista que fica mais útil conforme você registra suas compras.</h2><p>O ListaLar reconhece itens compatíveis do histórico e usa preços anteriores para compor uma estimativa. Itens sem correspondência segura ficam fora do cálculo, evitando inventar valores.</p><a class="btn btn-primary" href="./index.html">Começar agora →</a></div>
-        <div class="history-card"><div class="history-title"><strong>Estimativa da lista</strong><small>Histórico encontrado</small></div><div class="hist-row"><span>Feijão • 2 un.</span><b>R$ 14,88</b></div><div class="hist-row"><span>Macarrão • 1 un.</span><b>R$ 7,49</b></div><div class="hist-row"><span>Ovos • 1 bandeja</span><b>R$ 19,98</b></div><div class="hist-row"><span>Itens estimados</span><b>3 itens</b></div><div class="history-note">A estimativa considera somente correspondências confiáveis do histórico. O preço final pode variar no mercado.</div></div>
-      </div>
-    </section>
-
-    <section id="como-funciona">
-      <div class="container">
-        <div class="section-head"><div class="overline">Simples de começar</div><h2>Três passos para organizar melhor as compras</h2><p>Você não precisa mudar toda a rotina da casa para começar a ganhar controle.</p></div>
-        <div class="steps"><article class="step"><h3>Monte sua lista</h3><p>Adicione produtos manualmente ou por voz e compartilhe a rotina com a família.</p></article><article class="step"><h3>Atualize estoque e compras</h3><p>Registre o que tem em casa e alimente o histórico conforme as compras acontecem.</p></article><article class="step"><h3>Use o histórico a seu favor</h3><p>Veja reposições, estimativas, gastos e preços com mais contexto antes de comprar novamente.</p></article></div>
+        <div>
+          <div class="eyebrow" style="background:rgba(255,255,255,.1);color:#dcecff">📊 Histórico que trabalha por você</div>
+          <h2>Uma estimativa baseada no que a família já comprou.</h2>
+          <p>Quando encontra correspondências confiáveis no histórico, o ListaLar usa preços anteriores para estimar parte da lista. O que não tem correspondência segura fica fora do cálculo.</p>
+          <a class="btn btn-primary" href="./index.html">Começar agora →</a>
+        </div>
+        <div class="history-card">
+          <div class="history-title"><strong>Estimativa da lista</strong><small>Histórico encontrado</small></div>
+          <div class="hist-row"><span>Feijão • 2 un.</span><b>R$ 14,88</b></div>
+          <div class="hist-row"><span>Macarrão • 1 un.</span><b>R$ 7,49</b></div>
+          <div class="hist-row"><span>Ovos • 1 bandeja</span><b>R$ 19,98</b></div>
+          <div class="hist-row"><span>Itens estimados</span><b>3 itens</b></div>
+          <div class="history-note">A estimativa usa somente correspondências confiáveis do histórico. O preço final pode variar no mercado.</div>
+        </div>
       </div>
     </section>
 
@@ -123,7 +150,7 @@
     </section>
   </main>
 
-  <footer><div class="container footer-inner"><div class="footer-brand">ListaLar — organização inteligente para sua casa.</div><div>Apresentação atualizada • setembro de 2026</div></div></footer>
+  <footer><div class="container footer-inner"><div class="footer-brand">ListaLar — organização da casa, feita para a família toda usar.</div><div>Apresentação atualizada • setembro de 2026</div></div></footer>
 
   <script>
     document.getElementById('btnCompartilhar')?.addEventListener('click', async () => {
