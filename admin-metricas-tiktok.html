@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0a1628">
+  <title>Métricas TikTok | ListaLar</title>
+  <link rel="icon" href="./icon-192.png">
+  <style>
+    :root{--bg:#f5f8fc;--card:#fff;--text:#0f172a;--muted:#64748b;--blue:#2563eb;--cyan:#06b6d4;--green:#16a34a;--line:#dbeafe;--red:#dc2626;--shadow:0 16px 45px rgba(15,23,42,.10)}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}.wrap{width:min(920px,calc(100% - 24px));margin:0 auto}.top{background:#0a1628;color:#fff;padding:18px 0}.topin{display:flex;justify-content:space-between;align-items:center;gap:12px}.brand{display:flex;align-items:center;gap:10px;font-weight:900}.brand img{width:42px;height:42px;border-radius:12px}.btn{border:0;border-radius:13px;padding:12px 16px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn-light{background:#fff;color:#0a1628}.btn-primary{background:linear-gradient(135deg,var(--blue),var(--cyan));color:#fff}.hero{padding:34px 0 20px}.hero h1{margin:0 0 8px;font-size:clamp(2rem,5vw,3rem)}.hero p{margin:0;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0}.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow)}.metric span{display:block;color:var(--muted);font-weight:800;font-size:.9rem}.metric strong{display:block;font-size:2.2rem;margin-top:8px}.funnel{margin:18px 0 42px}.row{display:grid;grid-template-columns:180px 1fr 85px;gap:12px;align-items:center;margin:14px 0}.bar{height:18px;background:#e2e8f0;border-radius:999px;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--cyan));border-radius:999px;min-width:2px}.status{margin:18px 0;padding:14px 16px;border-radius:14px;background:#fff;border:1px solid var(--line);color:var(--muted)}.error{color:var(--red);border-color:#fecaca;background:#fff7f7}.muted{color:var(--muted);font-size:.9rem}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}.bar{order:3}.topin{align-items:flex-start}.metric strong{font-size:1.8rem}}@media(max-width:420px){.grid{grid-template-columns:1fr}.btn{width:100%}.topin{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <header class="top"><div class="wrap topin"><div class="brand"><img src="./icon-192.png" alt="Logo ListaLar"><span>ListaLar • Métricas TikTok</span></div><a class="btn btn-light" href="./admin.html">← Voltar ao Admin</a></div></header>
+  <main class="wrap">
+    <section class="hero"><h1>Funil TikTok</h1><p>Veja onde as pessoas estão desistindo entre o anúncio e o uso do ListaLar.</p><div class="actions"><button id="atualizar" class="btn btn-primary" type="button">Atualizar métricas</button></div></section>
+    <div id="status" class="status">Validando acesso administrativo...</div>
+    <section id="conteudo" hidden>
+      <div class="grid">
+        <article class="card metric"><span>Landing aberta</span><strong id="landingAberta">0</strong></article>
+        <article class="card metric"><span>Clicou em abrir ListaLar</span><strong id="clicouAbrirListaLar">0</strong></article>
+        <article class="card metric"><span>Login concluído</span><strong id="loginConcluido">0</strong></article>
+        <article class="card metric"><span>Entrou/criou família</span><strong id="familiaVinculada">0</strong></article>
+      </div>
+      <section class="card funnel">
+        <h2>Conversão do funil</h2>
+        <div class="row"><strong>Landing → Abrir app</strong><div class="bar"><div id="barCta" class="fill"></div></div><span id="taxaCta">0%</span></div>
+        <div class="row"><strong>Abrir app → Login</strong><div class="bar"><div id="barLogin" class="fill"></div></div><span id="taxaLogin">0%</span></div>
+        <div class="row"><strong>Login → Família</strong><div class="bar"><div id="barFamilia" class="fill"></div></div><span id="taxaFamilia">0%</span></div>
+        <p class="muted" id="atualizadoEm">Ainda sem atualização registrada.</p>
+      </section>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig={apiKey:"AIzaSyC2U7q5HupxKyI3QiAyan-2Sio55NSir0Y",authDomain:"compras-da-casa.firebaseapp.com",projectId:"compras-da-casa",storageBucket:"compras-da-casa.firebasestorage.app",messagingSenderId:"63765433273",appId:"1:63765433273:web:c478a3dd33ef3cd55a0468"};
+    const app=getApps().length?getApp():initializeApp(firebaseConfig);const auth=getAuth(app);const db=getFirestore(app);
+    const $=(id)=>document.getElementById(id);
+    function taxa(a,b){return b>0?Math.min(100,(a/b)*100):0}
+    function pct(v){return `${v.toFixed(1).replace(".0","")}%`}
+    async function carregar(){
+      try{
+        $("status").textContent="Carregando métricas...";$("status").classList.remove("error");
+        const snap=await getDoc(doc(db,"metricas_publicas","tiktok"));const d=snap.exists()?snap.data():{};
+        const landing=Number(d.landingAberta||0),cta=Number(d.clicouAbrirListaLar||0),login=Number(d.loginConcluido||0),familia=Number(d.familiaVinculada||0);
+        $("landingAberta").textContent=landing;$("clicouAbrirListaLar").textContent=cta;$("loginConcluido").textContent=login;$("familiaVinculada").textContent=familia;
+        const t1=taxa(cta,landing),t2=taxa(login,cta),t3=taxa(familia,login);
+        $("taxaCta").textContent=pct(t1);$("taxaLogin").textContent=pct(t2);$("taxaFamilia").textContent=pct(t3);$("barCta").style.width=`${t1}%`;$("barLogin").style.width=`${t2}%`;$("barFamilia").style.width=`${t3}%`;
+        const data=d.atualizadoEm?.toDate?d.atualizadoEm.toDate():null;$("atualizadoEm").textContent=data?`Última atualização: ${data.toLocaleString("pt-BR")}`:"Ainda sem atualização registrada.";
+        $("status").textContent=snap.exists()?"Métricas carregadas.":"Ainda não há métricas registradas.";$("conteudo").hidden=false;
+      }catch(e){$("status").textContent="Não foi possível ler as métricas. Verifique as regras do Firestore.";$("status").classList.add("error");console.error(e)}
+    }
+    onAuthStateChanged(auth,async(user)=>{if(!user){$("status").textContent="Faça login no ListaLar com sua conta administrativa e abra esta página novamente.";$("status").classList.add("error");return}try{const u=await getDoc(doc(db,"usuarios",user.uid));if(!u.exists()||u.data()?.adminSistema!==true){$("status").textContent="Acesso permitido somente ao administrador do sistema.";$("status").classList.add("error");return}await carregar()}catch(e){$("status").textContent="Não foi possível validar o acesso administrativo.";$("status").classList.add("error");console.error(e)}});
+    $("atualizar").addEventListener("click",carregar);
+  </script>
+</body>
+</html>
