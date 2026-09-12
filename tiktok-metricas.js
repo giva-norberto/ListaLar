@@ -1,8 +1,8 @@
 // ListaLar — métricas da landing TikTok
-// Registra apenas eventos agregados, sem nome, e-mail, IP ou identificador pessoal.
+// Registra eventos anônimos do funil, sem nome, e-mail ou identificador pessoal.
 
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyC2U7q5HupxKyI3QiAyan-2Sio55NSir0Y",
@@ -15,21 +15,20 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const ref = doc(db, "metricas_publicas", "tiktok");
+const eventosRef = collection(db, "metricas_publicas", "tiktok", "eventos");
 
-async function registrar(campo) {
+async function registrar(evento) {
   try {
-    await setDoc(ref, {
-      [campo]: increment(1),
-      atualizadoEm: serverTimestamp()
-    }, { merge: true });
+    await addDoc(eventosRef, {
+      evento,
+      criadoEm: serverTimestamp()
+    });
   } catch (erro) {
-    console.warn("Métrica TikTok não registrada:", campo, erro?.code || erro?.message || erro);
+    console.warn("Métrica TikTok não registrada:", evento, erro?.code || erro?.message || erro);
   }
 }
 
-// Uma abertura por carregamento da landing.
-registrar("landingAberta");
+registrar("landing_aberta");
 
 const seletoresCta = [
   'a[href^="./index.html"]',
@@ -44,7 +43,7 @@ document.querySelectorAll(seletoresCta.join(",")).forEach((link) => {
   } catch (_) {}
 
   link.addEventListener("click", () => {
-    registrar("clicouAbrirListaLar");
+    registrar("clicou_abrir_listalar");
     try {
       localStorage.setItem("listalar_origem_tiktok", "1");
       localStorage.setItem("listalar_origem_tiktok_em", String(Date.now()));
