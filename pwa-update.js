@@ -458,6 +458,11 @@
     INTERVALO_VERIFICACAO
   );
 
+  // Novo layout visual do login. Mantém os mesmos IDs e funções de autenticação.
+  import('./login-layout.js?v=1.0.0').catch((erro) => {
+    console.warn('Layout do login indisponível:', erro);
+  });
+
   // Protege o login Google quando o ListaLar é aberto em navegadores
   // internos de Teams, WhatsApp, Instagram e similares.
   import('./login-navegador.js?v=1.0.0').catch((erro) => {
