@@ -1,5 +1,5 @@
 {
-  "version": "1.0.74",
-  "updatedAt": "2026-09-12",
-  "notes": "Novo layout da tela de login com reforço de segurança e confiança"
+  "version": "1.0.75",
+  "updatedAt": "2026-09-15",
+  "notes": "Correção da importação de NFC-e da SEF/MG com códigos alfanuméricos e unidades un9/kg9"
 }
