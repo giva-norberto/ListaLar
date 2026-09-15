@@ -1,7 +1,7 @@
 /**
  * ListaLar — Importador e Conferidor de Nota Fiscal
  * Arquivo: importar-nota-pdf.js
- * Versão: 1.3.6
+ * Versão: 1.3.7
  *
  * Responsabilidades:
  * - selecionar e ler uma nota fiscal em PDF;
@@ -12,6 +12,14 @@
  * - emitir o evento de nota confirmada para o módulo Gastos.
  *
  * Este arquivo não grava diretamente no Firestore.
+ *
+ * Changelog 1.3.7:
+ * - Aceita códigos de produto alfanuméricos em NFC-e da SEF/MG
+ *   (ex.: SS011544, usados pelo Carrefour), preservando códigos
+ *   puramente numéricos já suportados.
+ * - Tolera o artefato visual "9" anexado à unidade em alguns PDFs
+ *   da SEF/MG (ex.: un9 / kg9), sem alterar notas que já chegam
+ *   com unidades normais.
  *
  * Changelog 1.3.4:
  * - Nova estratégia de extração de itens por COLUNA (posição x,y bruta
@@ -26,7 +34,7 @@
 const ImportadorNotaPDF = (() => {
     "use strict";
 
-    const VERSAO = "1.3.6";
+    const VERSAO = "1.3.7";
 
     const ESTADO = {
         arquivo: null,
@@ -146,17 +154,18 @@ const ImportadorNotaPDF = (() => {
                     );
                 };
 
-            document.head.appendChild(
-                script
-            );
-        }
-    ).catch((erro) => {
-        promessaPDFJS = null;
-        throw erro;
-    });
+                document.head.appendChild(
+                    script
+                );
+            }
+        ).catch((erro) => {
+            promessaPDFJS = null;
+            throw erro;
+        });
 
-    return promessaPDFJS;
-}
+        return promessaPDFJS;
+    }
+
     // ============================================================
     // ESTILOS
     // ============================================================
@@ -1232,7 +1241,7 @@ const ImportadorNotaPDF = (() => {
                     .trim();
 
                 const codigoMatch = descricaoTexto.match(
-                    /\(C[oó]digo\s*:\s*(\d+)\s*\)/i
+                    /\(C[oó]digo\s*:\s*([A-Za-z0-9._\/-]+)\s*\)/i
                 );
                 if (!codigoMatch) continue;
 
@@ -1284,7 +1293,7 @@ const ImportadorNotaPDF = (() => {
                     .trim();
 
                 const unidadeMatch = textoDireita.match(
-                    /\bUN\s*:\s*([A-Za-zÀ-ÿ]{1,10})(?=\s|Valor|$)/i
+                    /\bUN\s*:\s*([A-Za-zÀ-ÿ]{1,10})(?:9)?(?=\s|Valor|$)/i
                 );
                 const valorMatch = textoDireita.match(
                     /Valor total R\$\s*:\s*(?:R\$\s*)?([\d.,]+)/i
@@ -1394,7 +1403,7 @@ const ImportadorNotaPDF = (() => {
         const itens = [];
         const textoUnificado = linhas.join("\n");
         const padraoItem =
-            /(.+?)\s*\(C[oó]digo:\s*(\d+)\)\s*Qtde total de [ií]tens:\s*([\d.,]+)\s*UN:\s*([A-Za-zÀ-ÿ]+)\s*Valor total R\$:\s*R?\$?\s*([\d.,]+)/gi;
+            /(.+?)\s*\(C[oó]digo:\s*([A-Za-z0-9._\/-]+)\)\s*Qtde total de [ií]tens:\s*([\d.,]+)\s*UN:\s*([A-Za-zÀ-ÿ]+)(?:9)?\s*Valor total R\$:\s*R?\$?\s*([\d.,]+)/gi;
         let correspondencia;
 
         while ((correspondencia = padraoItem.exec(textoUnificado)) !== null) {
@@ -1503,7 +1512,7 @@ const ImportadorNotaPDF = (() => {
              */
             const codigoMatch =
                 bloco.match(
-                    /\(C[oó]digo\s*:\s*(\d+)\s*\)/i
+                    /\(C[oó]digo\s*:\s*([A-Za-z0-9._\/-]+)\s*\)/i
                 );
 
             if (!codigoMatch) {
@@ -1531,7 +1540,7 @@ const ImportadorNotaPDF = (() => {
 
             const unidadeMatch =
                 depoisCodigo.match(
-                    /UN\s*:\s*([A-Za-zÀ-ÿ]{1,10})(?=\s|Valor|$)/i
+                    /UN\s*:\s*([A-Za-zÀ-ÿ]{1,10})(?:9)?(?=\s|Valor|$)/i
                 );
 
             const valorMatch =
@@ -1632,7 +1641,7 @@ const ImportadorNotaPDF = (() => {
                 blocoLinhas.join(" ");
 
             const codigoMatch = bloco.match(
-                /\(C[oó]digo:\s*(\d+)\)/i
+                /\(C[oó]digo:\s*([A-Za-z0-9._\/-]+)\)/i
             );
 
             if (!codigoMatch) {
@@ -1676,7 +1685,7 @@ const ImportadorNotaPDF = (() => {
                     /^.*?Qtde total de [ií]tens:\s*/i,
                     ""
                 )
-                .replace(/\(C[oó]digo:\s*\d+\)/gi, " ")
+                .replace(/\(C[oó]digo:\s*[A-Za-z0-9._\/-]+\)/gi, " ")
                 .replace(/Qtde total de [ií]tens:/gi, " ")
                 .replace(/UN:/gi, " ")
                 .replace(/Valor total R\$:\s*(?:R\$)?/gi, " ")
@@ -1684,7 +1693,7 @@ const ImportadorNotaPDF = (() => {
                 .trim();
 
             const valores = somenteValores.match(
-                /([\d.,]+)\s+([A-Za-zÀ-ÿ]{1,10})\s+([\d.,]+)(?:\s|$)/i
+                /([\d.,]+)\s+([A-Za-zÀ-ÿ]{1,10})(?:9)?\s+([\d.,]+)(?:\s|$)/i
             );
 
             if (!valores) {
@@ -1717,7 +1726,7 @@ const ImportadorNotaPDF = (() => {
         ) {
             const linha = linhas[indice];
             const codigoMatch = linha.match(
-                /\(C[oó]digo:\s*(\d+)\)/i
+                /\(C[oó]digo:\s*([A-Za-z0-9._\/-]+)\)/i
             );
 
             if (!codigoMatch) {
@@ -1754,7 +1763,7 @@ const ImportadorNotaPDF = (() => {
             );
 
             const unidadeMatch = bloco.match(
-                /UN:\s*([A-Za-zÀ-ÿ]{1,10})/i
+                /UN:\s*([A-Za-zÀ-ÿ]{1,10})(?:9)?/i
             );
 
             const valorMatch = bloco.match(
@@ -1827,7 +1836,7 @@ const ImportadorNotaPDF = (() => {
                 ),
 
             codigo:
-                somenteDigitos(codigo),
+                normalizarCodigoProduto(codigo),
 
             quantidade:
                 quantidadeConvertida,
@@ -1887,7 +1896,7 @@ const ImportadorNotaPDF = (() => {
 
         for (const item of itens) {
             const codigo =
-                somenteDigitos(
+                normalizarCodigoProduto(
                     item.codigo
                 );
 
@@ -2120,7 +2129,7 @@ const ImportadorNotaPDF = (() => {
                 )
             ).trim(),
 
-            codigo: somenteDigitos(
+            codigo: normalizarCodigoProduto(
                 primeiroValorValido(
                     item?.codigo,
                     item?.codigoProduto,
@@ -2983,6 +2992,14 @@ const ImportadorNotaPDF = (() => {
     function somenteDigitos(valor) {
         return String(valor || "")
             .replace(/\D/g, "");
+    }
+
+    function normalizarCodigoProduto(valor) {
+        return String(valor ?? "")
+            .trim()
+            .toUpperCase()
+            .replace(/\s+/g, "")
+            .replace(/[^A-Z0-9._\/-]/g, "");
     }
 
     function formatarMoeda(valor) {
